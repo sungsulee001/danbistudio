@@ -83,13 +83,13 @@ function createEditorApiRequestTimeout(
 ): { signal?: AbortSignal; clear: () => void } {
   if (!init.timeoutMs || init.timeoutMs <= 0 || typeof AbortController === 'undefined') {
     return {
-      signal: init.signal,
+      signal: init.signal ?? undefined,
       clear: () => undefined,
     };
   }
   if (init.signal?.aborted) {
     return {
-      signal: init.signal,
+      signal: init.signal ?? undefined,
       clear: () => undefined,
     };
   }

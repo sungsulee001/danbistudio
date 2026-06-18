@@ -319,7 +319,9 @@ export default function SettingsPage() {
               </div>
 
               <button
-                onClick={testConnection}
+                onClick={() => {
+                  void testConnection();
+                }}
                 disabled={testing}
                 className="px-6 py-2 bg-primary hover:bg-primary/80 text-white rounded-lg transition-all font-medium shadow-lg shadow-primary/20 disabled:bg-foreground/20 disabled:shadow-none"
               >
@@ -388,7 +390,9 @@ export default function SettingsPage() {
                 Runtime Diagnostics
               </h2>
               <button
-                onClick={refreshRuntimeDiagnostics}
+                onClick={() => {
+                  void refreshRuntimeDiagnostics();
+                }}
                 disabled={runtimeLoading}
                 className="px-4 py-2 bg-secondary border border-border hover:bg-secondary/70 text-foreground rounded-lg transition-all text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -467,14 +471,18 @@ export default function SettingsPage() {
                   min="1"
                   max="3650"
                   onChange={(e) => setCleanupDays(e.target.value)}
-                  onBlur={refreshStorageCleanupPreview}
+                  onBlur={() => {
+                    void refreshStorageCleanupPreview();
+                  }}
                   className="mt-2 w-full px-4 py-2 bg-background/50 border border-border text-foreground rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
                 />
               </label>
 
               <div className="flex flex-wrap gap-2">
                 <button
-                  onClick={refreshStorageCleanupPreview}
+                  onClick={() => {
+                    void refreshStorageCleanupPreview();
+                  }}
                   disabled={cleanupScanning || cleanupRunning}
                   className="px-6 py-2 bg-secondary border border-border hover:bg-secondary/70 text-foreground rounded-lg transition-all font-medium disabled:cursor-not-allowed disabled:opacity-50"
                 >

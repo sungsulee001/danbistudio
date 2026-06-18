@@ -112,7 +112,7 @@ export async function runFfprobe(
 }
 
 function normalizeFfprobeTimeout(value: number | undefined): number {
-  if (!Number.isFinite(value)) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
     return DEFAULT_FFPROBE_TIMEOUT_MS;
   }
 

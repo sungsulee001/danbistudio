@@ -1,8 +1,12 @@
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { importNativeMediaFilePaths, selectAndImportNativeMediaFiles } from '../../src/electron/main/native-media-import-engine';
+import {
+  importNativeMediaFilePaths,
+  resolveNativeMediaImportAutomationFilePaths,
+  selectAndImportNativeMediaFiles,
+} from '../../src/electron/main/native-media-import-engine';
 
 vi.mock('../../src/server/editor/media-analyzer', () => ({
   analyzeMediaFile: vi.fn(async () => ({
@@ -11,6 +15,10 @@ vi.mock('../../src/server/editor/media-analyzer', () => ({
     warnings: [],
   })),
 }));
+
+const originalLocalDataRoot = process.env.DANBI_LOCAL_DATA_ROOT;
+const originalElectronUserData = process.env.DANBI_ELECTRON_USER_DATA;
+const originalAutomationMediaFilePaths = process.env.DANBI_ELECTRON_AUTOMATION_MEDIA_FILE_PATHS;
 
 describe('native media import engine', () => {
   let tempRoot: string;
@@ -22,6 +30,9 @@ describe('native media import engine', () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    restoreEnvValue('DANBI_LOCAL_DATA_ROOT', originalLocalDataRoot);
+    restoreEnvValue('DANBI_ELECTRON_USER_DATA', originalElectronUserData);
+    restoreEnvValue('DANBI_ELECTRON_AUTOMATION_MEDIA_FILE_PATHS', originalAutomationMediaFilePaths);
     await rm(tempRoot, { recursive: true, force: true });
   });
 
@@ -149,6 +160,65 @@ describe('native media import engine', () => {
     });
   });
 
+  it('uses automation media file paths for installed-app smoke imports', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1800000000000);
+
+    const audioPath = join(tempRoot, 'source', 'automation.wav');
+    await mkdir(dirname(audioPath), { recursive: true });
+    await writeFile(audioPath, 'native audio');
+    process.env.DANBI_ELECTRON_AUTOMATION_MEDIA_FILE_PATHS = JSON.stringify([audioPath]);
+
+    const selected = await selectAndImportNativeMediaFiles({
+      async showOpenDialog() {
+        throw new Error('Automated media import should not open a native dialog.');
+      },
+    }, {}, {
+      sourceRoot: tempRoot,
+      queueCache: false,
+    });
+
+    expect(resolveNativeMediaImportAutomationFilePaths({
+      DANBI_ELECTRON_AUTOMATION_MEDIA_FILE_PATHS: JSON.stringify([audioPath, '']),
+    })).toEqual([audioPath]);
+    expect(selected.warnings).toEqual([]);
+    expect(selected.files[0]).toMatchObject({
+      originalName: 'automation.wav',
+      source: '/imports/1800000000000-0-automation.wav',
+    });
+  });
+
+  it('stores packaged native imports under Electron userData instead of the app cwd', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1800000000000);
+
+    const originalCwd = process.cwd();
+    const appCwd = join(tempRoot, 'Program Files', 'Danbi Studio');
+    const userDataRoot = join(tempRoot, 'user-data');
+    const sourcePath = join(tempRoot, 'source', 'voice.wav');
+    await mkdir(appCwd, { recursive: true });
+    await mkdir(dirname(sourcePath), { recursive: true });
+    await writeFile(sourcePath, 'native audio');
+
+    try {
+      process.chdir(appCwd);
+      delete process.env.DANBI_LOCAL_DATA_ROOT;
+      process.env.DANBI_ELECTRON_USER_DATA = userDataRoot;
+
+      const imported = await importNativeMediaFilePaths([sourcePath], {
+        queueCache: false,
+      });
+
+      expect(imported.warnings).toEqual([]);
+      expect(imported.files[0]).toMatchObject({
+        source: '/imports/1800000000000-0-voice.wav',
+        renderPath: join(userDataRoot, 'imports', '1800000000000-0-voice.wav'),
+      });
+      await expect(readFile(imported.files[0].renderPath, 'utf8')).resolves.toBe('native audio');
+      await expect(stat(join(appCwd, '.danbi'))).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
   it('preserves analyzer audio-only metadata for WebM native imports', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1800000000000);
 
@@ -171,3 +241,15 @@ describe('native media import engine', () => {
     });
   });
 });
+
+function restoreEnvValue(
+  name: 'DANBI_LOCAL_DATA_ROOT' | 'DANBI_ELECTRON_USER_DATA' | 'DANBI_ELECTRON_AUTOMATION_MEDIA_FILE_PATHS',
+  value: string | undefined,
+): void {
+  if (value === undefined) {
+    delete process.env[name];
+    return;
+  }
+
+  process.env[name] = value;
+}

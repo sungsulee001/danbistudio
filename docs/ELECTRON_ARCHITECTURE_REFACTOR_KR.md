@@ -212,6 +212,8 @@ Implementation note 2026-06-15: `npm run electron:package:smoke` prepares Next s
 
 Implementation note 2026-06-15: Electron startup now initializes a desktop runtime directory under userData before IPC registration. The runtime creates `logs`, `crashDumps`, `projects`, `packages`, `renders`, and `temp`, sets Electron's app log and crash dump paths where available, writes `logs/main-process.jsonl`, and exposes the snapshot through `editor:system:diagnostics`.
 
+Implementation note 2026-06-18: Packaged Electron runtime now also creates `imports`, `cache`, `autosave`, `jobs`, `stt`, and `outputs` under Electron `userData`. During desktop runtime initialization it sets both `DANBI_ELECTRON_USER_DATA` and `DANBI_LOCAL_DATA_ROOT` to userData so packaged renderer/API storage helpers do not fall back to an install-directory `.danbi`.
+
 ### `main/packaged-renderer-server.ts`
 
 Packaged renderer host for the desktop release. It resolves `.next/standalone/server.js` from development, explicit env override, or `process.resourcesPath/renderer/standalone/server.js` in packaged builds; finds a local port; starts the standalone Next server with `ELECTRON_RUN_AS_NODE=1`; waits until `/editor` responds; and exposes a stop handle so Electron quits without leaving the renderer server alive.
@@ -222,7 +224,7 @@ FFmpeg/FFprobe setup boundary for desktop and packaged runtime. It checks explic
 
 ### `main/runtime-diagnostics.ts`
 
-Desktop runtime diagnostics boundary. It resolves local data paths from Electron userData, creates log/crash/project/package/render/temp directories, writes main-process JSONL diagnostic events, records uncaught exception/unhandled rejection summaries, resolves packaged getting-started sample package candidates, and builds the `DanbiRuntimeDiagnosticsSnapshot` returned by preload IPC, the Settings Runtime Diagnostics panel, and smoke result JSON. The renderer system client also exposes native open/reveal actions for diagnostic paths through the existing file bridge.
+Desktop runtime diagnostics boundary. It resolves local data paths from Electron userData, creates log/crash/project/package/import/cache/autosave/render/temp/job/STT/output directories, writes main-process JSONL diagnostic events, records uncaught exception/unhandled rejection summaries, resolves packaged getting-started sample package candidates, and builds the `DanbiRuntimeDiagnosticsSnapshot` returned by preload IPC, the Settings Runtime Diagnostics panel, and smoke result JSON. The renderer system client also exposes native open/reveal actions for diagnostic paths through the existing file bridge.
 
 ### `main/sample-project-pack.ts`
 
@@ -240,7 +242,9 @@ Implementation note 2026-06-15: Native file actions now validate renderer-provid
 
 ### `main/native-media-import-engine.ts`
 
-Electron native media import engine. It opens an Electron-like multi-file dialog, copies selected local media into durable import storage (`.danbi/imports` in local development or `userData/imports` in the packaged app), runs the same ffprobe analysis used by the browser upload API, optionally queues media-cache work, and returns the same imported media record shape used by the renderer import workflow.
+Electron native media import engine. It opens an Electron-like multi-file dialog, copies selected local media into durable import storage (`.danbi/imports` in local development or `userData/imports` in the packaged app), runs the same ffprobe analysis used by the browser upload API, optionally queues media-cache work, and returns the same imported media record shape used by the renderer import workflow. The install smoke can inject deterministic local files through `DANBI_ELECTRON_AUTOMATION_MEDIA_FILE_PATHS` so installed-app acceptance can verify import without manual dialog control.
+
+Implementation note 2026-06-18: Relative project package export/import directories are resolved under the runtime `userData/packages` root in packaged Electron. Absolute filesystem paths remain explicit, but `.danbi/packages`-style relative payloads are normalized away from Program Files. Local installed-app acceptance verifies that imports, cache, autosave, projects, packages, renders, temp, jobs, stt, and outputs are under userData and that Program Files/install-directory storage write violations are absent.
 
 ### `main/project-package-engine.ts`
 

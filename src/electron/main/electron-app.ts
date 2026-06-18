@@ -67,6 +67,8 @@ export function registerDanbiElectronIpc(options: DanbiElectronAppOptions = {}):
     mediaDialog: {
       showOpenDialog: (request) => dialog.showOpenDialog(request),
     } satisfies ElectronMediaDialogLike,
+    externalExporterOutputRoot: runtimePaths.outputsPath,
+    projectPackageRoot: runtimePaths.packagesPath,
     pluginPackageInstallRoot: runtimePaths.packagesPath,
   }));
 }

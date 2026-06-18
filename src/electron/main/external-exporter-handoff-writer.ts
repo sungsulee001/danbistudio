@@ -104,7 +104,7 @@ export async function writeReviewedExternalExporterHandoff(
         outputRelativePath,
         manifestRelativePath,
         writtenAt,
-      }), null, 2)}\n`, 'utf8');
+      }), null, 2)}\n`);
 
       writes.push({
         profileId,

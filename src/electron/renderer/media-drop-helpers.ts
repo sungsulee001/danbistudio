@@ -1,5 +1,6 @@
 import { hasEmbeddedAudio, hasTimelineAudio } from '../../lib/editor/media-metadata';
 import { addImportedMediaAsset } from '../../lib/editor/media-import';
+import type { SupportedMediaFileKind } from '../../lib/editor/media-file-support';
 import { resolveRenderableAssetMediaKind } from '../../lib/editor/renderable-media-kind';
 import {
   insertAssetPatchOnTimeline,
@@ -124,7 +125,7 @@ export function readDraggedMediaFilePreview(dataTransfer: DataTransfer): { label
   const items = Array.from(dataTransfer.items).filter((item) => item.kind === 'file');
   const supportedItems = items
     .map((item) => inferMediaFileReferenceKind({ name: '', type: item.type }))
-    .filter((kind): kind is EditorAsset['kind'] => Boolean(kind));
+    .filter((kind): kind is SupportedMediaFileKind => Boolean(kind));
   if (supportedItems.length === 0) {
     return undefined;
   }

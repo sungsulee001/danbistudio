@@ -9,8 +9,14 @@ export interface DanbiRuntimePathSnapshot {
   crashDumpsPath: string;
   projectsPath: string;
   packagesPath: string;
+  importsPath: string;
+  cachePath: string;
+  autosavePath: string;
   rendersPath: string;
   tempPath: string;
+  jobsPath: string;
+  sttPath: string;
+  outputsPath: string;
 }
 
 export interface FfmpegExecutableCandidateSnapshot {

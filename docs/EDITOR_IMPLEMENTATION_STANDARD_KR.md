@@ -98,6 +98,9 @@
    - file system, FFmpeg, ComfyUI, SQLite는 main process에서 관리
    - renderer는 UI 전용
    - preload/IPC로만 로컬 권한 노출
+   - packaged Electron의 imports/cache/projects/packages/jobs/stt/autosave/renders/outputs/temp는 Electron `userData` 아래에만 저장
+   - 개발 모드에서만 project root `.danbi` 사용
+   - Program Files 또는 설치 디렉터리 내부 storage write 금지
 
 ## Shotcut 참고 기준
 
@@ -189,6 +192,7 @@ Shotcut은 GPLv3 오픈소스이므로 구조와 기능 설계는 참고할 수 
 - Implementation note 2026-06-13: Video scopes are complete only when Program Monitor samples active video/image frames through a bounded canvas, core code derives luma histogram, waveform, vectorscope, and average/low/peak values from RGBA data, the overlay follows the selected or top active visual layer, tainted or unavailable sources fail without breaking preview, and core tests prove deterministic scope math.
 - Implementation note 2026-06-13: STT speaker diarization draft is complete only when caption-based speaker assignments respect existing speaker labels, fill missing labels deterministically, produce speaker and turn timeline summaries, apply through undoable caption edits from the UI, avoid changes on reapply, and core tests prove assignment, turn grouping, selected-caption behavior, and no-op reapplication.
 - Implementation note 2026-06-13: Autosave recovery is complete only when project edits are debounced into persistent local snapshots, snapshots survive database failures, the Project panel can list/restore/delete them, restoring remains undoable, and core tests prove save/list/load/delete behavior. Autosave snapshots are stored under local development `.danbi/autosave` and Electron package `userData/autosave`.
+- Implementation note 2026-06-18: Packaged Electron storage is complete only when imports, cache, projects, packages, jobs, stt, autosave, renders, outputs, and temp resolve under Electron `userData`, never under Program Files or the installed app directory. Installed-app acceptance must prove media import, sample project load, export preflight, MP4 render, ffprobe readability, and no forbidden install-directory writes.
 - Implementation note 2026-06-13: Project save safety is complete only when the editor differentiates DB-saved, autosaved-only, and dirty project states, updates those states after save/load/import/recovery/delete flows, autosaves only dirty edits, warns before browser close with unsaved edits, and core tests prove the snapshot comparison behavior.
 - Implementation note 2026-06-13: Audio track mixing is complete only when each audio-capable track stores normalized gain and pan values, old projects migrate to 0 dB/center, the timeline exposes direct mixer controls, Program Monitor browser playback and audio layers use the adjusted volume/pan, unsupported reverse browser audio is handled explicitly, FFmpeg applies track gain and stereo balance after clip volume/keyframes/ducking, and core tests prove migration, clamping, preview, browser-monitor state, and render filters.
 - Implementation note 2026-06-13: Project settings editing is complete only when name, canvas width/height, FPS, and duration are editable from the Project panel, invalid names are rejected, dimensions/FPS/duration are clamped to production-safe ranges, duration cannot be shortened before the last clip/marker/caption, changes are undoable and autosaved, and core tests prove validation and clamping.

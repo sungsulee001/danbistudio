@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,7 +17,9 @@ const smokeRoot = path.join(rootDir, '.danbi', 'electron-install-smoke');
 const installDir = path.join(smokeRoot, 'app');
 const userDataDir = path.join(smokeRoot, 'user-data');
 const renderOutputPath = path.join(smokeRoot, 'renders', 'getting-started-installed-render.mp4');
+const importSourcePath = path.join(smokeRoot, 'import-source', 'local-installed-import.wav');
 const failureScreenshot = path.join(smokeRoot, 'failure.png');
+const smokeResultPath = path.join(smokeRoot, 'result.json');
 const runLog = path.join(smokeRoot, 'run.log');
 const rendererPort = String(34100 + Math.floor(Math.random() * 800));
 const skipBuild = process.argv.includes('--skip-build') || process.env.DANBI_ELECTRON_INSTALL_SMOKE_SKIP_BUILD === '1';
@@ -41,10 +43,17 @@ assertFile(installerPath, 10_000_000);
 assertInsideWorkspace(smokeRoot);
 rmSync(smokeRoot, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
 mkdirSync(smokeRoot, { recursive: true });
+writeSilentWavFile(importSourcePath);
 
 let app;
 let page;
 let installed = false;
+let diagnostics = null;
+let importedMediaPath = null;
+let ffprobeEvidence = null;
+let runtimePathCheck = null;
+let installWriteCheck = null;
+let sampleMediaPathCheck = null;
 const blockedRequests = [];
 const observedRequests = new Set();
 const observedWebSockets = new Set();
@@ -93,6 +102,7 @@ try {
       DANBI_ELECTRON_RENDERER_PORT: rendererPort,
       DANBI_ELECTRON_USER_DATA: userDataDir,
       DANBI_ELECTRON_AUTOMATION_SAVE_FILE_PATH: renderOutputPath,
+      DANBI_ELECTRON_AUTOMATION_MEDIA_FILE_PATHS: JSON.stringify([importSourcePath]),
     },
   });
 
@@ -123,14 +133,16 @@ try {
 
   logStep('Checking installed runtime diagnostics.');
   await page.waitForFunction(() => Boolean(window.danbiEditor?.system?.diagnostics), null, { timeout: 60_000 });
-  const diagnostics = await page.evaluate(async () => window.danbiEditor?.system.diagnostics());
+  diagnostics = await page.evaluate(async () => window.danbiEditor?.system.diagnostics());
   if (!diagnostics?.samples?.available || !diagnostics.samples.gettingStartedPackagePath) {
     throw new Error(`Installed smoke did not expose a packaged sample project: ${JSON.stringify(diagnostics?.samples)}`);
   }
   if (!diagnostics?.ffmpeg?.ready) {
     throw new Error(`Installed smoke did not find an FFmpeg setup: ${JSON.stringify(diagnostics?.ffmpeg)}`);
   }
+  runtimePathCheck = assertRuntimePathsUnderUserData(diagnostics.paths, userDataDir);
   assertPathInside(diagnostics.samples.gettingStartedPackagePath, installDir, 'sample package path');
+  sampleMediaPathCheck = inspectSamplePackageRenderMedia(diagnostics.samples.gettingStartedPackagePath);
 
   logStep('Opening sample project from installed app.');
   const openSampleButton = page.getByRole('button', { name: 'Open sample' });
@@ -138,6 +150,13 @@ try {
   await openSampleButton.click();
   await expect(page.getByRole('heading', { name: 'Danbi Getting Started' })).toBeVisible({ timeout: 60_000 });
   await expect(page.getByRole('button', { name: 'Timeline clip Generated intro' })).toBeVisible({ timeout: 60_000 });
+
+  logStep('Importing local media into installed app.');
+  await page.getByRole('button', { name: 'Import media' }).first().click();
+  await expect(page.getByText('local-installed-import.wav', { exact: true })).toBeVisible({ timeout: 60_000 });
+  importedMediaPath = findImportedMediaFile(diagnostics.paths.importsPath, 'local-installed-import.wav');
+  assertFile(importedMediaPath, 44);
+  assertPathInside(importedMediaPath, diagnostics.paths.importsPath, 'imported media path');
 
   logStep('Rendering sample project from installed app.');
   await page.locator('header').getByRole('button', { name: 'Export', exact: true }).click();
@@ -149,6 +168,7 @@ try {
   await expect(page.getByTestId('render-job-status')).toHaveText('completed', { timeout: 120_000 });
   await expect(page.getByTestId('render-job-progress')).toHaveText('100%', { timeout: 60_000 });
   await waitForFile(renderOutputPath, 10_000, 120_000);
+  ffprobeEvidence = probeMp4(renderOutputPath, diagnostics.ffmpeg.ffprobePath);
 
   const externalWebSockets = [...observedWebSockets].filter((url) => !isAllowedOfflineUrl(url));
   if (blockedRequests.length > 0 || externalWebSockets.length > 0) {
@@ -157,17 +177,59 @@ try {
       externalWebSockets,
     }, null, 2)}`);
   }
+  installWriteCheck = buildForbiddenInstallWriteCheck(installDir);
+  if (installWriteCheck.violations.length > 0) {
+    throw new Error(`Installed app wrote runtime storage inside the install directory: ${installWriteCheck.violations.join(', ')}`);
+  }
 
   logStep(`Installed Electron smoke passed with ${observedRequests.size} renderer request(s), all local.`);
-  console.log(JSON.stringify({
+  const report = {
+    kind: 'danbi.electron.installed-app-smoke',
     status: 'passed',
+    generatedAt: new Date().toISOString(),
     installer: path.relative(rootDir, installerPath).replace(/\\/g, '/'),
-    installDir: path.relative(rootDir, installDir).replace(/\\/g, '/'),
-    installedExe: path.relative(rootDir, installedExe).replace(/\\/g, '/'),
-    renderOutput: path.relative(rootDir, renderOutputPath).replace(/\\/g, '/'),
+    install: {
+      status: 'passed',
+      installDir: path.relative(rootDir, installDir).replace(/\\/g, '/'),
+      installedExe: path.relative(rootDir, installedExe).replace(/\\/g, '/'),
+    },
+    launch: {
+      status: 'passed',
+      rendererPort,
+      userDataPath: diagnostics.paths.userDataPath,
+    },
+    sampleProject: {
+      status: 'passed',
+      packagePath: diagnostics.samples.gettingStartedPackagePath,
+      mediaPathCheck: sampleMediaPathCheck,
+    },
+    mediaImport: {
+      status: 'passed',
+      sourcePath: path.relative(rootDir, importSourcePath).replace(/\\/g, '/'),
+      importedPath: importedMediaPath,
+      importedInsideUserData: isPathInsideOrEqual(diagnostics.paths.userDataPath, importedMediaPath),
+    },
+    exportPreflight: {
+      status: 'passed',
+      profile: 'Sample H.264 360p',
+      evidence: 'Render button enabled after export plan preflight.',
+    },
+    mp4Render: {
+      status: 'passed',
+      outputPath: path.relative(rootDir, renderOutputPath).replace(/\\/g, '/'),
+      outputBytes: statSync(renderOutputPath).size,
+      ffprobe: ffprobeEvidence,
+    },
+    storage: {
+      status: 'passed',
+      runtimePathCheck,
+      installWriteCheck,
+    },
     rendererRequestCount: observedRequests.size,
     websocketCount: observedWebSockets.size,
-  }, null, 2));
+  };
+  writeJsonReport(smokeResultPath, report);
+  console.log(JSON.stringify(report, null, 2));
 } catch (error) {
   if (page) {
     await page.screenshot({ path: failureScreenshot, fullPage: true }).catch(() => undefined);
@@ -361,6 +423,229 @@ function assertPathInside(targetPath, parentPath, label) {
   if (!relativePath || relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
     throw new Error(`${label} is outside expected directory: ${targetPath}`);
   }
+}
+
+function assertRuntimePathsUnderUserData(paths, expectedUserDataPath) {
+  const expectedRoot = path.resolve(expectedUserDataPath);
+  if (path.resolve(paths.userDataPath) !== expectedRoot) {
+    throw new Error(`Installed runtime userDataPath mismatch. Expected ${expectedRoot}, got ${paths.userDataPath}`);
+  }
+
+  const requiredKeys = [
+    'importsPath',
+    'cachePath',
+    'autosavePath',
+    'projectsPath',
+    'packagesPath',
+    'rendersPath',
+    'tempPath',
+    'jobsPath',
+    'sttPath',
+    'outputsPath',
+  ];
+  const checked = {};
+  for (const key of requiredKeys) {
+    if (!paths[key]) {
+      throw new Error(`Installed runtime diagnostics is missing ${key}.`);
+    }
+    assertPathInside(paths[key], expectedRoot, key);
+    checked[key] = paths[key];
+  }
+
+  return {
+    status: 'passed',
+    userDataPath: paths.userDataPath,
+    checked,
+  };
+}
+
+function inspectSamplePackageRenderMedia(packageDirectory) {
+  const packageFilePath = path.join(packageDirectory, 'project.danbi-project.json');
+  assertFile(packageFilePath, 1_000);
+  const packageJson = JSON.parse(readFileSync(packageFilePath, 'utf8'));
+  const entries = Array.isArray(packageJson.mediaManifest?.entries)
+    ? packageJson.mediaManifest.entries
+    : [];
+  const renderEntries = entries.filter((entry) => (
+    entry &&
+    entry.role === 'render' &&
+    entry.status === 'bundle-ready' &&
+    typeof entry.packagePath === 'string'
+  ));
+
+  if (renderEntries.length === 0) {
+    throw new Error('Packaged sample project has no bundle-ready render media entries.');
+  }
+
+  const files = renderEntries.map((entry) => {
+    const filePath = path.resolve(packageDirectory, entry.packagePath);
+    assertPathInside(filePath, packageDirectory, `${entry.assetName ?? entry.assetId ?? 'sample asset'} render media`);
+    assertFile(filePath, 44);
+    return {
+      assetId: entry.assetId,
+      assetName: entry.assetName,
+      packagePath: entry.packagePath,
+      filesystemPath: filePath,
+      bytes: statSync(filePath).size,
+    };
+  });
+
+  return {
+    status: 'passed',
+    packageDirectory,
+    renderMediaCount: files.length,
+    files,
+  };
+}
+
+function buildForbiddenInstallWriteCheck(installDirectory) {
+  const checkedRoots = uniqueExistingPaths([
+    installDirectory,
+    process.env.ProgramFiles ? path.join(process.env.ProgramFiles, 'Danbi Studio') : undefined,
+  ]);
+  const forbiddenNames = [
+    '.danbi',
+    'imports',
+    'cache',
+    'autosave',
+    'projects',
+    'packages',
+    'renders',
+    'temp',
+    'jobs',
+    'stt',
+    'outputs',
+  ];
+  const violations = [];
+
+  for (const root of checkedRoots) {
+    for (const name of forbiddenNames) {
+      const candidate = path.join(root, name);
+      if (existsSync(candidate)) {
+        violations.push(candidate);
+      }
+    }
+  }
+
+  return {
+    status: violations.length === 0 ? 'passed' : 'failed',
+    checkedRoots,
+    forbiddenNames,
+    violations,
+  };
+}
+
+function uniqueExistingPaths(paths) {
+  const seen = new Set();
+  const unique = [];
+  for (const candidate of paths) {
+    if (!candidate || !existsSync(candidate)) {
+      continue;
+    }
+    const resolved = path.resolve(candidate);
+    const key = process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(resolved);
+    }
+  }
+  return unique;
+}
+
+function findImportedMediaFile(importsPath, suffix) {
+  const match = readdirSync(importsPath, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(suffix))
+    .map((entry) => path.join(importsPath, entry.name))[0];
+  if (!match) {
+    throw new Error(`Imported media file was not found under userData imports: ${suffix}`);
+  }
+  return match;
+}
+
+function probeMp4(filePath, ffprobePath) {
+  const command = ffprobePath || 'ffprobe';
+  const result = spawnSync(command, [
+    '-v',
+    'error',
+    '-show_entries',
+    'format=duration:stream=codec_type,codec_name,width,height',
+    '-of',
+    'json',
+    filePath,
+  ], {
+    cwd: rootDir,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    throw new Error(`ffprobe failed for installed smoke MP4 with code ${result.status}.\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+  }
+
+  const data = JSON.parse(result.stdout);
+  const streams = Array.isArray(data.streams) ? data.streams : [];
+  const durationSeconds = Number(data.format?.duration);
+  if (!streams.some((stream) => stream.codec_type === 'video')) {
+    throw new Error('Installed smoke MP4 ffprobe did not find a video stream.');
+  }
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    throw new Error(`Installed smoke MP4 ffprobe duration is invalid: ${data.format?.duration}`);
+  }
+
+  return {
+    status: 'passed',
+    ffprobePath: command,
+    durationSeconds,
+    streams: streams.map((stream) => ({
+      codecType: stream.codec_type,
+      codecName: stream.codec_name,
+      width: stream.width,
+      height: stream.height,
+    })),
+  };
+}
+
+function writeSilentWavFile(filePath) {
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  writeFileSync(filePath, buildSilentWavBuffer(), { flag: 'w' });
+}
+
+function buildSilentWavBuffer() {
+  const sampleRate = 8000;
+  const channelCount = 1;
+  const bytesPerSample = 2;
+  const sampleCount = sampleRate;
+  const dataBytes = sampleCount * channelCount * bytesPerSample;
+  const buffer = Buffer.alloc(44 + dataBytes);
+
+  buffer.write('RIFF', 0, 'ascii');
+  buffer.writeUInt32LE(36 + dataBytes, 4);
+  buffer.write('WAVE', 8, 'ascii');
+  buffer.write('fmt ', 12, 'ascii');
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(channelCount, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate * channelCount * bytesPerSample, 28);
+  buffer.writeUInt16LE(channelCount * bytesPerSample, 32);
+  buffer.writeUInt16LE(bytesPerSample * 8, 34);
+  buffer.write('data', 36, 'ascii');
+  buffer.writeUInt32LE(dataBytes, 40);
+
+  return buffer;
+}
+
+function isPathInsideOrEqual(parentPath, targetPath) {
+  const relativePath = path.relative(path.resolve(parentPath), path.resolve(targetPath));
+  return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
+}
+
+function writeJsonReport(filePath, data) {
+  mkdirSync(path.dirname(filePath), { recursive: true });
+  writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
 }
 
 async function waitForFile(filePath, minimumBytes, timeoutMs) {

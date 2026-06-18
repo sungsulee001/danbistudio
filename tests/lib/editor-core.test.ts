@@ -21876,6 +21876,8 @@ describe('editor core', () => {
     const samplePackageDir = joinPath(resourcesPath, 'samples', 'getting-started');
     const available = new Set([envFfmpeg, bundledFfprobe]);
     const setPathCalls: Array<{ name: string; value: string }> = [];
+    const previousLocalDataRoot = process.env.DANBI_LOCAL_DATA_ROOT;
+    const previousElectronUserData = process.env.DANBI_ELECTRON_USER_DATA;
     let logsPath = '';
 
     try {
@@ -21937,9 +21939,13 @@ describe('editor core', () => {
       const resolved = resolveDanbiRuntimePaths(userDataPath);
 
       expect(paths).toEqual(resolved);
+      expect(process.env.DANBI_LOCAL_DATA_ROOT).toBe(userDataPath);
+      expect(process.env.DANBI_ELECTRON_USER_DATA).toBe(userDataPath);
       expect(logsPath).toBe(resolved.logsPath);
       expect(setPathCalls).toContainEqual({ name: 'crashDumps', value: resolved.crashDumpsPath });
       expect((await stat(resolved.logsPath)).isDirectory()).toBe(true);
+      expect((await stat(resolved.importsPath)).isDirectory()).toBe(true);
+      expect((await stat(resolved.outputsPath)).isDirectory()).toBe(true);
       await expect(readFile(joinPath(resolved.logsPath, 'main-process.jsonl'), 'utf8')).resolves.toContain('runtime-initialized');
 
       const diagnostics = await buildDanbiRuntimeDiagnostics({
@@ -21960,6 +21966,8 @@ describe('editor core', () => {
       });
       expect(diagnostics.samples.candidates).toContain(samplePackageDir);
     } finally {
+      restoreEnvValue('DANBI_LOCAL_DATA_ROOT', previousLocalDataRoot);
+      restoreEnvValue('DANBI_ELECTRON_USER_DATA', previousElectronUserData);
       await rm(rootDir, { recursive: true, force: true });
     }
   });
@@ -22029,8 +22037,14 @@ describe('editor core', () => {
         crashDumpsPath: 'runtime/user-data/crashDumps',
         projectsPath: 'runtime/user-data/projects',
         packagesPath: 'runtime/user-data/packages',
+        importsPath: 'runtime/user-data/imports',
+        cachePath: 'runtime/user-data/cache',
+        autosavePath: 'runtime/user-data/autosave',
         rendersPath: 'runtime/user-data/renders',
         tempPath: 'runtime/user-data/temp',
+        jobsPath: 'runtime/user-data/jobs',
+        sttPath: 'runtime/user-data/stt',
+        outputsPath: 'runtime/user-data/outputs',
       },
       ffmpeg: {
         checkedAt: '2026-06-15T00:00:00.000Z',

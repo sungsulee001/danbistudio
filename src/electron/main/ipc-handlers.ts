@@ -1,3 +1,4 @@
+import { isAbsolute, posix, relative, resolve, win32 } from 'node:path';
 import {
   EDITOR_IPC_CHANNELS,
   type EditorIpcChannel,
@@ -52,6 +53,7 @@ export interface EditorIpcHandlerDependencies {
   mediaDialog?: ElectronMediaDialogLike;
   systemDiagnostics?: () => Promise<DanbiRuntimeDiagnosticsSnapshot> | DanbiRuntimeDiagnosticsSnapshot;
   externalExporterOutputRoot?: string;
+  projectPackageRoot?: string;
   pluginPackageInstallRoot?: string;
 }
 
@@ -71,8 +73,8 @@ export function createEditorIpcHandlers(deps: EditorIpcHandlerDependencies): Edi
     },
     [EDITOR_IPC_CHANNELS.projectSave]: (payload) => deps.projects.save(payload.project),
     [EDITOR_IPC_CHANNELS.projectDelete]: (payload) => deps.projects.delete(payload.id),
-    [EDITOR_IPC_CHANNELS.projectPackageExport]: (payload) => exportProjectPackageFolder(payload),
-    [EDITOR_IPC_CHANNELS.projectPackageImport]: (payload) => importProjectPackageFolder(payload),
+    [EDITOR_IPC_CHANNELS.projectPackageExport]: (payload) => exportProjectPackageFolder(withRuntimeProjectPackageRoot(payload, deps.projectPackageRoot)),
+    [EDITOR_IPC_CHANNELS.projectPackageImport]: (payload) => importProjectPackageFolder(withRuntimeProjectPackageRoot(payload, deps.projectPackageRoot)),
     [EDITOR_IPC_CHANNELS.projectCloudSync]: (payload) => syncProjectToCloudFolder(payload),
     [EDITOR_IPC_CHANNELS.projectCloudSyncImport]: (payload) => importProjectFromCloudFolder(payload),
     [EDITOR_IPC_CHANNELS.pluginPackageInstall]: async (payload) => {
@@ -176,6 +178,70 @@ export function createEditorIpcHandlers(deps: EditorIpcHandlerDependencies): Edi
       return deps.systemDiagnostics();
     },
   };
+}
+
+function withRuntimeProjectPackageRoot<T extends { packageDirectory: string }>(
+  payload: T,
+  projectPackageRoot?: string,
+): T {
+  const packageDirectory = resolveRuntimeProjectPackageDirectory(payload.packageDirectory, projectPackageRoot);
+  return packageDirectory === payload.packageDirectory
+    ? payload
+    : { ...payload, packageDirectory };
+}
+
+function resolveRuntimeProjectPackageDirectory(packageDirectory: string, projectPackageRoot?: string): string {
+  if (!projectPackageRoot || isAbsolutePath(packageDirectory)) {
+    return packageDirectory;
+  }
+
+  const relativePackagePath = normalizeRelativeProjectPackageDirectory(packageDirectory);
+  const packageRoot = resolve(projectPackageRoot);
+  const resolvedPackageDirectory = relativePackagePath
+    ? resolve(packageRoot, ...relativePackagePath.split('/'))
+    : packageRoot;
+  const packageRootRelativePath = relative(packageRoot, resolvedPackageDirectory);
+
+  if (packageRootRelativePath.startsWith('..') || isAbsolutePath(packageRootRelativePath)) {
+    throw new Error(`Project package directory escapes runtime package root: ${packageDirectory}`);
+  }
+
+  return resolvedPackageDirectory;
+}
+
+function normalizeRelativeProjectPackageDirectory(packageDirectory: string): string {
+  const normalized = packageDirectory.trim().replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+|\/+$/g, '');
+  if (!normalized) {
+    return '';
+  }
+  if (normalized.includes('\0')) {
+    throw new Error('Project package directory cannot contain null bytes.');
+  }
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(normalized)) {
+    throw new Error(`Project package directory must be relative or absolute filesystem path: ${packageDirectory}`);
+  }
+
+  const withoutDanbiPrefix = normalized === '.danbi'
+    ? ''
+    : normalized.startsWith('.danbi/')
+      ? normalized.slice('.danbi/'.length)
+      : normalized;
+  const withoutPackagesPrefix = withoutDanbiPrefix === 'packages'
+    ? ''
+    : withoutDanbiPrefix.startsWith('packages/')
+      ? withoutDanbiPrefix.slice('packages/'.length)
+      : withoutDanbiPrefix;
+  const parts = withoutPackagesPrefix.split('/').filter((part) => part && part !== '.');
+
+  if (parts.some((part) => part === '..')) {
+    throw new Error(`Project package directory cannot escape runtime package root: ${packageDirectory}`);
+  }
+
+  return parts.join('/');
+}
+
+function isAbsolutePath(value: string): boolean {
+  return isAbsolute(value) || win32.isAbsolute(value) || posix.isAbsolute(value);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -407,7 +407,8 @@ export function buildCommandPaletteItems(): CommandPaletteItem[] {
       throw new Error(`Unknown command palette variant command: ${variant.commandId}`);
     }
 
-    const description = variant.description ?? (command as { description?: string }).description;
+    const description = readOptionalDescription(variant) ?? readOptionalDescription(command);
+    const aliases = readOptionalStringList(variant, 'aliases');
 
     return {
       key: `${variant.commandId}:${variant.keySuffix}`,
@@ -424,7 +425,7 @@ export function buildCommandPaletteItems(): CommandPaletteItem[] {
         variant.keys,
         description ?? '',
         ...command.defaultShortcuts,
-        ...(variant.aliases ?? []),
+        ...aliases,
       ].join(' ')),
     };
   });
@@ -557,6 +558,23 @@ function normalizeCommandPaletteLimit(limit: number): number {
   }
 
   return Math.max(0, Math.trunc(limit));
+}
+
+function readOptionalDescription(value: unknown): string | undefined {
+  return value && typeof value === 'object' && 'description' in value
+    ? (value as { description?: string }).description
+    : undefined;
+}
+
+function readOptionalStringList(value: unknown, key: string): string[] {
+  if (!value || typeof value !== 'object' || !(key in value)) {
+    return [];
+  }
+
+  const list = (value as Record<string, unknown>)[key];
+  return Array.isArray(list)
+    ? list.filter((item): item is string => typeof item === 'string')
+    : [];
 }
 
 function normalizeSearchText(value: string): string {

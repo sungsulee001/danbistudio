@@ -59,6 +59,7 @@ export async function startPackagedRendererServer(
   const requestedPort = options.port ?? readPort(options.env?.DANBI_ELECTRON_RENDERER_PORT);
   const port = requestedPort ?? await findAvailablePort(DEFAULT_PACKAGED_RENDERER_PORT, host);
   const url = `http://${host}:${port}/editor`;
+  const userDataPath = options.userDataPath ?? options.env?.DANBI_ELECTRON_USER_DATA;
   const child = spawn(options.execPath ?? process.execPath, [entryPath], {
     cwd: dirname(entryPath),
     env: {
@@ -71,7 +72,8 @@ export async function startPackagedRendererServer(
       DANBI_ELECTRON_INTERNAL_RENDERER: '1',
       DANBI_ELECTRON_RESOURCES_PATH: options.resourcesPath,
       DANBI_ELECTRON_APP_PATH: options.appPath,
-      DANBI_ELECTRON_USER_DATA: options.userDataPath ?? options.env?.DANBI_ELECTRON_USER_DATA,
+      DANBI_ELECTRON_USER_DATA: userDataPath,
+      DANBI_LOCAL_DATA_ROOT: userDataPath,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });

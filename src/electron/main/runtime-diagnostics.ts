@@ -34,8 +34,14 @@ export function resolveDanbiRuntimePaths(userDataPath: string): DanbiRuntimePath
     crashDumpsPath: join(userDataPath, 'crashDumps'),
     projectsPath: join(userDataPath, 'projects'),
     packagesPath: join(userDataPath, 'packages'),
+    importsPath: join(userDataPath, 'imports'),
+    cachePath: join(userDataPath, 'cache'),
+    autosavePath: join(userDataPath, 'autosave'),
     rendersPath: join(userDataPath, 'renders'),
     tempPath: join(userDataPath, 'temp'),
+    jobsPath: join(userDataPath, 'jobs'),
+    sttPath: join(userDataPath, 'stt'),
+    outputsPath: join(userDataPath, 'outputs'),
   };
 }
 
@@ -46,6 +52,7 @@ export function initializeDanbiDesktopRuntime(
   const userDataPath = options.userDataPath ?? app.getPath?.('userData') ?? join(process.cwd(), '.danbi', 'electron-user-data');
   const paths = resolveDanbiRuntimePaths(userDataPath);
 
+  applyElectronStorageEnvironment(paths);
   for (const directory of Object.values(paths)) {
     mkdirSync(directory, { recursive: true });
   }
@@ -108,6 +115,11 @@ export function appendRuntimeLog(paths: DanbiRuntimePathSnapshot, event: string,
   } catch {
     // Logging must never stop the editor from launching.
   }
+}
+
+function applyElectronStorageEnvironment(paths: DanbiRuntimePathSnapshot): void {
+  process.env.DANBI_ELECTRON_USER_DATA = paths.userDataPath;
+  process.env.DANBI_LOCAL_DATA_ROOT = paths.userDataPath;
 }
 
 function registerProcessDiagnostics(paths: DanbiRuntimePathSnapshot): void {

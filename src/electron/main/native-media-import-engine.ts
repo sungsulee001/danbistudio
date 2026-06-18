@@ -36,11 +36,20 @@ export interface NativeMediaImportOptions {
   queueCache?: boolean;
 }
 
+export interface NativeMediaImportAutomationEnv {
+  DANBI_ELECTRON_AUTOMATION_MEDIA_FILE_PATHS?: string;
+}
+
 export function selectAndImportNativeMediaFiles(
   dialog: ElectronMediaDialogLike,
   request: EditorNativeMediaImportRequest = {},
   options: NativeMediaImportOptions = {},
 ): Promise<EditorNativeMediaImportResponse> {
+  const automatedFilePaths = resolveNativeMediaImportAutomationFilePaths();
+  if (automatedFilePaths.length > 0) {
+    return importNativeMediaFilePaths(automatedFilePaths, options);
+  }
+
   return dialog.showOpenDialog({
     title: request.title ?? 'Import media',
     defaultPath: request.defaultPath,
@@ -56,6 +65,28 @@ export function selectAndImportNativeMediaFiles(
       ? { canceled: true, files: [], warnings: [] }
       : importNativeMediaFilePaths(result.filePaths, options)
   ));
+}
+
+export function resolveNativeMediaImportAutomationFilePaths(
+  env: NativeMediaImportAutomationEnv = process.env as NativeMediaImportAutomationEnv,
+): string[] {
+  const value = env.DANBI_ELECTRON_AUTOMATION_MEDIA_FILE_PATHS?.trim();
+  if (!value) {
+    return [];
+  }
+
+  if (value.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return Array.isArray(parsed)
+        ? parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map((item) => item.trim())
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  return value.split(path.delimiter).map((item) => item.trim()).filter(Boolean);
 }
 
 export async function importNativeMediaFilePaths(

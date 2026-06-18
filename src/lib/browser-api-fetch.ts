@@ -20,7 +20,7 @@ function buildBrowserApiFetchRequestInit(init: BrowserApiFetchInit, signal?: Abo
 function createBrowserApiFetchTimeout(init: BrowserApiFetchInit): { signal?: AbortSignal; clear: () => void } {
   if (!init.timeoutMs || init.timeoutMs <= 0 || typeof AbortController === 'undefined') {
     return {
-      signal: init.signal,
+      signal: init.signal ?? undefined,
       clear: () => {},
     };
   }

@@ -16,6 +16,7 @@
     "electron:gui-smoke": "node scripts/electron-gui-smoke.mjs",
     "electron:installer:smoke": "node scripts/electron-installer-smoke.mjs",
     "electron:install-smoke": "node scripts/electron-install-smoke.mjs",
+    "electron:local-installed-acceptance": "node scripts/electron-local-installed-acceptance.mjs",
     "electron:offline-smoke": "node scripts/electron-offline-smoke.mjs",
     "electron:package:smoke": "node scripts/electron-package-smoke.mjs",
     "electron:release:prepare": "node scripts/prepare-electron-release.mjs",
