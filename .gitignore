@@ -5,6 +5,8 @@ node_modules/
 
 # Testing
 /coverage
+/test-results
+/playwright-report
 *.log
 
 # Next.js
@@ -15,6 +17,8 @@ next-env.d.ts
 # Production
 /build
 /dist
+/dist-electron
+/release
 
 # Misc
 .DS_Store
@@ -39,10 +43,19 @@ prisma/dev.db
 prisma/dev.db-journal
 
 # Generated outputs
+.danbi/
 public/outputs/*
 !public/outputs/.gitkeep
 public/temp/*
 !public/temp/.gitkeep
+public/imports/*
+!public/imports/.gitkeep
+public/cache/*
+!public/cache/.gitkeep
+
+# Third-party source mirrors for audit/reference.
+# These repositories are cloned locally with their own licenses and git history.
+third_party/source-mirrors/
 
 # IDE
 .vscode/*

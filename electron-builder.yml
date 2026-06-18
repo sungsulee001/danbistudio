@@ -1,0 +1,37 @@
+appId: com.danbistudio.editor
+productName: Danbi Studio
+artifactName: "Danbi-Studio-${version}-${os}-${arch}.${ext}"
+
+directories:
+  output: release/electron
+  buildResources: build
+
+files:
+  - dist-electron/**/*
+  - package.json
+
+extraResources:
+  - from: .next/standalone
+    to: renderer/standalone
+    filter:
+      - "**/*"
+  - from: .danbi/electron-release/samples
+    to: samples
+    filter:
+      - "**/*"
+
+asar: true
+afterPack: scripts/electron-builder-after-pack.cjs
+
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true

@@ -22,3 +22,12 @@ model GenerationJob {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
+
+model EditorProjectRecord {
+  id            String   @id
+  name          String
+  data          String
+  thumbnailPath String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}

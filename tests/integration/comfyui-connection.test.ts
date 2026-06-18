@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 
 const COMFYUI_URL = process.env.COMFYUI_URL || 'http://localhost:8188';
+const describeComfyUIIntegration = process.env.RUN_COMFYUI_INTEGRATION === '1' ? describe : describe.skip;
 
 interface SystemStats {
   system: {
@@ -41,7 +42,7 @@ class ComfyUIClient {
     try {
       const response = await fetch(`${this.baseUrl}/system_stats`);
       return response.ok;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
@@ -83,7 +84,7 @@ class ComfyUIClient {
   }
 }
 
-describe('Phase 1: ComfyUI Connection Tests', () => {
+describeComfyUIIntegration('Phase 1: ComfyUI Connection Tests', () => {
   let client: ComfyUIClient;
 
   beforeAll(() => {
@@ -128,9 +129,9 @@ describe('Phase 1: ComfyUI Connection Tests', () => {
       };
 
       try {
-        await client.queuePrompt(testWorkflow);
-        // If it succeeds, that's fine
-        expect(true).toBe(true);
+        const queued = await client.queuePrompt(testWorkflow);
+        expect(queued.prompt_id).toEqual(expect.any(String));
+        expect(queued.number).toEqual(expect.any(Number));
       } catch (error) {
         // If it fails, check that we got a proper error response from ComfyUI
         // This proves the API is accessible and responding

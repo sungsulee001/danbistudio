@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-06-15",
+  "purpose": "Pinned local source mirrors for license audit and clean-room reference. These mirrors are not Danbi runtime, build, test, or package inputs.",
+  "mirrors": [
+    {
+      "id": "opencut",
+      "name": "OpenCut",
+      "remoteUrl": "https://github.com/opencut-app/opencut.git",
+      "officialLicenseUrl": "https://github.com/opencut-app/opencut/blob/main/LICENSE",
+      "localPath": "third_party/source-mirrors/opencut",
+      "auditCommit": "a5888e2087c125767a394dc7fe5b919ba503ae57",
+      "license": "MIT",
+      "licenseFile": "LICENSE",
+      "requiredLicenseTerms": [
+        "Copyright 2026 OpenCut",
+        "Permission is hereby granted, free of charge"
+      ],
+      "allowedUse": [
+        "Direct Copy",
+        "Adapted Copy",
+        "Clean-room",
+        "Reference Only"
+      ],
+      "requiredDanbiRecords": [
+        "docs/THIRD_PARTY_SOURCE_REGISTER_KR.md",
+        "third_party/NOTICE.md",
+        "adapted-source file header when implementation code is copied or closely adapted"
+      ],
+      "distributionBoundary": "May be reused in Danbi source under MIT notice preservation. Source mirror itself must remain ignored and must not be bundled."
+    },
+    {
+      "id": "opencut-classic",
+      "name": "OpenCut Classic",
+      "remoteUrl": "https://github.com/opencut-app/opencut-classic.git",
+      "officialLicenseUrl": "https://github.com/opencut-app/opencut-classic/blob/main/LICENSE",
+      "localPath": "third_party/source-mirrors/opencut-classic",
+      "auditCommit": "cf5e79e919144200294fb9fed22a222592a0aeea",
+      "license": "MIT",
+      "licenseFile": "LICENSE",
+      "requiredLicenseTerms": [
+        "Copyright 2025-2026 OpenCut",
+        "Permission is hereby granted, free of charge"
+      ],
+      "allowedUse": [
+        "Direct Copy",
+        "Adapted Copy",
+        "Clean-room",
+        "Reference Only"
+      ],
+      "requiredDanbiRecords": [
+        "docs/THIRD_PARTY_SOURCE_REGISTER_KR.md",
+        "third_party/NOTICE.md",
+        "adapted-source file header when implementation code is copied or closely adapted"
+      ],
+      "distributionBoundary": "May be reused in Danbi source under MIT notice preservation. Source mirror itself must remain ignored and must not be bundled."
+    },
+    {
+      "id": "shotcut",
+      "name": "Shotcut",
+      "remoteUrl": "https://github.com/mltframework/shotcut.git",
+      "officialLicenseUrl": "https://github.com/mltframework/shotcut/blob/master/COPYING",
+      "localPath": "third_party/source-mirrors/shotcut",
+      "auditCommit": "9516f143e5c1e432d2088e91d2657c75bf6710e7",
+      "license": "GPLv3 / GPL-3.0",
+      "licenseFile": "COPYING",
+      "requiredLicenseTerms": [
+        "GNU GENERAL PUBLIC LICENSE",
+        "Version 3, 29 June 2007"
+      ],
+      "allowedUse": [
+        "Reference Only",
+        "Clean-room Reimplementation",
+        "External GPL Process"
+      ],
+      "requiredDanbiRecords": [
+        "docs/SHOTCUT_GPL_BOUNDARY_KR.md",
+        "docs/THIRD_PARTY_LICENSE_DECISION_LOG_KR.md",
+        "separate GPL notice and source-offer policy before any external GPL process is packaged"
+      ],
+      "distributionBoundary": "Do not copy Shotcut implementation code into Danbi main source. Use only reference-only notes, clean-room tests/specs, or a separately documented GPL process boundary."
+    }
+  ]
+}

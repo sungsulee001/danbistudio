@@ -1,14 +1,17 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { use, useCallback, useEffect, useState } from 'react';
+import { browserApiFetch } from '@/lib/browser-api-fetch';
+
+const STATUS_POLL_TIMEOUT_MS = 8000;
 
 interface JobStatus {
   id: string;
   status: string;
   modelName: string;
   workflowName: string;
-  parameters: any;
+  parameters: unknown;
   promptId?: string;
   resultPath?: string;
   error?: string;
@@ -16,54 +19,86 @@ interface JobStatus {
   updatedAt: string;
 }
 
+const activeStatuses = new Set(['pending', 'running']);
+
 export default function StatusPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [job, setJob] = useState<JobStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchStatus = useCallback(async (signal?: AbortSignal): Promise<JobStatus | null> => {
+    setRefreshing(true);
+    setError(null);
+
+    try {
+      const response = await browserApiFetch(`/api/status/${id}`, {
+        cache: 'no-store',
+        signal,
+        timeoutMs: STATUS_POLL_TIMEOUT_MS,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch job status: ${response.status}`);
+      }
+
+      const data = await response.json() as JobStatus;
+      setJob(data);
+      return data;
+    } catch (fetchError) {
+      if (signal?.aborted) {
+        return null;
+      }
+
+      setError((fetchError as Error).message);
+      return null;
+    } finally {
+      if (!signal?.aborted) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    }
+  }, [id]);
+
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    const controller = new AbortController();
+    let interval: ReturnType<typeof setInterval> | null = null;
+    let polling = false;
 
-    const fetchStatus = async () => {
+    const pollStatus = async () => {
+      if (polling || controller.signal.aborted) {
+        return;
+      }
+
+      polling = true;
       try {
-        const response = await fetch(`/api/status/${id}`);
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch job status');
+        const nextJob = await fetchStatus(controller.signal);
+        if (nextJob && !activeStatuses.has(nextJob.status) && interval) {
+          clearInterval(interval);
+          interval = null;
         }
-
-        const data = await response.json();
-        setJob(data);
-        setLoading(false);
-
-        // Stop polling if job is completed or failed
-        if (data.status === 'completed' || data.status === 'failed') {
-          if (interval) clearInterval(interval);
-        }
-      } catch (err) {
-        setError((err as Error).message);
-        setLoading(false);
-        if (interval) clearInterval(interval);
+      } finally {
+        polling = false;
       }
     };
 
-    // Initial fetch
-    fetchStatus();
-
-    // Poll every 3 seconds
-    interval = setInterval(fetchStatus, 3000);
+    void pollStatus();
+    interval = setInterval(() => void pollStatus(), 3000);
 
     return () => {
-      if (interval) clearInterval(interval);
+      controller.abort();
+      if (interval) {
+        clearInterval(interval);
+      }
     };
-  }, [id]);
+  }, [fetchStatus]);
 
   if (loading) {
     return (
-      <main className="container mx-auto px-4 py-8 min-h-screen">
-        <div className="max-w-2xl mx-auto text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary mx-auto mb-4"></div>
+      <main className="container mx-auto min-h-screen px-4 py-8">
+        <div className="mx-auto max-w-2xl text-center">
+          <div className="mx-auto mb-4 h-16 w-16 animate-spin rounded-full border-b-2 border-primary" />
           <p className="text-foreground/70">Loading job status...</p>
         </div>
       </main>
@@ -72,69 +107,77 @@ export default function StatusPage({ params }: { params: Promise<{ id: string }>
 
   if (error || !job) {
     return (
-      <main className="container mx-auto px-4 py-8 min-h-screen">
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-8 text-center">
-            <h2 className="text-2xl font-bold text-red-400 mb-4">Error</h2>
-            <p className="text-red-400/80 mb-6">{error || 'Job not found'}</p>
-            <Link
-              href="/"
-              className="inline-block bg-primary hover:bg-primary/80 text-white px-6 py-3 rounded-lg transition-all font-medium shadow-lg shadow-primary/20"
-            >
-              Go Home
-            </Link>
+      <main className="container mx-auto min-h-screen px-4 py-8">
+        <div className="mx-auto max-w-2xl">
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-8 text-center">
+            <h2 className="mb-4 text-2xl font-bold text-red-400">Error</h2>
+            <p className="mb-6 text-red-400/80">{error || 'Job not found'}</p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
+              <button
+                type="button"
+                onClick={() => void fetchStatus()}
+                className="rounded-lg bg-primary px-6 py-3 font-medium text-white shadow-lg shadow-primary/20 transition-colors hover:bg-primary/80"
+              >
+                Retry
+              </button>
+              <Link
+                href="/library"
+                className="rounded-lg border border-border bg-secondary px-6 py-3 font-medium text-foreground transition-colors hover:bg-secondary/70"
+              >
+                View Library
+              </Link>
+            </div>
           </div>
         </div>
       </main>
     );
   }
 
-  const statusColor = {
-    pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-    running: 'bg-primary/20 text-primary border-primary/30',
-    completed: 'bg-green-500/20 text-green-400 border-green-500/30',
-    failed: 'bg-red-500/20 text-red-400 border-red-500/30',
-  }[job.status] || 'bg-foreground/10 text-foreground/80 border-border';
+  const isActive = activeStatuses.has(job.status);
 
   return (
-    <main className="container mx-auto px-4 py-8 min-h-screen">
-      <div className="max-w-2xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <Link href="/" className="text-primary hover:text-primary/80 mb-4 inline-block transition-colors">
-            ← Back to Home
-          </Link>
-          <h1 className="text-3xl font-bold text-foreground mb-2">
-            Job Status
-          </h1>
-          <p className="text-foreground/60 font-mono text-sm">
-            {job.id}
-          </p>
+    <main className="container mx-auto min-h-screen px-4 py-8">
+      <div className="mx-auto max-w-2xl">
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <Link href="/" className="mb-4 inline-block text-primary transition-colors hover:text-primary/80">
+              Back to Home
+            </Link>
+            <h1 className="mb-2 text-3xl font-bold text-foreground">Job Status</h1>
+            <p className="font-mono text-sm text-foreground/60">{job.id}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void fetchStatus()}
+            disabled={refreshing}
+            className="rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary/70 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </button>
         </div>
 
-        {/* Status Card */}
-        <div className="bg-secondary/50 backdrop-blur-sm border border-border rounded-lg shadow-lg p-8 mb-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-semibold text-foreground">
-              Current Status
-            </h2>
-            <span className={`px-4 py-2 rounded-full border font-medium uppercase text-sm ${statusColor}`}>
-              {job.status}
+        <div className="mb-6 rounded-lg border border-border bg-secondary/50 p-8 shadow-lg backdrop-blur-sm">
+          <div className="mb-6 flex items-center justify-between gap-4">
+            <h2 className="text-2xl font-semibold text-foreground">Current Status</h2>
+            <span className={`rounded-full border px-4 py-2 text-sm font-medium uppercase ${statusClassName(job.status)}`}>
+              {statusLabel(job.status)}
             </span>
           </div>
 
-          {job.status === 'running' && (
+          {isActive && (
             <div className="mb-6">
-              <div className="w-full bg-background/50 rounded-full h-2 overflow-hidden">
-                <div className="bg-primary h-2 rounded-full animate-pulse" style={{ width: '60%' }}></div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-background/50">
+                <div className="h-2 w-1/2 animate-pulse rounded-full bg-primary" />
               </div>
-              <p className="text-sm text-foreground/70 mt-2">Processing...</p>
+              <p className="mt-2 text-sm text-foreground/70">
+                {job.status === 'pending' ? 'Queued in ComfyUI...' : 'Processing in ComfyUI...'}
+              </p>
             </div>
           )}
 
           {job.error && (
-            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-              <p className="text-red-400 font-medium">Error:</p>
+            <div className="mb-6 rounded-lg border border-red-500/30 bg-red-500/10 p-4">
+              <p className="font-medium text-red-400">Error</p>
               <p className="text-red-400/80">{job.error}</p>
             </div>
           )}
@@ -143,45 +186,45 @@ export default function StatusPage({ params }: { params: Promise<{ id: string }>
             <InfoRow label="Model" value={job.modelName} />
             <InfoRow label="Workflow" value={job.workflowName} />
             {job.promptId && <InfoRow label="Prompt ID" value={job.promptId} />}
-            <InfoRow label="Created" value={new Date(job.createdAt).toLocaleString()} />
-            <InfoRow label="Updated" value={new Date(job.updatedAt).toLocaleString()} />
+            <InfoRow label="Created" value={formatDate(job.createdAt)} />
+            <InfoRow label="Updated" value={formatDate(job.updatedAt)} />
           </div>
         </div>
 
-        {/* Result */}
-        {job.status === 'completed' && job.resultPath && (
-          <div className="bg-secondary/50 backdrop-blur-sm border border-border rounded-lg shadow-lg p-8">
-            <h2 className="text-2xl font-semibold text-foreground mb-4">
-              Result
-            </h2>
-            <div className="bg-background/50 border border-border rounded-lg p-4 mb-4">
-              <img
-                src={job.resultPath}
-                alt="Generated result"
-                className="max-w-full mx-auto rounded"
-              />
-            </div>
-            <a
-              href={job.resultPath}
-              download
-              className="block w-full text-center bg-primary hover:bg-primary/80 text-white px-6 py-3 rounded-lg transition-all font-medium shadow-lg shadow-primary/20"
-            >
-              Download Result
-            </a>
+        {job.status === 'completed' && (
+          <div className="rounded-lg border border-border bg-secondary/50 p-8 shadow-lg backdrop-blur-sm">
+            <h2 className="mb-4 text-2xl font-semibold text-foreground">Result</h2>
+            {job.resultPath ? (
+              <>
+                <div className="mb-4 rounded-lg border border-border bg-background/50 p-4">
+                  <ResultPreview job={job} />
+                </div>
+                <a
+                  href={job.resultPath}
+                  download
+                  className="block w-full rounded-lg bg-primary px-6 py-3 text-center font-medium text-white shadow-lg shadow-primary/20 transition-colors hover:bg-primary/80"
+                >
+                  Download Result
+                </a>
+              </>
+            ) : (
+              <p className="text-foreground/70">
+                The job completed, but no output file was captured.
+              </p>
+            )}
           </div>
         )}
 
-        {/* Actions */}
-        <div className="mt-6 flex gap-4">
+        <div className="mt-6 flex flex-col gap-4 sm:flex-row">
           <Link
             href="/generate"
-            className="flex-1 text-center bg-primary hover:bg-primary/80 text-white px-6 py-3 rounded-lg transition-all font-medium shadow-lg shadow-primary/20"
+            className="flex-1 rounded-lg bg-primary px-6 py-3 text-center font-medium text-white shadow-lg shadow-primary/20 transition-colors hover:bg-primary/80"
           >
             Generate Another
           </Link>
           <Link
             href="/library"
-            className="flex-1 text-center bg-secondary border border-border hover:bg-secondary/70 text-foreground px-6 py-3 rounded-lg transition-all font-medium"
+            className="flex-1 rounded-lg border border-border bg-secondary px-6 py-3 text-center font-medium text-foreground transition-colors hover:bg-secondary/70"
           >
             View Library
           </Link>
@@ -191,11 +234,93 @@ export default function StatusPage({ params }: { params: Promise<{ id: string }>
   );
 }
 
+function ResultPreview({ job }: { job: JobStatus }) {
+  if (!job.resultPath) {
+    return null;
+  }
+
+  if (isVideoPath(job.resultPath)) {
+    return (
+      <video
+        src={job.resultPath}
+        controls
+        className="mx-auto max-h-[70vh] max-w-full rounded"
+      />
+    );
+  }
+
+  return (
+    <img
+      src={job.resultPath}
+      alt={`${job.modelName} result`}
+      className="mx-auto max-h-[70vh] max-w-full rounded"
+    />
+  );
+}
+
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between items-center py-2 border-b border-border/30">
-      <span className="text-foreground/70 font-medium">{label}</span>
-      <span className="text-foreground">{value}</span>
+    <div className="flex items-center justify-between gap-4 border-b border-border/30 py-2">
+      <span className="font-medium text-foreground/70">{label}</span>
+      <span className="min-w-0 truncate text-right text-foreground" title={value}>
+        {value}
+      </span>
     </div>
   );
+}
+
+function statusLabel(status: string): string {
+  if (status === 'pending') {
+    return 'Pending';
+  }
+
+  if (status === 'running') {
+    return 'Running';
+  }
+
+  if (status === 'completed') {
+    return 'Completed';
+  }
+
+  if (status === 'failed') {
+    return 'Failed';
+  }
+
+  return status || 'Unknown';
+}
+
+function statusClassName(status: string): string {
+  if (status === 'pending') {
+    return 'border-yellow-500/30 bg-yellow-500/20 text-yellow-300';
+  }
+
+  if (status === 'running') {
+    return 'border-primary/30 bg-primary/20 text-primary';
+  }
+
+  if (status === 'completed') {
+    return 'border-green-500/30 bg-green-500/20 text-green-300';
+  }
+
+  if (status === 'failed') {
+    return 'border-red-500/30 bg-red-500/20 text-red-300';
+  }
+
+  return 'border-border bg-foreground/10 text-foreground/80';
+}
+
+function isVideoPath(path: string): boolean {
+  return /\.(?:mp4|webm|mov|m4v|mkv)$/i.test(path);
+}
+
+function formatDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
 }
