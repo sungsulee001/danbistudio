@@ -849,3 +849,43 @@ UX 구조 변경을 진행할 때는 다음 문서를 같이 갱신한다.
 - ComfyUI/Automation/Render Worker/Plugin architecture를 유지하는 것을 명시했다.
 - screen별 역할, 표시 항목, 숨길 항목, 상태 모델, 사용자 흐름, 단계별 전환 계획을 문서화했다.
 - 이번 작업은 문서 작업만 수행했다.
+
+## 17. Phase 1 구현 기록
+
+2026-06-19:
+
+- 기존 `/` -> `/editor` redirect를 제거하고 Project Hub를 첫 화면으로 구현했다.
+- `src/app/danbi-app-shell.tsx`에 공통 app shell, left rail, top bar, status bar, workspace panel primitives를 추가했다.
+- 다음 top-level route를 추가했다.
+  - `/`
+  - `/ai-studio`
+  - `/automation`
+  - `/render-queue`
+  - `/extensions`
+- 기존 `/editor`는 그대로 유지하고 Project Hub와 shell navigation에서 연결했다.
+- 기존 `/settings`, `/generate`, `/library`도 새 top-level 화면의 entry action으로 연결했다.
+- ComfyUI, AI Results, Automation, Render Worker, Render Worker Daemon, Fleet Discovery, Headless Render, Plugin/Extension system은 제거하거나 우회하지 않았다.
+
+이번 구현 범위:
+
+- Phase 1 app shell
+- Project Hub first screen
+- top-level workspace routing
+- 운영 화면 skeleton
+
+검증:
+
+- `npm run build` 통과
+- `/`, `/ai-studio`, `/automation`, `/render-queue`, `/extensions` route 200 OK 확인
+- local dev server: `http://127.0.0.1:3000`
+
+아직 남은 UX 구현:
+
+- Editor 본문을 app shell 내부로 통합
+- 실제 saved/recent project list를 Project Hub에 연결
+- AI Studio가 실제 ComfyUI queue와 AI Results state를 직접 읽도록 연결
+- Automation 화면이 실제 hook/job state를 직접 읽도록 연결
+- Render Queue 화면이 실제 render jobs/worker/fleet state를 직접 읽도록 연결
+- Extensions 화면이 실제 plugin manifest/signing/sandbox state를 직접 읽도록 연결
+- Settings 화면을 app shell 구조로 통합
+- Playwright screenshot 기반 desktop/mobile layout 검증

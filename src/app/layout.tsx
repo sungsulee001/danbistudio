@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'DanbiStudio',
-  description: 'Local GPU-based AI Model Platform',
+  title: 'Danbi Studio',
+  description: 'Local-first desktop video editor and orchestration platform',
 };
 
 export default function RootLayout({

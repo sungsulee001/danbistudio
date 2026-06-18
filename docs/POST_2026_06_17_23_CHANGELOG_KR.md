@@ -354,3 +354,64 @@ docs/UX_STRUCTURE_DESIGN_KR.md
 - Local Installed-App Acceptance와 external Fresh Windows QA pending 상태를 Settings/Diagnostics에서 구분한다.
 
 이번 UX 작업은 문서 작업만 수행했다. 코드 구현, 테스트 실행, 화면 변경은 하지 않았다.
+
+## 15. 2026-06-19 UX Phase 1 구현
+
+UX 구조 설계의 첫 구현 단계로 Project Hub와 top-level app shell을 추가했다.
+
+변경 파일:
+
+- `src/app/danbi-app-shell.tsx`
+- `src/app/page.tsx`
+- `src/app/ai-studio/page.tsx`
+- `src/app/automation/page.tsx`
+- `src/app/render-queue/page.tsx`
+- `src/app/extensions/page.tsx`
+- `src/app/layout.tsx`
+- `docs/UX_STRUCTURE_DESIGN_KR.md`
+
+구현 내용:
+
+- 기존 `/` -> `/editor` redirect 제거
+- `/`를 Project Hub 첫 화면으로 변경
+- left rail, top bar, status bar, workspace panel primitive 추가
+- `/ai-studio`, `/automation`, `/render-queue`, `/extensions` route 추가
+- 기존 `/editor`, `/settings`, `/generate`, `/library`와 연결
+
+보존 조건:
+
+- ComfyUI integration 제거 없음
+- ComfyUI batch queue 제거 없음
+- AI Results workflow 제거 없음
+- Automation hooks 제거 없음
+- Render Worker / Daemon / Fleet Discovery / Headless Render 제거 없음
+- Plugin / Extension system 제거 없음
+- 기존 export validation semantics 변경 없음
+
+검증:
+
+```text
+npm run build
+```
+
+결과:
+
+```text
+passed
+```
+
+route 확인:
+
+```text
+/ 200 OK
+/ai-studio 200 OK
+/automation 200 OK
+/render-queue 200 OK
+/extensions 200 OK
+```
+
+local dev server:
+
+```text
+http://127.0.0.1:3000
+```
