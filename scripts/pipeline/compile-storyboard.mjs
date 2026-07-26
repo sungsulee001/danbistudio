@@ -529,12 +529,13 @@ function buildProject({ productionId, projectName, cuts, timeline, assetsDoc, ma
     const seg = segId ? placedTts.find((item) => item.assetId === segId) : undefined;
     const start = seg ? seg.start : cut.start;
     const end = seg ? round(seg.start + seg.duration) : cut.end;
+    // speaker 필드는 넣지 않는다 — 렌더러 formatCaptionText가 "speaker: " 접두사를
+    // 번인하는데, 화자 표기는 콘티 subtitle 텍스트가 이미 소유한다(로마자 접두사 방지).
     captions.push({
       id: `caption-${cut.id.toLowerCase()}`,
       start,
       end,
       text: cut.subtitle.text,
-      ...(seg ? { speaker: seg.speaker } : {}),
       style: { ...CAPTION_STYLES[cut.subtitle.style] },
     });
     if (!seg) {
@@ -726,6 +727,37 @@ function cutLabel(cutNo) {
   return `CUT-${String(cutNo).padStart(2, '0')}`;
 }
 
+function scaleCaptionFontsForProfile(project, profile, referenceHeight) {
+  const scale = profile.height / referenceHeight;
+  if (Math.abs(scale - 1) < 0.001) return project;
+
+  const scaleFontSize = (value) => Math.min(180, Math.max(12, Math.round(value * scale)));
+  const scaleShadow = (value) => Math.min(32, Math.max(0, Math.round(value * scale)));
+  const scaleStyle = (style) => ({
+    ...style,
+    ...(typeof style.fontSize === 'number' ? { fontSize: scaleFontSize(style.fontSize) } : {}),
+    ...(typeof style.shadowOffset === 'number' ? { shadowOffset: scaleShadow(style.shadowOffset) } : {}),
+  });
+
+  return {
+    ...project,
+    captions: project.captions.map((caption) => (
+      caption.style ? { ...caption, style: scaleStyle(caption.style) } : caption
+    )),
+    tracks: project.tracks.map((track) => ({
+      ...track,
+      clips: track.clips.map((clip) => ({
+        ...clip,
+        effects: clip.effects.map((effect) => (
+          effect.type === 'caption' && effect.parameters?.titleStyle === true
+            ? { ...effect, parameters: scaleStyle(effect.parameters) }
+            : effect
+        )),
+      })),
+    })),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // 4. 스키마 검증 (project-schema.ts를 esbuild로 번들 — src 무수정, 읽기 전용 사용)
 // ---------------------------------------------------------------------------
@@ -877,9 +909,16 @@ async function main() {
     // 자막 번인: 렌더러는 project.captions가 비어 있지 않으면 항상 번인한다
     // (ffmpeg-renderer buildCaptionBurnInFilters — 별도 옵션 없음).
     const profileId = args.profile ?? project.exportProfiles[0].id;
-    if (!project.exportProfiles.some((profile) => profile.id === profileId)) {
+    const renderProfile = project.exportProfiles.find((profile) => profile.id === profileId);
+    if (!renderProfile) {
       throw new Error(`render: unknown export profile ${profileId}`);
     }
+
+    // 캡션/타이틀 fontSize는 렌더러에서 절대 px(출력 해상도 비례 스케일 없음 —
+    // normalizeCaptionRenderStyle은 미지정 시에만 height 비례 기본값). 프로젝트의
+    // 스타일 값은 1080p 기준이므로, 렌더 페이로드에서만 출력높이×(기준값/1080)로
+    // 스케일한다(저장 프로젝트는 1080p 기준값 유지 — 본 렌더에서 그대로 적정).
+    const renderProject = scaleCaptionFontsForProfile(project, renderProfile, PROJECT_HEIGHT);
     const jobStatePath = path.join(workdir, `render-job-${profileId}.json`);
 
     let jobId = args.job;
@@ -895,7 +934,7 @@ async function main() {
       const queueResponse = await fetch(`${args.api}/api/editor/render-jobs`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ project, profileId, encoderPreference: args.encoder ?? 'auto' }),
+        body: JSON.stringify({ project: renderProject, profileId, encoderPreference: args.encoder ?? 'auto' }),
       });
       const queued = await queueResponse.json();
       if (!queueResponse.ok) {
