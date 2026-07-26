@@ -753,18 +753,33 @@ function buildProject({ productionId, projectName, cuts, timeline, assetsDoc, ma
     chapterIndex += 1;
   }
 
-  // v1 유래 검수 포인트는 소스 매핑으로 v2 컷 위치를 찾는다 (컷 번호 하드코딩 제거)
+  // v1 유래 검수 포인트는 소스 매핑으로 v2 컷 위치를 찾고, 채택 이미지가 해당 결함본일 때만 표시
   const v2Of = (v1CutId) => placedCuts.find((cut) => cut.source === `v1 ${v1CutId}`);
   const reviewTodos = [
     { time: 0, label: '자막 word-level 후속', note: '캡션 타이밍은 세그먼트 수준 — SenseVoice word-level 정렬은 후속 사이클' },
-    { time: 0, label: 'v2 콘티 재승인 대기', note: '컷 밀도 개정(45컷)·신규 이미지 25장 채택은 잠정 — 인간 재승인 필요(EXTERNAL_PENDING)' },
-    { time: v2Of('CUT-02')?.start ?? 0, label: `${v2Of('CUT-02')?.id ?? ''} 우측 크롭 전제(구 CUT-02)`, note: '채택 조건: 우측 ~18% 크롭(인물 잔존) — UI에서 리프레임 확인' },
-    { time: v2Of('CUT-07')?.start ?? 0, label: `${v2Of('CUT-07')?.id ?? ''} 크롭·화질 확인(구 CUT-07)`, note: '우측 ~35% 크롭 전제 + I2V가 832×468 크롭 업스케일이라 연질 가능 — 미달 시 kenburns 폴백' },
-    { time: v2Of('CUT-08')?.start ?? 0, label: `${v2Of('CUT-08')?.id ?? ''} 하단 프레이밍(구 CUT-08)`, note: '하단 가장자리 점경 인물 극소수 — 프레이밍/크롭으로 배제 확인' },
-    { time: v2Of('CUT-13')?.start ?? 0, label: `${v2Of('CUT-13')?.id ?? ''} 파열음 SFX(구 CUT-13)`, note: '화면 침묵 컷 — BGM 공백 유지, 파열음 SFX 별도 삽입 필요(S6 소관)' },
-    { time: v2Of('CUT-07')?.start ?? 0, label: 'I2V 슬로우 저더 확인', note: `I2V 4컷 ${I2V_SPEED}x 슬로우(16fps 소스 → 실효 8fps) — 저더 확인, 필요시 보간/루프 대체` },
-    ...todoMarkers,
+    { time: 0, label: 'v2 콘티 재승인 대기', note: '컷 밀도 개정(45컷)·신규/교체 이미지 채택은 잠정 — 인간 재승인 필요(EXTERNAL_PENDING)' },
   ];
+  const cropCut02 = v2Of('CUT-02');
+  if (cropCut02?.imageAsset.assetId === 'CUT-02-r3') {
+    reviewTodos.push({ time: cropCut02.start, label: `${cropCut02.id} 우측 크롭 전제(구 CUT-02)`, note: '채택 조건: 우측 ~18% 크롭(인물 잔존) — UI에서 리프레임 확인' });
+  }
+  const cropCut07 = v2Of('CUT-07');
+  if (cropCut07?.imageAsset.assetId === 'CUT-07-r3') {
+    reviewTodos.push({ time: cropCut07.start, label: `${cropCut07.id} 크롭·화질 확인(구 CUT-07)`, note: '우측 ~35% 크롭 전제 + I2V가 832×468 크롭 업스케일이라 연질 가능 — 미달 시 kenburns 폴백' });
+  }
+  const frameCut08 = v2Of('CUT-08');
+  if (frameCut08?.imageAsset.assetId === 'CUT-08-r2') {
+    reviewTodos.push({ time: frameCut08.start, label: `${frameCut08.id} 하단 프레이밍(구 CUT-08)`, note: '하단 가장자리 점경 인물 극소수 — 프레이밍/크롭으로 배제 확인' });
+  }
+  const sfxCut = v2Of('CUT-13');
+  if (sfxCut) {
+    reviewTodos.push({ time: sfxCut.start, label: `${sfxCut.id} 파열음 SFX(구 CUT-13)`, note: '화면 침묵 컷 — BGM 공백 유지, 파열음 SFX 별도 삽입 필요(S6 소관)' });
+  }
+  const i2vCuts = placedCuts.filter((cut) => cut.isI2V);
+  if (i2vCuts.length > 0) {
+    reviewTodos.push({ time: i2vCuts[0].start, label: 'I2V 슬로우 저더 확인', note: `I2V ${i2vCuts.length}컷 ${I2V_SPEED}x 슬로우(16fps 소스 → 실효 8fps) — 저더 확인, 필요시 보간/루프 대체` });
+  }
+  reviewTodos.push(...todoMarkers);
   reviewTodos.forEach((todo, index) => {
     markers.push({
       id: `marker-todo-${index + 1}`,
