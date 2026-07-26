@@ -591,6 +591,7 @@ function buildTextVisualUnit(
   const textPosition = buildTextPositionExpression(context.clip, 't', style);
   const drawTextOptions = [
     `text='${escapeDrawtextText(text)}'`,
+    ...buildDrawtextFontOptions(),
     `fontcolor=${captionColorToFfmpeg(style.fontColor)}`,
     `fontsize=${Math.round(style.fontSize)}`,
     `box=${style.boxEnabled ? 1 : 0}`,
@@ -1888,6 +1889,7 @@ function buildCaptionBurnInFilters(
     const text = escapeDrawtextText(formatCaptionText(caption));
     const options = [
       `text='${text}'`,
+      ...buildDrawtextFontOptions(),
       `fontcolor=${captionColorToFfmpeg(style.fontColor)}`,
       `fontsize=${Math.round(style.fontSize)}`,
       `box=${style.boxEnabled ? 1 : 0}`,
@@ -1908,6 +1910,42 @@ function buildCaptionBurnInFilters(
     currentLabel = nextLabel;
     return filter;
   });
+}
+
+let cachedDefaultDrawtextFontFile: string | null | undefined;
+
+/**
+ * drawtext는 fontfile 미지정 시 fontconfig 기본 폰트로 폴백하는데, Windows FFmpeg 빌드의
+ * 기본 폰트는 한글 글리프가 없어 CJK 텍스트가 tofu(□)로 렌더된다. 캡션/타이틀 스타일
+ * 스키마에는 폰트 필드가 없으므로, Node 렌더 컨텍스트에서만 CJK 커버리지가 있는 시스템
+ * 폰트(맑은 고딕)를 기본 폴백으로 지정한다. DANBI_CAPTION_FONT_FILE 환경 변수가 있으면
+ * 그것이 우선한다. 브라우저 번들에서는 항상 no-op(기존 동작 유지).
+ */
+function resolveDefaultDrawtextFontFile(): string | undefined {
+  if (cachedDefaultDrawtextFontFile !== undefined) {
+    return cachedDefaultDrawtextFontFile ?? undefined;
+  }
+
+  cachedDefaultDrawtextFontFile = null;
+  if (typeof process !== 'undefined' && process.versions?.node) {
+    const override = process.env?.DANBI_CAPTION_FONT_FILE?.trim();
+    if (override) {
+      cachedDefaultDrawtextFontFile = override;
+    } else if (process.platform === 'win32') {
+      cachedDefaultDrawtextFontFile = `${process.env?.WINDIR ?? 'C:\\Windows'}\\Fonts\\malgun.ttf`;
+    }
+  }
+
+  return cachedDefaultDrawtextFontFile ?? undefined;
+}
+
+function buildDrawtextFontOptions(): string[] {
+  const fontFile = resolveDefaultDrawtextFontFile();
+  if (!fontFile) {
+    return [];
+  }
+
+  return [`fontfile='${escapeDrawtextText(fontFile.replace(/\\/g, '/'))}'`];
 }
 
 function buildDrawtextShadowOptions(style: Required<CaptionStyle>): string[] {
