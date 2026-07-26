@@ -16,12 +16,15 @@
  * 배치 규칙 (S6 §4.1):
  *  - 컷 duration: TTS 실측이 시간을 지배 — 장면별 (실측+휴지)/계획 비율로 duration_plan 스케일.
  *    장면 간 0.3s 휴지, 최종 컷 뒤 1.0s 엔딩 마진(S2 전체 여백).
- *  - V1: 컷 20개 순서 배치. I2V 컷은 [채택 정지 이미지 → I2V 클립(0.5× 슬로우, 최대 ~10.12s)]로
+ *  - V1: 콘티 컷 순서 배치(v2: 컷 수 가변 — 45컷). 이미지/I2V 에셋은 콘티의
+ *    "v1→v2 재사용 매핑 표"가 결정(명시 asset_id 또는 '신규'→03-assets cut_id+-v2 채택 행).
+ *    I2V 컷은 [채택 정지 이미지 → I2V 클립(0.5× 슬로우, 최대 ~10.12s)]로
  *    분할 — I2V 첫 프레임 = 입력 정지 이미지이므로 정지→I2V 접합점이 프레임 매치(자연 분할점).
- *  - V2(text): 콘티 subtitle 중 타이틀 카드(CUT-02)만 Title style 텍스트 클립.
- *    나머지 자막은 captions[](캡션 체계, 세그먼트 수준 타이밍 — word-level 후속).
+ *  - V2(text): 콘티 subtitle 중 "(타이틀 카드)" 마커가 있는 컷만 Title style 텍스트 클립.
+ *    나머지 subtitle 컷은 상단 오버레이 카드, 전체 나레이션 자막은 captions[](세그먼트 수준 — word-level 후속).
  *  - A1: TTS 세그먼트 순서·장면 경계대로 연속 배치(장면 내 연속, 장면 간 0.3s 휴지).
- *  - A2: BGM을 챕터 구간 오프셋에 배치, CUT-13 구간 공백. 트랙 volumeDb -14dB.
+ *  - A2: BGM 구간은 콘티 bgm_cue 시퀀스(start/change=구간 시작, stop=침묵)가 결정 —
+ *    k번째 구간 ← k번째 bgm 행(assetId 순). 트랙 volumeDb -14dB.
  *  - 전환: §2.1a 사전 → 스키마 타입 매핑(dissolve→crossfade). ai-morph는 이번 사이클
  *    crossfade 폴백(+todo 마커).
  *  - 마커: 챕터 5개 kind:chapter(제목 포함 — 유튜브 챕터 직결) + 검수 포인트 kind:todo.
@@ -106,10 +109,10 @@ function parseAssetsDoc(markdown) {
   const productionId = markdown.match(/^production_id:\s*(\S+)/m)?.[1];
   if (!productionId) throw new Error('03-assets.md: production_id not found');
 
-  const images = new Map(); // cutNo -> { assetId, path }
+  const imagesById = new Map(); // 채택 이미지: asset_id -> { assetId, cutId, path }
   const tts = [];
   const bgm = [];
-  const i2v = new Map(); // cutNo -> { assetId, path, duration }
+  const i2vById = new Map(); // asset_id -> { assetId, path, duration }
 
   for (const line of markdown.split('\n')) {
     if (!line.startsWith('|')) continue;
@@ -121,11 +124,8 @@ function parseAssetsDoc(markdown) {
 
     if (type === 'image') {
       if (!assetId.startsWith('CUT-') || !adopted.includes('채택')) continue;
-      const cutNo = Number(assetId.match(/^CUT-(\d+)/)[1]);
-      if (images.has(cutNo)) {
-        throw new Error(`03-assets.md: cut ${cutNo} has multiple adopted images (${images.get(cutNo).assetId}, ${assetId})`);
-      }
-      images.set(cutNo, { assetId, path: filePath });
+      // v2: 컷별 채택은 콘티의 재사용 매핑 표가 결정 — 여기서는 채택 행을 id로 색인만 한다.
+      imagesById.set(assetId, { assetId, cutId, path: filePath });
     } else if (type === 'tts') {
       const match = assetId.match(/^N(\d{2})-(\d{2})-(.+)$/);
       if (!match) throw new Error(`03-assets.md: unexpected tts asset_id ${assetId}`);
@@ -138,23 +138,62 @@ function parseAssetsDoc(markdown) {
         duration: Number(durationSec),
       });
     } else if (type === 'bgm') {
-      const range = cutId.match(/^CUT-(\d+)(?:~(\d+))?$/);
-      if (!range) throw new Error(`03-assets.md: unexpected bgm cut range ${cutId}`);
-      bgm.push({
-        assetId,
-        path: filePath,
-        duration: Number(durationSec),
-        cutStart: Number(range[1]),
-        cutEnd: Number(range[2] ?? range[1]),
-      });
+      bgm.push({ assetId, path: filePath, duration: Number(durationSec), cutRange: cutId });
     } else if (type === 'i2v') {
-      const cutNo = Number(cutId.match(/^CUT-(\d+)/)[1]);
-      i2v.set(cutNo, { assetId, path: filePath, duration: Number(durationSec) });
+      i2vById.set(assetId, { assetId, path: filePath, duration: Number(durationSec) });
     }
   }
 
   tts.sort((a, b) => (a.scene - b.scene) || (a.order - b.order));
-  return { productionId, images, tts, bgm, i2v };
+  bgm.sort((a, b) => a.assetId.localeCompare(b.assetId));
+  return { productionId, imagesById, tts, bgm, i2vById };
+}
+
+// v2 콘티의 "## v1→v2 재사용 매핑 표" 파싱 — 컷별 이미지/i2v 에셋 해석의 권위 원천.
+// | v2 컷 | 소스 | 이미지 asset_id | i2v asset_id |
+function parseCutSourceMap(markdown) {
+  const section = markdown.match(/^## v1→v2 재사용 매핑 표\s*$([\s\S]*?)(?=^## )/m);
+  if (!section) throw new Error('02-storyboard.md: v1→v2 재사용 매핑 표 section not found (v2 콘티 필요)');
+  const map = new Map();
+  for (const line of section[1].split('\n')) {
+    const cells = line.split('|').map((cell) => cell.trim());
+    if (cells.length < 5 || !/^CUT-\d{2}$/.test(cells[1])) continue;
+    map.set(cells[1], {
+      source: cells[2],
+      imageAssetId: cells[3],
+      i2vAssetId: cells[4] && cells[4] !== '—' ? cells[4] : undefined,
+    });
+  }
+  if (map.size === 0) throw new Error('02-storyboard.md: 재사용 매핑 표 rows not parsed');
+  return map;
+}
+
+// 컷별 에셋 해석: 매핑 표의 명시 id 또는 '신규'(03-assets에서 cut_id 일치 + '-v2' 채택 행)
+function resolveCutAssets(cuts, sourceMap, assetsDoc) {
+  for (const cut of cuts) {
+    const entry = sourceMap.get(cut.id);
+    if (!entry) throw new Error(`${cut.id}: missing row in v1→v2 재사용 매핑 표`);
+    cut.source = entry.source;
+    let image;
+    if (entry.imageAssetId === '신규') {
+      const candidates = [...assetsDoc.imagesById.values()]
+        .filter((row) => row.cutId === cut.id && row.assetId.includes('-v2'));
+      if (candidates.length !== 1) {
+        throw new Error(`${cut.id}: expected exactly 1 adopted -v2 image in 03-assets, found ${candidates.length}`);
+      }
+      image = candidates[0];
+    } else {
+      image = assetsDoc.imagesById.get(entry.imageAssetId);
+      if (!image) throw new Error(`${cut.id}: adopted image ${entry.imageAssetId} not found in 03-assets`);
+    }
+    cut.imageAsset = image;
+    if (cut.isI2V) {
+      if (!entry.i2vAssetId) throw new Error(`${cut.id}: motion=I2V but no i2v asset in 매핑 표`);
+      const clip = assetsDoc.i2vById.get(entry.i2vAssetId);
+      if (!clip) throw new Error(`${cut.id}: i2v asset ${entry.i2vAssetId} not found in 03-assets`);
+      cut.i2vAsset = clip;
+    }
+  }
 }
 
 // 01-script.md 장면 블록의 나레이션/대사 라인 추출 — TTS 세그먼트와 순서 1:1 매핑
@@ -228,11 +267,14 @@ function parseStoryboard(markdown) {
     const motion = field('motion') ?? '';
     const subtitleRaw = field('subtitle') ?? '—';
     let subtitle;
+    let isTitleCard = false;
     if (subtitleRaw !== '—') {
       const match = subtitleRaw.match(/^(caption-default|caption-emphasis)\s*—\s*"([^"]+)"/);
       if (!match) throw new Error(`${id}: subtitle field outside §2.1a vocabulary: ${subtitleRaw}`);
       subtitle = { style: match[1], text: match[2] };
+      isTitleCard = subtitleRaw.includes('타이틀 카드');
     }
+    const bgmCue = field('bgm_cue')?.match(/^(start|change|continue|stop)/)?.[1] ?? 'continue';
 
     if (!Number.isFinite(durationPlan) || !Number.isFinite(scene)) {
       throw new Error(`${id}: duration_seconds/narration_ref parse failure`);
@@ -242,7 +284,7 @@ function parseStoryboard(markdown) {
     }
 
     cuts.push({
-      id, no, durationPlan, scene, transition: transitionRaw, chapter, subtitle,
+      id, no, durationPlan, scene, transition: transitionRaw, chapter, subtitle, isTitleCard, bgmCue,
       isI2V: /^I2V/i.test(motion),
       zoomOut: /(zoom-out|pull-back)/i.test(motion),
     });
@@ -262,18 +304,25 @@ const MIME_BY_EXT = {
   '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm',
 };
 
-async function importMedia(apiBase, assetsDoc, mappingPath) {
+async function importMedia(apiBase, cuts, assetsDoc, mappingPath) {
   const mapping = existsSync(mappingPath)
     ? JSON.parse(await readFile(mappingPath, 'utf8'))
     : {};
 
   const jobs = [];
-  for (const [cutNo, image] of assetsDoc.images) {
-    jobs.push({ key: image.assetId, path: image.path, note: `image cut ${cutNo}` });
+  const seen = new Set();
+  for (const cut of cuts) {
+    if (!seen.has(cut.imageAsset.assetId)) {
+      seen.add(cut.imageAsset.assetId);
+      jobs.push({ key: cut.imageAsset.assetId, path: cut.imageAsset.path, note: `image ${cut.id}` });
+    }
+    if (cut.i2vAsset && !seen.has(cut.i2vAsset.assetId)) {
+      seen.add(cut.i2vAsset.assetId);
+      jobs.push({ key: cut.i2vAsset.assetId, path: cut.i2vAsset.path, note: 'i2v' });
+    }
   }
   for (const seg of assetsDoc.tts) jobs.push({ key: seg.mappingKey ?? seg.assetId, path: seg.path, note: 'tts' });
   for (const track of assetsDoc.bgm) jobs.push({ key: track.assetId, path: track.path, note: 'bgm' });
-  for (const clip of assetsDoc.i2v.values()) jobs.push({ key: clip.assetId, path: clip.path, note: 'i2v' });
 
   // Next.js request.formData()는 대용량 본문 파싱에 실패(관측: ≥14MB → "Failed to parse
   // body as FormData."). 대용량은 서버가 하는 일과 동일하게 imports 디렉터리로 복사한 뒤
@@ -455,19 +504,23 @@ function buildProject({ productionId, projectName, cuts, timeline, assetsDoc, ma
     return id;
   };
 
-  for (const [cutNo, image] of assetsDoc.images) {
-    pushMediaAsset(image.assetId, 'image', `${cutLabel(cutNo)} still`, 0);
+  for (const cut of cuts) {
+    if (!assetIdOf.has(cut.imageAsset.assetId)) {
+      pushMediaAsset(cut.imageAsset.assetId, 'image', `${cut.id} still (${cut.imageAsset.assetId})`, 0);
+    }
+    if (cut.i2vAsset && !assetIdOf.has(cut.i2vAsset.assetId)) {
+      pushMediaAsset(cut.i2vAsset.assetId, 'video', cut.i2vAsset.assetId, cut.i2vAsset.duration);
+    }
   }
   for (const seg of assetsDoc.tts) pushMediaAsset(seg.mappingKey ?? seg.assetId, 'audio', seg.assetId, seg.duration);
   for (const track of assetsDoc.bgm) pushMediaAsset(track.assetId, 'audio', track.assetId, track.duration);
-  for (const clip of assetsDoc.i2v.values()) pushMediaAsset(clip.assetId, 'video', clip.assetId, clip.duration);
 
   // ---- V1 메인 트랙 -------------------------------------------------------
   const v1Clips = [];
   const todoMarkers = [];
   for (const cut of placedCuts) {
-    const image = assetsDoc.images.get(cut.no);
-    if (!image) throw new Error(`${cut.id}: no adopted image in 03-assets.md`);
+    const image = cut.imageAsset;
+    if (!image) throw new Error(`${cut.id}: no resolved image asset`);
     const imageAssetId = assetIdOf.get(image.assetId);
     const transitionSpec = TRANSITION_MAP[cut.transition];
     const transitionOut = transitionSpec
@@ -487,7 +540,7 @@ function buildProject({ productionId, projectName, cuts, timeline, assetsDoc, ma
       });
     }
 
-    const i2vSource = cut.isI2V ? assetsDoc.i2v.get(cut.no) : undefined;
+    const i2vSource = cut.isI2V ? cut.i2vAsset : undefined;
     if (i2vSource) {
       const i2vTimelineDuration = round(Math.min(cut.duration, i2vSource.duration / I2V_SPEED));
       const stillDuration = round(cut.duration - i2vTimelineDuration);
@@ -539,10 +592,10 @@ function buildProject({ productionId, projectName, cuts, timeline, assetsDoc, ma
     { id: `kf-${lastClip.id}-fade-a`, property: 'opacity', time: round(lastClip.duration - ENDING_MARGIN_SECONDS), value: 1, easing: 'linear' },
     { id: `kf-${lastClip.id}-fade-b`, property: 'opacity', time: lastClip.duration, value: 0, easing: 'linear' },
   ];
-  decisions.push('CUT-20: 엔딩 마진 1.0s + 마지막 1.0s 페이드아웃(opacity 키프레임)');
+  decisions.push(`${placedCuts[placedCuts.length - 1].id}: 엔딩 마진 ${ENDING_MARGIN_SECONDS}s + 마지막 ${ENDING_MARGIN_SECONDS}s 페이드아웃(opacity 키프레임)`);
 
-  // ---- V2 텍스트 트랙 (타이틀 카드) ----------------------------------------
-  const titleCut = placedCuts.find((cut) => cut.no === 2);
+  // ---- V2 텍스트 트랙 (타이틀 카드) — subtitle 필드의 "(타이틀 카드)" 마커로 식별
+  const titleCut = placedCuts.find((cut) => cut.isTitleCard);
   const textClips = [];
   if (titleCut?.subtitle) {
     assets.push({
@@ -570,7 +623,7 @@ function buildProject({ productionId, projectName, cuts, timeline, assetsDoc, ma
         parameters: { ...TITLE_CARD_STYLE, titleStyle: true },
       }],
     }));
-    decisions.push('CUT-02: 타이틀 카드는 V2 텍스트 클립(Title style) — 나머지 자막은 captions[]');
+    decisions.push(`${titleCut.id}: 타이틀 카드는 V2 텍스트 클립(Title style) — 나머지 자막은 captions[]`);
   }
 
   // ---- 캡션: 전체 나레이션 자막 (채널 §2 전체 번인 규격) ---------------------
@@ -603,12 +656,13 @@ function buildProject({ productionId, projectName, cuts, timeline, assetsDoc, ma
   }
   decisions.push(`전체 나레이션 자막 ${captions.length}건 — 대본 문장 분할, 세그먼트 내 음절수 비례 타이밍(word-level 후속), 줄당 ~${CAPTION_LINE_MAX}자·최대 2줄`);
 
-  // 콘티 subtitle 중 나레이션과 중복되지 않는 오버레이 카드(한자 병기·출처)만 유지 —
-  // 하단 전체 자막과 충돌하지 않게 position: top. 순수 인용 자막(05·11·15)은 전체
-  // 자막에 흡수되어 제거, CUT-02 타이틀 카드는 V2 텍스트 클립 유지.
-  const OVERLAY_CARD_CUTS = new Set([9, 18, 19, 20]);
+  // 콘티 subtitle 중 타이틀 카드를 제외한 나머지 = 오버레이 카드(한자 병기·출처).
+  // 하단 전체 자막과 충돌하지 않게 position: top. (순수 인용 자막은 v2 콘티에서 이미
+  // 전체 자막에 흡수되어 subtitle 필드가 없음.)
+  const overlayCards = [];
   for (const cut of placedCuts) {
-    if (!cut.subtitle || !OVERLAY_CARD_CUTS.has(cut.no)) continue;
+    if (!cut.subtitle || cut.isTitleCard) continue;
+    overlayCards.push(cut.id);
     captions.push({
       id: `caption-card-${cut.id.toLowerCase()}`,
       start: cut.start,
@@ -617,7 +671,7 @@ function buildProject({ productionId, projectName, cuts, timeline, assetsDoc, ma
       style: { ...CAPTION_STYLES[cut.subtitle.style], position: 'top' },
     });
   }
-  decisions.push('오버레이 카드 4건(CUT-09·18·19·20 한자 병기·출처) 상단 유지, 중복 인용 자막(05·11·15) 전체 자막에 통합');
+  decisions.push(`오버레이 카드 ${overlayCards.length}건(${overlayCards.join('·')} — 한자 병기·출처) 상단 유지`);
 
   // ---- A1 나레이션 ---------------------------------------------------------
   const a1Clips = placedTts.map((seg) => makeClip({
@@ -631,22 +685,41 @@ function buildProject({ productionId, projectName, cuts, timeline, assetsDoc, ma
     color: '#a3e635',
   }));
 
-  // ---- A2 BGM --------------------------------------------------------------
+  // ---- A2 BGM — 콘티 bgm_cue 시퀀스가 구간을 결정 (v2: 컷 번호 하드코딩 제거) ----
+  // start/change 컷 = 새 구간 시작, stop 컷 = 침묵 시작. k번째 구간 ← k번째 bgm 행(assetId 순).
   const cutByNo = new Map(placedCuts.map((cut) => [cut.no, cut]));
+  const segments = [];
+  for (const cut of placedCuts) {
+    if (cut.bgmCue === 'start' || cut.bgmCue === 'change') {
+      if (segments.length > 0 && segments[segments.length - 1].end === undefined) {
+        segments[segments.length - 1].end = cut.start;
+      }
+      segments.push({ start: cut.start, startCutId: cut.id, end: undefined });
+    } else if (cut.bgmCue === 'stop') {
+      if (segments.length > 0 && segments[segments.length - 1].end === undefined) {
+        segments[segments.length - 1].end = cut.start;
+      }
+      decisions.push(`${cut.id}: bgm stop — 구간 침묵 유지`);
+    }
+  }
+  if (segments.length > 0 && segments[segments.length - 1].end === undefined) {
+    segments[segments.length - 1].end = totalDuration;
+  }
+  if (segments.length !== assetsDoc.bgm.length) {
+    throw new Error(`bgm cue segments (${segments.length}) != bgm tracks (${assetsDoc.bgm.length})`);
+  }
   const a2Clips = [];
-  for (const track of assetsDoc.bgm) {
-    const from = cutByNo.get(track.cutStart);
-    const to = cutByNo.get(track.cutEnd);
-    if (!from || !to) throw new Error(`${track.assetId}: bgm cut range CUT-${track.cutStart}~${track.cutEnd} not on timeline`);
-    const span = round(to.end - from.start);
+  assetsDoc.bgm.forEach((track, index) => {
+    const segment = segments[index];
+    const span = round(segment.end - segment.start);
     const duration = round(Math.min(span, track.duration));
     const clip = makeClip({
       id: `clip-${track.assetId.toLowerCase()}`,
       assetId: assetIdOf.get(track.assetId),
       trackId: 'track-a2',
-      name: `${track.assetId} (CUT-${String(track.cutStart).padStart(2, '0')}~${String(track.cutEnd).padStart(2, '0')})`,
+      name: `${track.assetId} (${segment.startCutId}~)`,
       kind: 'audio',
-      start: from.start,
+      start: segment.start,
       duration,
       color: '#818cf8',
     });
@@ -657,10 +730,12 @@ function buildProject({ productionId, projectName, cuts, timeline, assetsDoc, ma
     ];
     a2Clips.push(clip);
     if (duration < track.duration) {
-      decisions.push(`${track.assetId}: ${track.duration}s → ${duration}s 트리밍(구간 스팬) + 끝 2s 페이드`);
+      decisions.push(`${track.assetId}: ${track.duration}s → ${duration}s 트리밍(구간 스팬 ${span}s) + 끝 2s 페이드`);
+    } else if (track.duration < span) {
+      decisions.push(`${track.assetId}: 실측 ${track.duration}s < 구간 스팬 ${span}s — ${round(span - track.duration)}s 조기 종료(재생성 금지 계약, 끝 2s 페이드로 자연 소멸)`);
     }
-  }
-  decisions.push(`A2 BGM 트랙 게인 ${BGM_TRACK_GAIN_DB}dB(track.volumeDb — 스키마 지원 확인), CUT-13 구간 BGM 공백 유지`);
+  });
+  decisions.push(`A2 BGM 트랙 게인 ${BGM_TRACK_GAIN_DB}dB(track.volumeDb — 스키마 지원 확인), stop 컷 구간 BGM 공백 유지`);
 
   // ---- 마커 ---------------------------------------------------------------
   const markers = [];
@@ -678,13 +753,16 @@ function buildProject({ productionId, projectName, cuts, timeline, assetsDoc, ma
     chapterIndex += 1;
   }
 
+  // v1 유래 검수 포인트는 소스 매핑으로 v2 컷 위치를 찾는다 (컷 번호 하드코딩 제거)
+  const v2Of = (v1CutId) => placedCuts.find((cut) => cut.source === `v1 ${v1CutId}`);
   const reviewTodos = [
     { time: 0, label: '자막 word-level 후속', note: '캡션 타이밍은 세그먼트 수준 — SenseVoice word-level 정렬은 후속 사이클' },
-    { time: cutByNo.get(2)?.start ?? 0, label: 'CUT-02 우측 크롭 전제', note: '채택 조건: 우측 ~18% 크롭(인물 잔존) — UI에서 리프레임 확인' },
-    { time: cutByNo.get(7)?.start ?? 0, label: 'CUT-07 크롭·화질 확인', note: '우측 ~35% 크롭 전제 + I2V가 832×468 크롭 업스케일이라 연질 가능 — 미달 시 kenburns 폴백' },
-    { time: cutByNo.get(8)?.start ?? 0, label: 'CUT-08 하단 프레이밍', note: '하단 가장자리 점경 인물 극소수 — 프레이밍/크롭으로 배제 확인' },
-    { time: cutByNo.get(13)?.start ?? 0, label: 'CUT-13 파열음 SFX', note: '화면 침묵 컷 — BGM 공백 유지, 파열음 SFX 별도 삽입 필요(S6 소관)' },
-    { time: cutByNo.get(7)?.start ?? 0, label: 'I2V 슬로우 저더 확인', note: `I2V 4컷 ${I2V_SPEED}x 슬로우(16fps 소스 → 실효 8fps) — 저더 확인, 필요시 보간/루프 대체` },
+    { time: 0, label: 'v2 콘티 재승인 대기', note: '컷 밀도 개정(45컷)·신규 이미지 25장 채택은 잠정 — 인간 재승인 필요(EXTERNAL_PENDING)' },
+    { time: v2Of('CUT-02')?.start ?? 0, label: `${v2Of('CUT-02')?.id ?? ''} 우측 크롭 전제(구 CUT-02)`, note: '채택 조건: 우측 ~18% 크롭(인물 잔존) — UI에서 리프레임 확인' },
+    { time: v2Of('CUT-07')?.start ?? 0, label: `${v2Of('CUT-07')?.id ?? ''} 크롭·화질 확인(구 CUT-07)`, note: '우측 ~35% 크롭 전제 + I2V가 832×468 크롭 업스케일이라 연질 가능 — 미달 시 kenburns 폴백' },
+    { time: v2Of('CUT-08')?.start ?? 0, label: `${v2Of('CUT-08')?.id ?? ''} 하단 프레이밍(구 CUT-08)`, note: '하단 가장자리 점경 인물 극소수 — 프레이밍/크롭으로 배제 확인' },
+    { time: v2Of('CUT-13')?.start ?? 0, label: `${v2Of('CUT-13')?.id ?? ''} 파열음 SFX(구 CUT-13)`, note: '화면 침묵 컷 — BGM 공백 유지, 파열음 SFX 별도 삽입 필요(S6 소관)' },
+    { time: v2Of('CUT-07')?.start ?? 0, label: 'I2V 슬로우 저더 확인', note: `I2V 4컷 ${I2V_SPEED}x 슬로우(16fps 소스 → 실효 8fps) — 저더 확인, 필요시 보간/루프 대체` },
     ...todoMarkers,
   ];
   reviewTodos.forEach((todo, index) => {
@@ -887,6 +965,7 @@ async function main() {
 
   const assetsDoc = parseAssetsDoc(assetsMd);
   const cuts = parseStoryboard(storyboardMd);
+  const sourceMap = parseCutSourceMap(storyboardMd);
   const scriptDialogues = parseScriptDialogues(scriptMd);
 
   // TTS 후처리본 오버라이드 (예: atempo 1.1x — 경로·실측 duration 교체, 반입 키 분리)
@@ -914,18 +993,16 @@ async function main() {
   const mappingPath = path.join(workdir, 'media-import-mapping.json');
   const projectPath = path.join(workdir, 'editor-project.json');
 
+  // 입력 검증 + 컷별 에셋 해석 (v2 매핑 표 기반 — 전수 대조는 resolveCutAssets가 throw)
+  resolveCutAssets(cuts, sourceMap, assetsDoc);
+  const uniqueImages = new Set(cuts.map((cut) => cut.imageAsset.assetId));
+  const uniqueI2v = new Set(cuts.filter((cut) => cut.i2vAsset).map((cut) => cut.i2vAsset.assetId));
   console.log(`production: ${assetsDoc.productionId}`);
-  console.log(`cuts: ${cuts.length} / images: ${assetsDoc.images.size} / tts: ${assetsDoc.tts.length} / bgm: ${assetsDoc.bgm.length} / i2v: ${assetsDoc.i2v.size}`);
-
-  // 입력 검증: 컷 ↔ 채택 이미지 전수 대조
-  for (const cut of cuts) {
-    if (!assetsDoc.images.has(cut.no)) throw new Error(`input check failed: ${cut.id} has no adopted image`);
-    if (cut.isI2V && !assetsDoc.i2v.has(cut.no)) throw new Error(`input check failed: ${cut.id} motion=I2V but no i2v asset`);
-  }
+  console.log(`cuts: ${cuts.length} / images: ${uniqueImages.size} / tts: ${assetsDoc.tts.length} / bgm: ${assetsDoc.bgm.length} / i2v: ${uniqueI2v.size}`);
 
   let mapping = existsSync(mappingPath) ? JSON.parse(await readFile(mappingPath, 'utf8')) : {};
   if (steps.includes('import')) {
-    mapping = await importMedia(args.api, assetsDoc, mappingPath);
+    mapping = await importMedia(args.api, cuts, assetsDoc, mappingPath);
   }
 
   if (!steps.includes('compile')) return;
