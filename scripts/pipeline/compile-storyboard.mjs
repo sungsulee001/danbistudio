@@ -656,6 +656,20 @@ function buildProject({ productionId, projectName, cuts, timeline, assetsDoc, ma
         videoBitrateMbps: 12,
         audioBitrateKbps: 192,
       },
+      {
+        id: 'draft-480p',
+        label: '검수용 드래프트 480p (자막 번인)',
+        purpose: 'proxy',
+        container: 'mp4',
+        codec: 'h264',
+        width: 854,
+        height: 480,
+        fps: PROJECT_FPS,
+        videoBitrateMbps: 2.5,
+        audioBitrateKbps: 128,
+        ffmpegPreset: 'fast',
+        crf: 23,
+      },
     ],
   };
 
@@ -857,6 +871,65 @@ async function main() {
     const plan = await planResponse.json();
     console.log(`render-plan (dry-run): OK — command length ${plan.command?.length ?? 'n/a'}, issues: ${(plan.issues ?? []).length}`);
     for (const issue of plan.issues ?? []) console.log(`  plan issue: ${JSON.stringify(issue)}`);
+  }
+
+  if (steps.includes('render')) {
+    // 자막 번인: 렌더러는 project.captions가 비어 있지 않으면 항상 번인한다
+    // (ffmpeg-renderer buildCaptionBurnInFilters — 별도 옵션 없음).
+    const profileId = args.profile ?? project.exportProfiles[0].id;
+    if (!project.exportProfiles.some((profile) => profile.id === profileId)) {
+      throw new Error(`render: unknown export profile ${profileId}`);
+    }
+    const jobStatePath = path.join(workdir, `render-job-${profileId}.json`);
+
+    let jobId = args.job;
+    if (!jobId && existsSync(jobStatePath)) {
+      const saved = JSON.parse(await readFile(jobStatePath, 'utf8'));
+      if (saved.jobId && !['completed', 'failed', 'cancelled'].includes(saved.lastStatus ?? '')) {
+        jobId = saved.jobId;
+        console.log(`\nresuming render job ${jobId} (${profileId})`);
+      }
+    }
+
+    if (!jobId) {
+      const queueResponse = await fetch(`${args.api}/api/editor/render-jobs`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ project, profileId, encoderPreference: args.encoder ?? 'auto' }),
+      });
+      const queued = await queueResponse.json();
+      if (!queueResponse.ok) {
+        console.error('RENDER QUEUE FAILED:', JSON.stringify(queued, null, 2));
+        process.exitCode = 1;
+        return;
+      }
+      jobId = queued.job.id;
+      await writeFile(jobStatePath, JSON.stringify({ jobId, profileId, queuedAt: new Date().toISOString() }, null, 2));
+      console.log(`\nrender job queued: ${jobId} (profile ${profileId}) → ${queued.job.outputPath}`);
+    }
+
+    let lastLogged = -1;
+    for (;;) {
+      const jobResponse = await fetch(`${args.api}/api/editor/render-jobs/${jobId}`);
+      if (!jobResponse.ok) throw new Error(`render job poll failed: HTTP ${jobResponse.status}`);
+      const { job: snapshotJob } = await jobResponse.json();
+      const progress = Math.floor(snapshotJob.progress ?? 0);
+      if (progress !== lastLogged) {
+        console.log(`  render ${snapshotJob.status} ${progress}%`);
+        lastLogged = progress;
+      }
+      await writeFile(jobStatePath, JSON.stringify({ jobId, profileId, lastStatus: snapshotJob.status, progress, outputPath: snapshotJob.outputPath }, null, 2));
+      if (snapshotJob.status === 'completed') {
+        console.log(`render DONE: ${snapshotJob.outputPath}`);
+        break;
+      }
+      if (snapshotJob.status === 'failed' || snapshotJob.status === 'cancelled') {
+        console.error(`render ${snapshotJob.status}: ${snapshotJob.error ?? 'no error message'}`);
+        process.exitCode = 1;
+        return;
+      }
+      await new Promise((resolvePause) => setTimeout(resolvePause, 5000));
+    }
   }
 }
 
