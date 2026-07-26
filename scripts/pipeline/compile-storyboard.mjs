@@ -157,6 +157,60 @@ function parseAssetsDoc(markdown) {
   return { productionId, images, tts, bgm, i2v };
 }
 
+// 01-script.md 장면 블록의 나레이션/대사 라인 추출 — TTS 세그먼트와 순서 1:1 매핑
+function parseScriptDialogues(markdown) {
+  const dialogues = new Map(); // scene number -> [{ speaker, text }]
+  const blocks = markdown.split(/^## 장면 \d+ \(N(\d{2})\)\s*$/m);
+  for (let i = 1; i < blocks.length; i += 2) {
+    const scene = Number(blocks[i]);
+    const body = blocks[i + 1];
+    const sectionMatch = body.match(/- \*\*나레이션\/대사\*\*:\n([\s\S]*?)(?=^- \*\*)/m);
+    if (!sectionMatch) throw new Error(`01-script.md: scene N${blocks[i]} has no 나레이션/대사 block`);
+    const lines = [];
+    for (const raw of sectionMatch[1].split('\n')) {
+      const line = raw.match(/^\s+-\s+([^:]+):\s*(.+)$/);
+      if (line) lines.push({ speaker: line[1].trim(), text: line[2].trim() });
+    }
+    if (lines.length === 0) throw new Error(`01-script.md: scene N${blocks[i]} has no dialogue lines`);
+    dialogues.set(scene, lines);
+  }
+  return dialogues;
+}
+
+// 문장 단위 분할 → 줄바꿈(줄당 ~30자) → 최대 2줄 캡션 단위로 묶기
+const CAPTION_LINE_MAX = 30;
+
+function splitSentences(text) {
+  return text.split(/(?<=[.?!])\s+/u).map((sentence) => sentence.trim()).filter(Boolean);
+}
+
+function wrapLines(sentence, maxChars) {
+  const words = sentence.split(/\s+/);
+  const lines = [];
+  let current = '';
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (current && candidate.length > maxChars) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+function sentenceToCaptionTexts(sentence) {
+  // 캡션 1건 = 1줄(~30자). 렌더러 drawtext 번인이 텍스트 내 개행을 지원하지 않아
+  // ('\n'이 리터럴 n으로 렌더되는 것을 실측 확인) 2줄 묶음 대신 줄 단위 캡션을 쓴다.
+  return wrapLines(sentence, CAPTION_LINE_MAX);
+}
+
+function captionWeight(text) {
+  return Math.max(1, text.replace(/\s/g, '').length);
+}
+
 function parseStoryboard(markdown) {
   const cuts = [];
   const sections = markdown.split(/^### (CUT-\d{2})\s*$/m);
@@ -217,7 +271,7 @@ async function importMedia(apiBase, assetsDoc, mappingPath) {
   for (const [cutNo, image] of assetsDoc.images) {
     jobs.push({ key: image.assetId, path: image.path, note: `image cut ${cutNo}` });
   }
-  for (const seg of assetsDoc.tts) jobs.push({ key: seg.assetId, path: seg.path, note: 'tts' });
+  for (const seg of assetsDoc.tts) jobs.push({ key: seg.mappingKey ?? seg.assetId, path: seg.path, note: 'tts' });
   for (const track of assetsDoc.bgm) jobs.push({ key: track.assetId, path: track.path, note: 'bgm' });
   for (const clip of assetsDoc.i2v.values()) jobs.push({ key: clip.assetId, path: clip.path, note: 'i2v' });
 
@@ -374,7 +428,7 @@ function computeTimeline(cuts, ttsSegments) {
   return { placedCuts, placedTts, sceneStart, sceneSpan, sceneAudio, totalDuration, scenes };
 }
 
-function buildProject({ productionId, projectName, cuts, timeline, assetsDoc, mapping }) {
+function buildProject({ productionId, projectName, cuts, timeline, assetsDoc, mapping, scriptDialogues }) {
   const { placedCuts, placedTts, totalDuration } = timeline;
   const nowIso = new Date().toISOString();
   const decisions = [];
@@ -404,7 +458,7 @@ function buildProject({ productionId, projectName, cuts, timeline, assetsDoc, ma
   for (const [cutNo, image] of assetsDoc.images) {
     pushMediaAsset(image.assetId, 'image', `${cutLabel(cutNo)} still`, 0);
   }
-  for (const seg of assetsDoc.tts) pushMediaAsset(seg.assetId, 'audio', seg.assetId, seg.duration);
+  for (const seg of assetsDoc.tts) pushMediaAsset(seg.mappingKey ?? seg.assetId, 'audio', seg.assetId, seg.duration);
   for (const track of assetsDoc.bgm) pushMediaAsset(track.assetId, 'audio', track.assetId, track.duration);
   for (const clip of assetsDoc.i2v.values()) pushMediaAsset(clip.assetId, 'video', clip.assetId, clip.duration);
 
@@ -519,36 +573,56 @@ function buildProject({ productionId, projectName, cuts, timeline, assetsDoc, ma
     decisions.push('CUT-02: 타이틀 카드는 V2 텍스트 클립(Title style) — 나머지 자막은 captions[]');
   }
 
-  // ---- 캡션 (세그먼트 수준 타이밍) -----------------------------------------
-  // 전용 TTS 세그먼트가 있는 인용은 세그먼트 범위, 그 외는 컷 스팬(word-level 후속)
-  const captionSegmentByCut = { 5: 'N02-07-sejong', 15: 'N05-02-josunsaeng' };
+  // ---- 캡션: 전체 나레이션 자막 (채널 §2 전체 번인 규격) ---------------------
+  // 대본 문장 단위 분할, 세그먼트 실측 duration 안에서 음절수 비례 배분(word-level 후속).
+  // speaker 필드는 넣지 않는다 — 렌더러가 "speaker: " 로마자 접두사를 번인하기 때문.
   const captions = [];
-  for (const cut of placedCuts) {
-    if (!cut.subtitle || cut.no === 2) continue; // CUT-02는 타이틀 카드로 처리
-    const segId = captionSegmentByCut[cut.no];
-    const seg = segId ? placedTts.find((item) => item.assetId === segId) : undefined;
-    const start = seg ? seg.start : cut.start;
-    const end = seg ? round(seg.start + seg.duration) : cut.end;
-    // speaker 필드는 넣지 않는다 — 렌더러 formatCaptionText가 "speaker: " 접두사를
-    // 번인하는데, 화자 표기는 콘티 subtitle 텍스트가 이미 소유한다(로마자 접두사 방지).
-    captions.push({
-      id: `caption-${cut.id.toLowerCase()}`,
-      start,
-      end,
-      text: cut.subtitle.text,
-      style: { ...CAPTION_STYLES[cut.subtitle.style] },
+  for (const seg of placedTts) {
+    const lines = scriptDialogues.get(seg.scene);
+    const segIndex = placedTts.filter((item) => item.scene === seg.scene).indexOf(seg);
+    const dialogue = lines[segIndex];
+    if (!dialogue) throw new Error(`no script dialogue for ${seg.assetId}`);
+
+    const units = splitSentences(dialogue.text).flatMap(sentenceToCaptionTexts);
+    const totalWeight = units.reduce((sum, text) => sum + captionWeight(text), 0);
+    let at = seg.start;
+    units.forEach((text, unitIndex) => {
+      const isLast = unitIndex === units.length - 1;
+      const end = isLast
+        ? round(seg.start + seg.duration)
+        : round(at + (seg.duration * captionWeight(text)) / totalWeight);
+      captions.push({
+        id: `caption-${seg.assetId.toLowerCase()}-${unitIndex + 1}`,
+        start: round(at),
+        end,
+        text,
+        style: { ...CAPTION_STYLES['caption-default'] },
+      });
+      at = end;
     });
-    if (!seg) {
-      decisions.push(`${cut.id}: 자막 타이밍 = 컷 스팬 근사(세그먼트 수준) — word-level 후속`);
-    } else {
-      decisions.push(`${cut.id}: 자막 타이밍 = TTS 세그먼트 ${segId} 실측 범위`);
-    }
   }
+  decisions.push(`전체 나레이션 자막 ${captions.length}건 — 대본 문장 분할, 세그먼트 내 음절수 비례 타이밍(word-level 후속), 줄당 ~${CAPTION_LINE_MAX}자·최대 2줄`);
+
+  // 콘티 subtitle 중 나레이션과 중복되지 않는 오버레이 카드(한자 병기·출처)만 유지 —
+  // 하단 전체 자막과 충돌하지 않게 position: top. 순수 인용 자막(05·11·15)은 전체
+  // 자막에 흡수되어 제거, CUT-02 타이틀 카드는 V2 텍스트 클립 유지.
+  const OVERLAY_CARD_CUTS = new Set([9, 18, 19, 20]);
+  for (const cut of placedCuts) {
+    if (!cut.subtitle || !OVERLAY_CARD_CUTS.has(cut.no)) continue;
+    captions.push({
+      id: `caption-card-${cut.id.toLowerCase()}`,
+      start: cut.start,
+      end: cut.end,
+      text: cut.subtitle.text,
+      style: { ...CAPTION_STYLES[cut.subtitle.style], position: 'top' },
+    });
+  }
+  decisions.push('오버레이 카드 4건(CUT-09·18·19·20 한자 병기·출처) 상단 유지, 중복 인용 자막(05·11·15) 전체 자막에 통합');
 
   // ---- A1 나레이션 ---------------------------------------------------------
   const a1Clips = placedTts.map((seg) => makeClip({
     id: `clip-${seg.assetId.toLowerCase()}`,
-    assetId: assetIdOf.get(seg.assetId),
+    assetId: assetIdOf.get(seg.mappingKey ?? seg.assetId),
     trackId: 'track-a1',
     name: seg.assetId,
     kind: 'audio',
@@ -715,12 +789,28 @@ function makeTrack(id, name, kind, clips) {
 }
 
 function kenBurnsKeyframes(cut) {
-  // 콘티 motion: kenburns — 정지 이미지에 초저속 스케일 (zoom-out 지시 컷은 역방향)
-  const [fromScale, toScale] = cut.zoomOut ? [1.06, 1.0] : [1.0, 1.06];
-  return [
-    { id: `kf-${cut.id.toLowerCase()}-scale-a`, property: 'scale', time: 0, value: fromScale, easing: 'smooth' },
-    { id: `kf-${cut.id.toLowerCase()}-scale-b`, property: 'scale', time: cut.duration, value: toScale, easing: 'smooth' },
+  // 콘티 motion: kenburns — 체감형 스케일(100↔108%) + 컷별 교차 방향 팬.
+  // 렌더러는 scale/positionX/Y 키프레임을 transformed 경로(eval=frame)로 지원함(진단 확인).
+  // 검수 피드백 반영: 기존 6% 진폭은 인지 불가 → 8% + 팬 병행.
+  // 최소 스케일 1.04: 여백(0.04×1920/2=38px@1080p)이 팬 진폭(26px)보다 커야 검은 가장자리 없음
+  const key = cut.id.toLowerCase();
+  const [fromScale, toScale] = cut.zoomOut ? [1.12, 1.04] : [1.04, 1.12];
+  const keyframes = [
+    { id: `kf-${key}-scale-a`, property: 'scale', time: 0, value: fromScale, easing: 'smooth' },
+    { id: `kf-${key}-scale-b`, property: 'scale', time: cut.duration, value: toScale, easing: 'smooth' },
   ];
+  // 팬 방향 교차(1080p 기준 px — 렌더 페이로드에서 프로파일 비례 스케일):
+  // 0: 우→좌, 1: 좌→우, 2: 하→상, 3: 상→하
+  const PAN = 26;
+  const direction = cut.no % 4;
+  const property = direction < 2 ? 'positionX' : 'positionY';
+  const magnitude = direction < 2 ? PAN : Math.round(PAN * 0.7);
+  const from = direction % 2 === 0 ? magnitude : -magnitude;
+  keyframes.push(
+    { id: `kf-${key}-pan-a`, property, time: 0, value: from, easing: 'smooth' },
+    { id: `kf-${key}-pan-b`, property, time: cut.duration, value: -from, easing: 'smooth' },
+  );
+  return keyframes;
 }
 
 function cutLabel(cutNo) {
@@ -752,6 +842,12 @@ function scaleCaptionFontsForProfile(project, profile, referenceHeight) {
           effect.type === 'caption' && effect.parameters?.titleStyle === true
             ? { ...effect, parameters: scaleStyle(effect.parameters) }
             : effect
+        )),
+        // Ken Burns 팬(px)도 출력 해상도 비례 스케일
+        keyframes: clip.keyframes.map((keyframe) => (
+          (keyframe.property === 'positionX' || keyframe.property === 'positionY') && typeof keyframe.value === 'number'
+            ? { ...keyframe, value: Math.round(keyframe.value * scale * 10) / 10 }
+            : keyframe
         )),
       })),
     })),
@@ -787,10 +883,32 @@ async function main() {
 
   const storyboardMd = await readFile(args.storyboard, 'utf8');
   const assetsMd = await readFile(args.assets, 'utf8');
-  await readFile(args.script, 'utf8'); // 존재 검증(자막 원문 대조용 — 자막 텍스트 자체는 콘티가 소유)
+  const scriptMd = await readFile(args.script, 'utf8'); // 전체 자막 원문(문장 분할 소스)
 
   const assetsDoc = parseAssetsDoc(assetsMd);
   const cuts = parseStoryboard(storyboardMd);
+  const scriptDialogues = parseScriptDialogues(scriptMd);
+
+  // TTS 후처리본 오버라이드 (예: atempo 1.1x — 경로·실측 duration 교체, 반입 키 분리)
+  if (args['tts-override']) {
+    const override = JSON.parse(await readFile(args['tts-override'], 'utf8'));
+    for (const seg of assetsDoc.tts) {
+      const entry = override[seg.assetId];
+      if (!entry) throw new Error(`tts-override missing entry for ${seg.assetId}`);
+      seg.path = entry.path;
+      seg.duration = entry.duration;
+      seg.mappingKey = `${seg.assetId}-x11`;
+    }
+    console.log(`tts override applied: ${args['tts-override']}`);
+  }
+
+  // 세그먼트 ↔ 대본 대사 라인 1:1 검증
+  for (const [scene, lines] of scriptDialogues) {
+    const segs = assetsDoc.tts.filter((seg) => seg.scene === scene);
+    if (segs.length !== lines.length) {
+      throw new Error(`scene N${scene}: tts segments ${segs.length} != script dialogue lines ${lines.length}`);
+    }
+  }
   const workdir = args.workdir ?? path.join(SCRIPT_DIR, 'out', assetsDoc.productionId);
   await mkdir(workdir, { recursive: true });
   const mappingPath = path.join(workdir, 'media-import-mapping.json');
@@ -821,6 +939,7 @@ async function main() {
     timeline,
     assetsDoc,
     mapping,
+    scriptDialogues,
   });
 
   // 자체 검증 출력: 총 길이 정합
