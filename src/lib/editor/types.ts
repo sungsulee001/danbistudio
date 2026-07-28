@@ -293,6 +293,12 @@ export interface ExportProfile {
   audioBitrateKbps: number;
   ffmpegPreset?: 'ultrafast' | 'superfast' | 'veryfast' | 'faster' | 'fast' | 'medium' | 'slow';
   crf?: number;
+  /** Master delivery knobs (optional — omitted profiles keep legacy behaviour). */
+  audioSampleRate?: number;
+  audioChannels?: number;
+  h264Profile?: 'baseline' | 'main' | 'high';
+  gopSize?: number;
+  faststart?: boolean;
 }
 
 export interface EditorProject {

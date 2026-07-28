@@ -1673,18 +1673,35 @@ function buildProject({
   // 하단 전체 자막과 충돌하지 않게 position: top. (순수 인용 자막은 v2 콘티에서 이미
   // 전체 자막에 흡수되어 subtitle 필드가 없음.)
   const overlayCards = [];
+  const droppedCards = [];
+  const trimmedCards = [];
+  const narrationCaptions = captions.slice();
   for (const cut of placedCuts) {
     if (!cut.subtitle || cut.isTitleCard) continue;
+    // 상단 카드는 고유명사·한자 병기·출처 전용. 하단 나레이션 자막과 같은 문장을
+    // 위아래로 두 번 띄우는 구간은 제거하거나(전면 중복) 중복 절만 잘라낸다(부분 중복).
+    const resolved = resolveOverlayCardText(cut, narrationCaptions);
+    if (!resolved.text) {
+      droppedCards.push(cut.id);
+      continue;
+    }
+    if (resolved.trimmed) trimmedCards.push(`${cut.id}`);
     overlayCards.push(cut.id);
     captions.push({
       id: `caption-card-${cut.id.toLowerCase()}`,
       start: cut.start,
       end: cut.end,
-      text: cut.subtitle.text,
+      text: resolved.text,
       style: { ...CAPTION_STYLES[cut.subtitle.style], position: 'top' },
     });
   }
   decisions.push(`오버레이 카드 ${overlayCards.length}건(${overlayCards.join('·')} — 한자 병기·출처) 상단 유지`);
+  if (droppedCards.length > 0) {
+    decisions.push(`오버레이 카드 ${droppedCards.length}건 제거(${droppedCards.join('·')}) — 하단 나레이션 자막과 문구 전면 중복`);
+  }
+  if (trimmedCards.length > 0) {
+    decisions.push(`오버레이 카드 ${trimmedCards.length}건 문구 차별화(${trimmedCards.join('·')}) — 나레이션과 겹치는 국역 절 제거, 한자 원문만 유지`);
+  }
 
   // ---- A1 나레이션 ---------------------------------------------------------
   // A2V 컷의 세그먼트는 클립에 보이스가 내장돼 있으므로 A1에 두 번 놓지 않는다(이중 재생 방지).
@@ -1900,6 +1917,45 @@ function buildProject({
   return finalizeProject();
 }
 
+/**
+ * 상단 오버레이 카드 vs 하단 나레이션 자막 중복 정리.
+ *
+ * 카드는 고유명사·한자 병기·출처 전용이므로, 같은 시간대에 하단 자막이 같은 문장을
+ * 이미 보여주면 카드는 화면만 덮는다.
+ *  - 전면 중복(카드 문구가 겹치는 나레이션 안에 그대로 들어있음) → 카드 제거(null 반환)
+ *  - 부분 중복(구분자 뒤 국역 절만 중복) → 앞 절(한자 원문)만 남김
+ */
+function resolveOverlayCardText(cut, narrationCaptions) {
+  const raw = cut.subtitle.text;
+  const overlapping = narrationCaptions.filter((cap) => cap.start < cut.end && cap.end > cut.start);
+  const narrationBlob = normalizeForDuplicateCheck(overlapping.map((cap) => cap.text).join(' '));
+  if (!narrationBlob) return { text: raw, trimmed: false };
+
+  const whole = normalizeForDuplicateCheck(raw);
+  if (whole && narrationBlob.includes(whole)) {
+    return { text: null, trimmed: false };
+  }
+
+  // 구분자(— / – / -)로 "원문 — 국역" 구조를 이룰 때, 국역 절이 나레이션과 겹치면 잘라낸다.
+  const separatorMatch = raw.match(/^(.*?)\s+[—–-]\s+(.*)$/);
+  if (separatorMatch) {
+    const [, head, tail] = separatorMatch;
+    const tailNormalized = normalizeForDuplicateCheck(tail);
+    const headNormalized = normalizeForDuplicateCheck(head);
+    if (tailNormalized && narrationBlob.includes(tailNormalized) && headNormalized && !narrationBlob.includes(headNormalized)) {
+      return { text: head.trim(), trimmed: true };
+    }
+  }
+
+  return { text: raw, trimmed: false };
+}
+
+function normalizeForDuplicateCheck(text) {
+  return String(text ?? '')
+    .replace(/[\s.,!?·…"'“”‘’()[\]{}]/g, '')
+    .trim();
+}
+
 function buildExportProfiles() {
   return [
     {
@@ -1913,6 +1969,29 @@ function buildExportProfiles() {
       fps: PROJECT_FPS,
       videoBitrateMbps: 12,
       audioBitrateKbps: 192,
+    },
+    {
+      // 업로드 마스터: 인간 검수 통과분의 최종 인코딩.
+      // CRF 16 + 고 maxrate(사실상 무제한) / yuv420p / High / keyint 48(2s) / faststart
+      // 오디오는 유튜브 권장 규격(48kHz stereo AAC 192k) — BGM 44.1k 스테레오와
+      // A2V 48k 스테레오 대사가 24kHz 모노로 접히던 손실을 제거한다.
+      id: 'master-hd',
+      label: 'YouTube 마스터 1080p (S6 업로드용)',
+      purpose: 'master',
+      container: 'mp4',
+      codec: 'h264',
+      width: 1920,
+      height: 1080,
+      fps: PROJECT_FPS,
+      videoBitrateMbps: 40,
+      audioBitrateKbps: 192,
+      ffmpegPreset: 'slow',
+      crf: 16,
+      h264Profile: 'high',
+      gopSize: 48,
+      audioSampleRate: 48000,
+      audioChannels: 2,
+      faststart: true,
     },
     {
       id: 'draft-480p',

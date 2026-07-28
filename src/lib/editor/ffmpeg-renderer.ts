@@ -252,10 +252,11 @@ export function buildFfmpegRenderPlan(
     warnings.push('No visual clips are available for FFmpeg video output.');
   }
 
+  const audioDeliveryFilter = buildAudioDeliveryFormatFilter(manifest.profile);
   if (audioLabels.length === 1) {
-    filterGraph.push(`${audioLabels[0]}${buildFinalAudioFilter(masterAudioSettings)}${audioOutputLabel}`);
+    filterGraph.push(`${audioLabels[0]}${buildFinalAudioFilter(masterAudioSettings)}${audioDeliveryFilter}${audioOutputLabel}`);
   } else if (audioLabels.length > 1) {
-    filterGraph.push(`${audioLabels.join('')}amix=inputs=${audioLabels.length}:duration=longest:normalize=0${buildFinalAudioFilter(masterAudioSettings, true)}${audioOutputLabel}`);
+    filterGraph.push(`${audioLabels.join('')}amix=inputs=${audioLabels.length}:duration=longest:normalize=0${buildFinalAudioFilter(masterAudioSettings, true)}${audioDeliveryFilter}${audioOutputLabel}`);
   }
 
   if (manifest.exportRange) {
@@ -325,6 +326,7 @@ export function buildFfmpegRenderPlan(
     pixelFormatForProfile(manifest.profile),
     ...buildVideoEncodingArgs(manifest.profile, videoEncoder),
     ...buildAudioEncodingArgs(manifest.profile),
+    ...(manifest.profile.faststart ? ['-movflags', '+faststart'] : []),
     resolvedOutputPath,
   ];
 
@@ -974,6 +976,29 @@ function buildAudioTempoFilters(clip: TimelineClip): string {
   return factors.length > 0
     ? `,${factors.map((factor) => `atempo=${formatExpressionNumber(factor)}`).join(',')}`
     : '';
+}
+
+/**
+ * Delivery-format clamp for the mixed audio bus.
+ *
+ * Without it libavfilter negotiates amix down to the *narrowest* input format
+ * (24 kHz mono TTS), which silently destroys the 44.1 kHz stereo BGM and the
+ * 48 kHz stereo A2V dialogue before they ever reach the encoder. Constraining
+ * the graph output propagates the format backwards, so the mix itself happens
+ * at delivery spec. Emitted only for profiles that opt in.
+ */
+function buildAudioDeliveryFormatFilter(profile: ExportProfile): string {
+  const constraints: string[] = ['sample_fmts=fltp'];
+  if (profile.audioSampleRate !== undefined) {
+    constraints.push(`sample_rates=${Math.round(profile.audioSampleRate)}`);
+  }
+  if (profile.audioChannels !== undefined) {
+    constraints.push(`channel_layouts=${profile.audioChannels >= 2 ? 'stereo' : 'mono'}`);
+  }
+  if (constraints.length === 1) {
+    return '';
+  }
+  return `,aformat=${constraints.join(':')}`;
 }
 
 function buildFinalAudioFilter(settings: MasterAudioSettings, appended = false): string {
@@ -2045,6 +2070,14 @@ function buildVideoEncodingArgs(profile: ExportProfile, videoEncoder: FfmpegVide
   const canUseSoftwarePreset = !videoEncoder.hardware && (videoEncoder.encoder === 'libx264' || videoEncoder.encoder === 'libx265');
   const args: string[] = [];
 
+  if (profile.h264Profile && profile.codec === 'h264') {
+    args.push('-profile:v', profile.h264Profile);
+  }
+
+  if (profile.gopSize !== undefined) {
+    args.push('-g', String(Math.round(profile.gopSize)), '-keyint_min', String(Math.round(profile.gopSize)));
+  }
+
   if (canUseSoftwarePreset && profile.ffmpegPreset) {
     args.push('-preset', profile.ffmpegPreset);
   }
@@ -2094,6 +2127,8 @@ function buildAudioEncodingArgs(profile: ExportProfile): string[] {
     'aac',
     '-b:a',
     `${profile.audioBitrateKbps}k`,
+    ...(profile.audioSampleRate === undefined ? [] : ['-ar', String(Math.round(profile.audioSampleRate))]),
+    ...(profile.audioChannels === undefined ? [] : ['-ac', String(Math.round(profile.audioChannels))]),
   ];
 }
 
