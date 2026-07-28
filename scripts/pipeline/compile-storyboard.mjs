@@ -51,8 +51,11 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..', '..');
 const SCHEMA_ENTRY = path.join(REPO_ROOT, 'src', 'electron', 'shared', 'project-schema.ts');
 
-const SCENE_PAUSE_SECONDS = 0.3;
-const ENDING_MARGIN_SECONDS = 1.0;
+// 장면 간 휴지·엔딩 여백은 러닝타임 게이트(01-script §길이 게이트) 조정 레버다.
+// main()에서 --scene-pause / --ending-margin 으로 덮어쓸 수 있다(기본값은 종전 동작 보존).
+let SCENE_PAUSE_SECONDS = 0.3;
+let ENDING_MARGIN_SECONDS = 1.0;
+const ENDING_FADE_SECONDS = 1.0;  // 엔딩 페이드 길이 — 여백을 늘려도 페이드는 1초 고정
 const I2V_SPEED = 0.5;               // [v2 레거시 전용] WAN 16fps 소스 슬로우 (5.06s → 10.12s)
                                      // v3(LTX-2.3 24fps 실모션)에서는 사용하지 않는다 — 배속 1.0 고정.
 const BGM_TRACK_GAIN_DB = -14;       // 나레이션 대비 BGM 게인 (트랙 volumeDb 지원 확인됨)
@@ -174,7 +177,7 @@ const CHAPTER_COLORS = ['#22c55e', '#38bdf8', '#a78bfa', '#f59e0b', '#f43f5e'];
 // 크롭 = mask 이펙트(left/right/top/bottom 비율). src/lib/editor/crop-mask.ts CROP_MASK_EFFECT_LABEL 정합.
 const CROP_EFFECT_LABEL = 'Crop';
 
-const BOOLEAN_FLAGS = new Set(['upscaled', 'kenburns', 'offline']);
+const BOOLEAN_FLAGS = new Set(['upscaled', 'kenburns', 'offline', 'no-insert-cuts']);
 
 function parseArgs(argv) {
   const args = {
@@ -484,6 +487,125 @@ function parseUpscaleMap(markdown) {
   if (!body) return null;
   const map = parseAdoptedCutFileTable(body, '.mp4');
   return map.size > 0 ? new Map([...map].map(([cut, entry]) => [cut, entry.file])) : null;
+}
+
+// 03-assets §S6 삽입 컷 — 콘티 본문(02-storyboard)에 없는, S6가 타임라인에만 편입하는 보조 컷.
+// 콘티 컷 번호 체계 편입은 인간 소관이므로 02-storyboard는 건드리지 않고 이 세로형 표만 소비한다.
+// 표 형식: | 항목 | 값 |  (컷 ID / 미디어 키 / 1080p 파일 / 소스 이미지 / 담당 나레이션 /
+//                          배치 / shot_type / camera / transition / bgm_cue / 취지)
+function parseS6InsertCuts(markdown) {
+  const inserts = [];
+  for (const body of sectionsBodies(markdown, (heading) => /S6 삽입 컷/.test(heading))) {
+    const row = new Map();
+    for (const line of body.split('\n')) {
+      if (!isTableRow(line)) continue;
+      const cells = cellsOf(line);
+      if (cells.length < 4) continue;
+      row.set(cells[1], cells[2]);
+    }
+    if (row.size === 0) continue;
+
+    const idCell = row.get('컷 ID') ?? '';
+    const cutId = idCell.match(/CUT-\d{2}[A-Z]/)?.[0];
+    if (!cutId) throw new Error('03-assets §S6 삽입 컷: 컷 ID를 읽지 못했습니다');
+    const afterCut = idCell.match(/기존\s+(CUT-\d{2})\s*\*\*직후\*\*/)?.[1];
+    if (!afterCut) throw new Error(`${cutId}: 삽입 위치("기존 CUT-NN **직후**")를 읽지 못했습니다`);
+
+    const mediaKey = row.get('미디어 키')?.match(/CUT-\d{2}[A-Z]-[a-z0-9]+/)?.[0];
+    const clipFile = row.get('1080p 파일')?.match(/([A-Za-z0-9_.-]+\.mp4)/)?.[1];
+    const imageFile = row.get('소스 이미지')?.match(/([A-Za-z0-9_.-]+\.png)/)?.[1];
+    const scene = Number(row.get('담당 나레이션')?.match(/N(\d{2})/)?.[1]);
+    const placement = row.get('배치') ?? '';
+    const docDuration = Number(placement.match(/duration\s+\*{0,2}([\d.]+)\s*\*{0,2}s/)?.[1]);
+    const speed = Number(placement.match(/speed\s+\*{0,2}([\d.]+)/)?.[1] ?? '1');
+    const transition = row.get('transition')?.match(/out:\s*([a-z-]+)/)?.[1] ?? 'cut';
+    const bgmCue = row.get('bgm_cue')?.match(/^(start|change|continue|stop)/)?.[1] ?? 'continue';
+
+    if (!mediaKey || !clipFile || !imageFile || !Number.isFinite(scene) || !Number.isFinite(docDuration)) {
+      throw new Error(
+        `${cutId}: §S6 삽입 컷 표 필수 항목 누락 — `
+        + `미디어 키=${mediaKey} 클립=${clipFile} 이미지=${imageFile} 장면=${scene} duration=${docDuration}`,
+      );
+    }
+    if (!(transition in TRANSITION_MAP)) {
+      throw new Error(`${cutId}: transition "${transition}"이 §2.1a 어휘 밖입니다`);
+    }
+    if (Math.abs(speed - 1) > 0.001) {
+      throw new Error(`${cutId}: 삽입 컷은 speed 1.0만 지원합니다(표 값 ${speed})`);
+    }
+
+    // 정렬 키: CUT-36B → 36.02 (기존 36 뒤, 37 앞). 알파벳 접미가 순서를 결정한다.
+    const base = Number(cutId.slice(4, 6));
+    const suffixRank = cutId.charCodeAt(6) - 64; // A=1, B=2 ...
+    if (base !== Number(afterCut.slice(4))) {
+      throw new Error(`${cutId}: 삽입 위치 ${afterCut}와 컷 번호가 어긋납니다`);
+    }
+
+    inserts.push({
+      id: cutId, no: base + suffixRank / 100, afterCut, mediaKey, clipFile, imageFile,
+      scene, docDuration, transition, bgmCue,
+    });
+  }
+  return inserts;
+}
+
+// 삽입 컷을 콘티 컷 배열과 에셋 맵에 편입한다(02-storyboard 무수정).
+// 길이는 문서 값이 아니라 파일 ffprobe가 원천 — fixedDuration으로 고정 배치한다.
+async function applyS6InsertCuts(cuts, assetsDoc, inserts, args, warnings) {
+  if (inserts.length === 0) return [];
+  const applied = [];
+  const useUpscaled = Boolean(args.upscaled);
+  const upscaledDir = args['clips-dir'] ?? assetsDoc.paths.clipsUpscaled;
+  const clipDir = useUpscaled ? upscaledDir : assetsDoc.paths.clips;
+
+  for (const insert of inserts) {
+    if (cuts.some((cut) => cut.id === insert.id)) {
+      warnings.push(`${insert.id}: 콘티 본문에 이미 존재해 삽입을 건너뜁니다`);
+      continue;
+    }
+    const anchor = cuts.find((cut) => cut.id === insert.afterCut);
+    if (!anchor) throw new Error(`${insert.id}: 삽입 기준 컷 ${insert.afterCut}이 콘티에 없습니다`);
+
+    const clipPath = path.join(assetsDoc.mediaRoot, clipDir, insert.clipFile);
+    if (!existsSync(clipPath)) throw new Error(`${insert.id}: 클립 파일 없음 — ${clipPath}`);
+    const probed = await probeDuration(clipPath);
+    const duration = round(probed ?? insert.docDuration);
+    if (probed !== undefined && Math.abs(probed - insert.docDuration) > 0.05) {
+      warnings.push(`${insert.id}: 03-assets 표 ${insert.docDuration}s ≠ 파일 실측 ${duration}s — 파일 실측을 채택`);
+    }
+
+    assetsDoc.images.set(insert.id, {
+      assetId: `${insert.id}${assetsDoc.paths.assetSuffix}`,
+      cutId: insert.id,
+      file: insert.imageFile,
+      path: path.join(assetsDoc.mediaRoot, assetsDoc.paths.cuts, insert.imageFile),
+    });
+    assetsDoc.clips.set(insert.id, {
+      assetId: insert.mediaKey, cutId: insert.id, file: insert.clipFile, kind: 'i2v',
+      path: clipPath, duration, hasAudio: await probeHasAudioStream(clipPath),
+    });
+
+    cuts.push({
+      id: insert.id,
+      no: insert.no,
+      durationPlan: duration,
+      fixedDuration: duration,     // 슬롯을 비율 분배가 아니라 실측 길이로 고정(배속 1.0 보장)
+      scene: insert.scene,
+      transition: insert.transition,
+      chapter: undefined,
+      subtitle: undefined,
+      isTitleCard: false,
+      bgmCue: insert.bgmCue,
+      isI2V: true,
+      isA2V: false,
+      a2vSegmentKey: undefined,
+      zoomOut: false,
+      s6Insert: true,
+    });
+    applied.push({ ...insert, duration });
+  }
+  cuts.sort((a, b) => a.no - b.no);
+  return applied;
 }
 
 function parseAssetsDocV3(markdown, { cycle }) {
@@ -1137,11 +1259,25 @@ function computeTimelineV3(cuts, ttsSegments, warnings, preferStill = false) {
           + '(앞 컷 최소 길이 확보) — 내장 보이스와 자막이 그만큼 뒤로 이동합니다',
         );
       }
-      const planSum = block.cuts.reduce((sum, cut) => sum + cut.durationPlan, 0);
+      // S6 삽입 컷은 실측 길이로 고정 배치한다(비율 분배 대상에서 제외 — 배속 1.0 보장).
+      // 남은 스팬만 자유 컷이 계획 비율로 나눠 갖는다.
+      const isFixed = (cut) => Number.isFinite(cut.fixedDuration);
+      const freeCuts = block.cuts.filter((cut) => !isFixed(cut));
+      const fixedSum = block.cuts.reduce((sum, cut) => sum + (isFixed(cut) ? cut.fixedDuration : 0), 0);
+      const freeSpan = Math.max(blockSpan - fixedSum, 0);
+      if (fixedSum > blockSpan + 0.001) {
+        warnings.push(
+          `${block.cuts.filter(isFixed).map((cut) => cut.id).join('·')}: 고정 길이 합 ${round(fixedSum)}s가 `
+          + `블록 스팬 ${round(blockSpan)}s를 초과합니다 — 앞 컷이 압축됩니다`,
+        );
+      }
+      const planSum = freeCuts.reduce((sum, cut) => sum + cut.durationPlan, 0);
       for (const cut of block.cuts) {
-        const duration = planSum > 0
-          ? (blockSpan * cut.durationPlan) / planSum
-          : blockSpan / Math.max(block.cuts.length, 1);
+        const duration = isFixed(cut)
+          ? cut.fixedDuration
+          : (planSum > 0
+            ? (freeSpan * cut.durationPlan) / planSum
+            : freeSpan / Math.max(freeCuts.length, 1));
         const start = round(at);
         const end = round(at + duration);
         placedCuts.push({ ...cut, start, duration: round(end - start), end, pinned: false });
@@ -1170,10 +1306,25 @@ function computeTimelineV3(cuts, ttsSegments, warnings, preferStill = false) {
     }
     const requiredEnd = audioAtFinal + tail;
     if (requiredEnd > at + 0.001) {
-      const lastCut = [...placedCuts].reverse().find((cut) => cut.scene === scene);
+      // 고정 길이(S6 삽입) 컷은 늘리지 않는다 — 늘리면 배속 1.0 계약이 깨진다.
+      // 장면 안에서 늘릴 수 있는 마지막 컷을 늘리고, 그 뒤 컷들은 같은 양만큼 뒤로 민다(갭·중첩 0 유지).
+      const sceneIndices = placedCuts
+        .map((cut, index) => (cut.scene === scene ? index : -1))
+        .filter((index) => index >= 0);
+      const growIndex = [...sceneIndices].reverse()
+        .find((index) => !Number.isFinite(placedCuts[index].fixedDuration))
+        ?? sceneIndices[sceneIndices.length - 1];
       const extra = requiredEnd - at;
-      lastCut.duration = round(lastCut.duration + extra);
-      lastCut.end = round(lastCut.start + lastCut.duration);
+      const grow = placedCuts[growIndex];
+      grow.duration = round(grow.duration + extra);
+      grow.end = round(grow.start + grow.duration);
+      let shiftAt = grow.end;
+      for (const index of sceneIndices) {
+        if (index <= growIndex) continue;
+        placedCuts[index].start = round(shiftAt);
+        placedCuts[index].end = round(shiftAt + placedCuts[index].duration);
+        shiftAt = placedCuts[index].end;
+      }
       at = requiredEnd;
     }
 
@@ -1451,10 +1602,10 @@ function buildProject({
   const lastClip = v1Clips[v1Clips.length - 1];
   lastClip.keyframes = [
     ...lastClip.keyframes,
-    { id: `kf-${lastClip.id}-fade-a`, property: 'opacity', time: round(lastClip.duration - ENDING_MARGIN_SECONDS), value: 1, easing: 'linear' },
+    { id: `kf-${lastClip.id}-fade-a`, property: 'opacity', time: round(Math.max(0, lastClip.duration - ENDING_FADE_SECONDS)), value: 1, easing: 'linear' },
     { id: `kf-${lastClip.id}-fade-b`, property: 'opacity', time: lastClip.duration, value: 0, easing: 'linear' },
   ];
-  decisions.push(`${placedCuts[placedCuts.length - 1].id}: 엔딩 마진 ${ENDING_MARGIN_SECONDS}s + 마지막 ${ENDING_MARGIN_SECONDS}s 페이드아웃(opacity 키프레임)`);
+  decisions.push(`${placedCuts[placedCuts.length - 1].id}: 엔딩 마진 ${ENDING_MARGIN_SECONDS}s + 마지막 ${ENDING_FADE_SECONDS}s 페이드아웃(opacity 키프레임)`);
 
   // ---- V2 텍스트 트랙 (타이틀 카드) — subtitle 필드의 "(타이틀 카드)" 마커로 식별
   const titleCut = placedCuts.find((cut) => cut.isTitleCard);
@@ -1582,30 +1733,54 @@ function buildProject({
     throw new Error(`bgm cue segments (${segments.length}) != bgm tracks (${assetsDoc.bgm.length})`);
   }
   const a2Clips = [];
+  const BGM_MIN_REPEAT_TAIL = 4;   // 이보다 짧은 자투리는 반복하지 않는다(짧은 조각 재진입 = 부자연)
   assetsDoc.bgm.forEach((track, index) => {
     const segment = segments[index];
     const span = round(segment.end - segment.start);
-    const duration = round(Math.min(span, track.duration));
-    const clip = makeClip({
-      id: `clip-${track.assetId.toLowerCase()}`,
-      assetId: assetIdOf.get(track.assetId),
-      trackId: 'track-a2',
-      name: `${track.assetId} (${segment.startCutId}~)`,
-      kind: 'audio',
-      start: segment.start,
-      duration,
-      color: '#818cf8',
+    // 트랙이 구간보다 짧으면 반복 배치로 채운다(BGM 재생성 금지 계약 — 기존 6트랙 승계).
+    // 마지막 반복만 구간 끝에 맞춰 트리밍하고 페이드한다.
+    const placements = [];
+    let at = segment.start;
+    while (at < segment.end - 0.001) {
+      const remaining = round(segment.end - at);
+      if (placements.length > 0 && remaining < BGM_MIN_REPEAT_TAIL) break;
+      placements.push({ start: round(at), duration: round(Math.min(remaining, track.duration)) });
+      at += track.duration;
+    }
+
+    placements.forEach((placement, repeatIndex) => {
+      const suffix = repeatIndex === 0 ? '' : `-r${repeatIndex + 1}`;
+      const clip = makeClip({
+        id: `clip-${track.assetId.toLowerCase()}${suffix}`,
+        assetId: assetIdOf.get(track.assetId),
+        trackId: 'track-a2',
+        name: `${track.assetId}${suffix ? ` 반복${repeatIndex + 1}` : ''} (${segment.startCutId}~)`,
+        kind: 'audio',
+        start: placement.start,
+        duration: placement.duration,
+        color: '#818cf8',
+      });
+      // 마지막 조각만 끝 2초 페이드(구간 경계 클릭 방지). 중간 반복은 이어 붙어야 하므로 페이드 없음.
+      if (repeatIndex === placements.length - 1) {
+        clip.keyframes = [
+          { id: `kf-${clip.id}-fade-a`, property: 'volume', time: round(Math.max(0, placement.duration - 2)), value: 1, easing: 'linear' },
+          { id: `kf-${clip.id}-fade-b`, property: 'volume', time: placement.duration, value: 0, easing: 'linear' },
+        ];
+      }
+      a2Clips.push(clip);
     });
-    // 트리밍된 트랙 끝 2초 볼륨 페이드 (구간 경계 클릭 방지)
-    clip.keyframes = [
-      { id: `kf-${clip.id}-fade-a`, property: 'volume', time: round(Math.max(0, duration - 2)), value: 1, easing: 'linear' },
-      { id: `kf-${clip.id}-fade-b`, property: 'volume', time: duration, value: 0, easing: 'linear' },
-    ];
-    a2Clips.push(clip);
-    if (duration < track.duration) {
-      decisions.push(`${track.assetId}: ${track.duration}s → ${duration}s 트리밍(구간 스팬 ${span}s) + 끝 2s 페이드`);
-    } else if (track.duration < span) {
-      decisions.push(`${track.assetId}: 실측 ${track.duration}s < 구간 스팬 ${span}s — ${round(span - track.duration)}s 조기 종료(재생성 금지 계약, 끝 2s 페이드로 자연 소멸)`);
+
+    const covered = round(placements.reduce((sum, item) => sum + item.duration, 0));
+    if (placements.length > 1) {
+      decisions.push(
+        `${track.assetId}: 실측 ${track.duration}s < 구간 스팬 ${span}s — ${placements.length}회 반복 배치로 ${covered}s 커버`
+        + `(재생성 금지 계약 — 기존 트랙 반복, 마지막 조각만 끝 2s 페이드)`,
+      );
+    } else if (covered < track.duration) {
+      decisions.push(`${track.assetId}: ${track.duration}s → ${covered}s 트리밍(구간 스팬 ${span}s) + 끝 2s 페이드`);
+    }
+    if (covered + 0.01 < span) {
+      decisions.push(`${track.assetId}: 구간 말미 ${round(span - covered)}s BGM 공백(자투리 ${BGM_MIN_REPEAT_TAIL}s 미만 — 반복 미배치)`);
     }
   });
   decisions.push(`A2 BGM 트랙 게인 ${BGM_TRACK_GAIN_DB}dB(track.volumeDb — 스키마 지원 확인), stop 컷 구간 BGM 공백 유지`);
@@ -1892,12 +2067,30 @@ async function main() {
   PROJECT_FPS = PROJECT_FPS_BY_CYCLE[cycle];
   const warnings = [];
 
+  // 러닝타임 게이트 레버 (01-script §길이 게이트 480~510초) — 미지정 시 종전 기본값
+  for (const [flag, name] of [['scene-pause', 'SCENE_PAUSE'], ['ending-margin', 'ENDING_MARGIN']]) {
+    if (args[flag] === undefined) continue;
+    const value = Number(args[flag]);
+    if (!Number.isFinite(value) || value < 0) throw new Error(`--${flag} must be a non-negative number`);
+    if (name === 'SCENE_PAUSE') SCENE_PAUSE_SECONDS = value;
+    else ENDING_MARGIN_SECONDS = value;
+  }
+
   const assetsDoc = isV3 ? parseAssetsDocV3(assetsMd, { cycle }) : parseAssetsDoc(assetsMd);
   const cuts = parseStoryboard(storyboardMd);
   const sourceMap = parseCutSourceMap(storyboardMd);
   const scriptDialogues = parseScriptDialogues(scriptMd);
 
-  console.log(`cycle: ${cycle} (project fps ${PROJECT_FPS}, prefer ${args.prefer}${args.upscaled ? ', upscaled clips' : ''})`);
+  // 03-assets §S6 삽입 컷 편입 (02-storyboard 무수정) — v3 전용
+  let s6Inserts = [];
+  if (isV3 && !args['no-insert-cuts']) {
+    s6Inserts = await applyS6InsertCuts(cuts, assetsDoc, parseS6InsertCuts(assetsMd), args, warnings);
+    for (const insert of s6Inserts) {
+      console.log(`S6 삽입 컷: ${insert.id} ← ${insert.afterCut} 직후 / ${insert.duration}s 고정 / 미디어 키 ${insert.mediaKey} / N${String(insert.scene).padStart(2, '0')}`);
+    }
+  }
+
+  console.log(`cycle: ${cycle} (project fps ${PROJECT_FPS}, prefer ${args.prefer}${args.upscaled ? ', upscaled clips' : ''}, scene-pause ${SCENE_PAUSE_SECONDS}s, ending-margin ${ENDING_MARGIN_SECONDS}s)`);
 
   // TTS 후처리본 오버라이드 (예: atempo 1.1x — 경로·실측 duration 교체, 반입 키 분리)
   if (args['tts-override']) {
