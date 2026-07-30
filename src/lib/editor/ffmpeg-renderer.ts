@@ -1006,9 +1006,13 @@ function buildFinalAudioFilter(settings: MasterAudioSettings, appended = false):
     settings.loudnessLufs === undefined
       ? undefined
       : `loudnorm=I=${formatExpressionNumber(settings.loudnessLufs)}:TP=${formatExpressionNumber(settings.truePeakDb ?? -1.5)}:LRA=11`,
+    // `level` 은 alimiter의 **auto level** 옵션이고 기본값이 true다. 켜져 있으면 리미팅 뒤에
+    // 출력을 1/limit 배로 되올려 0 dBFS 기준으로 재정규화하므로 `limit`이 사실상 무효가 된다
+    // (실측: limit=0.841 지정에도 산출 최대치가 0.0 dBFS · 0dB 샘플 17,787개 · 트루피크 +0.38 dBTP).
+    // 마스터 단의 리미터는 천장을 지키는 것이 목적이므로 auto level을 반드시 끈다.
     settings.truePeakDb === undefined
       ? undefined
-      : `alimiter=limit=${formatExpressionNumber(truePeakDbToLinearLimit(settings.truePeakDb))}`,
+      : `alimiter=limit=${formatExpressionNumber(truePeakDbToLinearLimit(settings.truePeakDb))}:level=disabled`,
   ].filter((filter): filter is string => Boolean(filter));
 
   if (filters.length === 0) {

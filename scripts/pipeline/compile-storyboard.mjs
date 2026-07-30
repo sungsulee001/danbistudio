@@ -96,6 +96,24 @@ let BGM_TRACK_GAIN_DB = BGM_TRACK_GAIN_DB_DEFAULT;
 // (컷별 편차가 30dB에 달해 BGM식 트랙 일괄 게인으로는 표현할 수 없다 — 03-assets §S6 통합 설계)
 const SFX_TRACK_GAIN_DB = 0;
 const SFX_REFERENCE_PEAK_DBFS = -18; // 게인 표의 기준 피크(대사 피크 -4~-11dBFS 아래 7~14dB)
+
+// ---------------------------------------------------------------------------
+// 마스터 라우드니스 단 — **프로덕션별 옵트인**
+// ---------------------------------------------------------------------------
+// 렌더러의 마스터 체인(`loudnorm` → `alimiter`)은 프로젝트의 `before-export` 로컬 자동화 규칙
+// (`rule-before-export`)에서 파라미터를 읽는다. 컴파일러가 `automation: []`을 방출하면
+// `project-store.normalizeAutomation()`이 **로드 시 기본 규칙을 병합**해(`src/lib/editor/project.ts`)
+// 모든 프로덕션에 I=-14/TP=-1.5가 강제로 붙는다. ep1 v7(2026-07-28)은 이 기본 규칙 도입 전 산출이라
+// 마스터 단이 없었고 −22.27 LUFS로 납품됐다 — 지금 코드로 재렌더하면 산출이 달라진다(회귀).
+// 그래서 컴파일러가 **같은 id의 규칙을 명시적으로 방출**한다(mergeMissingById는 id가 있으면 덮지 않는다):
+//   - 등재 프로덕션 → 라우드니스 파라미터 포함(마스터 단 적용)
+//   - 미등재 프로덕션(ep1 포함) → 파라미터 없음 = 마스터 단 미적용 = 규칙 도입 전 동작 재현
+// ep2 TP는 −1.5가 아니라 **−2.0**이다. loudnorm 단일 패스(dynamic)는 TP 보증이 느슨해 리미터가
+// 실질 천장인데, 리미터는 샘플 피크만 잡으므로 48kHz 재구성 시 인터샘플 피크가 그 위로 올라간다.
+// 샘플 천장을 −2.0 dBFS로 두면 트루피크가 −1.0 dBTP 이하로 들어온다(유튜브 납품 기준).
+const MASTER_AUDIO_BY_PRODUCTION = {
+  '2026-07-29-jagyeongnu-night': { loudnessLufs: -14, truePeakDb: -2 },
+};
 const PROJECT_FPS_BY_CYCLE = { v2: 30, v3: 24 }; // v3: LTX-2.3 클립이 24fps — 리샘플 없이 정합
 let PROJECT_FPS = PROJECT_FPS_BY_CYCLE.v3;       // main()에서 --cycle에 따라 확정
 const PROJECT_WIDTH = 1920;
@@ -419,6 +437,56 @@ async function probeDuration(filePath) {
     }
     return undefined;
   }
+}
+
+// ---------------------------------------------------------------------------
+// 발화 구간 실측 — 자막 동기·컷 전환 위치의 유일한 원천
+// ---------------------------------------------------------------------------
+// TTS wav에는 앞뒤로 무음 패딩이 붙어 있다(ep2 109파일 실측: 선단 합 15.17s · 말단 합 49.27s,
+// 최대 선단 0.757s · 최대 말단 1.193s). 클립 경계를 그대로 자막 창으로 쓰면 자막이 최대 0.76초
+// **먼저 뜨고** 1.19초 **더 남는다** — 인간 검수 지적 「자막 안 맞음」·「대사 안 나옴」의 실체다.
+// 그래서 파일마다 무음 구간을 실측해 ①자막을 발화에 붙이고 ②컷 전환을 조용한 지점으로 옮긴다.
+const SILENCE_NOISE_DB = -45;      // 무음 판정 임계(TTS 노이즈 플로어보다 충분히 위)
+const SILENCE_MIN_SECONDS = 0.1;   // 이보다 짧은 무음은 발화의 일부(파열음 앞 폐쇄)로 본다
+
+let ffmpegAvailable = true;
+async function probeSilence(filePath, duration) {
+  if (!ffmpegAvailable || !Number.isFinite(duration) || !existsSync(filePath)) return undefined;
+  let stderr;
+  try {
+    ({ stderr } = await execFileAsync('ffmpeg', [
+      '-hide_banner', '-nostats', '-i', filePath,
+      '-af', `silencedetect=n=${SILENCE_NOISE_DB}dB:d=${SILENCE_MIN_SECONDS}`,
+      '-f', 'null', '-',
+    ], { maxBuffer: 16 * 1024 * 1024 }));
+  } catch (error) {
+    if (String(error?.code) === 'ENOENT') {
+      ffmpegAvailable = false;
+      console.warn('  warn: ffmpeg not found — 발화 구간 실측을 건너뜁니다(자막은 클립 경계 기준)');
+    }
+    return undefined;
+  }
+  const starts = [...String(stderr).matchAll(/silence_start:\s*(-?[\d.]+)/g)].map((m) => Number(m[1]));
+  const ends = [...String(stderr).matchAll(/silence_end:\s*(-?[\d.]+)/g)].map((m) => Number(m[1]));
+  const silences = [];
+  for (let i = 0; i < starts.length; i += 1) {
+    const start = Math.max(0, starts[i]);
+    const end = Math.min(duration, ends[i] ?? duration);
+    if (end > start + 0.001) silences.push([round(start), round(end)]);
+  }
+  const lead = silences.length > 0 && silences[0][0] < 0.001 ? silences[0][1] : 0;
+  const trail = silences.length > 0 && silences[silences.length - 1][1] > duration - 0.001
+    ? round(duration - silences[silences.length - 1][0])
+    : 0;
+  // 발화 런 = 무음의 여집합
+  const speech = [];
+  let at = 0;
+  for (const [start, end] of silences) {
+    if (start > at + 0.001) speech.push([round(at), round(start)]);
+    at = Math.max(at, end);
+  }
+  if (duration > at + 0.001) speech.push([round(at), round(duration)]);
+  return { lead: round(lead), trail, silences, speech };
 }
 
 async function probeHasAudioStream(filePath) {
@@ -1416,6 +1484,10 @@ function alignScriptDialoguesToSegments(scriptDialogues, ttsSegments, warnings =
 
 // 문장 단위 분할 → 줄바꿈(줄당 ~30자) → 최대 2줄 캡션 단위로 묶기
 const CAPTION_LINE_MAX = 30;
+// 자막 창 가드 — 발화 앞뒤로 이만큼만 여유를 준다(무음 패딩 전체를 자막에 쓰지 않는다).
+const CAPTION_LEAD_GUARD = 0.1;
+const CAPTION_TRAIL_GUARD = 0.25;
+const CAPTION_MIN_WINDOW = 0.5;
 
 function splitSentences(text) {
   return text.split(/(?<=[.?!])\s+/u).map((sentence) => sentence.trim()).filter(Boolean);
@@ -1783,17 +1855,32 @@ const cutUsesClip = (cut, preferStill) => !preferStill && Boolean(cut.clipAsset)
 // 화자 교대 간격: 같은 장면 안에서 앞 세그먼트와 화자가 다른 세그먼트 **앞**에 삽입하는 숨(초).
 // 장면 경계는 이미 SCENE_PAUSE_SECONDS가 담당하므로 장면 내 교대만 센다.
 // 이 간격이 러닝타임 게이트(01-script §길이 게이트)의 조정 레버다 — 대본·TTS·배속을 건드리지 않는다.
+// 대사 사이의 **들리는** 쉼 하한. 교대 간격은 화자가 바뀔 때만 들어가므로 같은 화자가 연달아
+// 말하는 구간(내레이터 연속 문장 등)은 쉼이 TTS 잔여 무음뿐이고, ep2 v1 실측에서 최소 0.058s까지
+// 붙었다(108쌍 중 13쌍이 0.35s 미만). 인간 검수 「앞뒤 대사에 쉼이 없음」의 배경이다.
+// 실측 무음(앞 세그 말단 + 뒤 세그 선단)을 합산해 모자란 만큼만 국소로 보탠다 — 전역 간격을 키우지 않는다.
+const MIN_AUDIBLE_PAUSE_SECONDS = 0.35;
+
 function computeSpeakerTurnGaps(ttsSegments, gapSeconds) {
   const gaps = new Map();
   let previous;
   let turns = 0;
+  let padded = 0;
+  let paddedTotal = 0;
   for (const seg of ttsSegments) {
-    const isTurn = Boolean(previous) && previous.scene === seg.scene && previous.speaker !== seg.speaker;
+    const sameScene = Boolean(previous) && previous.scene === seg.scene;
+    const isTurn = sameScene && previous.speaker !== seg.speaker;
     if (isTurn) turns += 1;
-    gaps.set(seg.segmentKey, isTurn ? gapSeconds : 0);
+    let gap = isTurn ? gapSeconds : 0;
+    if (sameScene) {
+      const audible = (previous.speechTrail ?? 0) + gap + (seg.speechLead ?? 0);
+      const extra = round(Math.max(0, MIN_AUDIBLE_PAUSE_SECONDS - audible));
+      if (extra > 0.001) { gap = round(gap + extra); padded += 1; paddedTotal += extra; }
+    }
+    gaps.set(seg.segmentKey, gap);
     previous = seg;
   }
-  return { gaps, turns, total: round(turns * gapSeconds) };
+  return { gaps, turns, total: round(turns * gapSeconds), padded, paddedTotal: round(paddedTotal) };
 }
 
 
@@ -1994,10 +2081,109 @@ function computeTimelineV3(cuts, ttsSegments, warnings, preferStill = false, opt
     }
   }
 
+  // (5) 컷 전환을 조용한 지점으로 스냅 — 총 길이·장면 경계는 건드리지 않는 국소 보정
+  const snaps = snapCutBoundariesToQuiet(placedCuts, placedTts, warnings);
+
   return {
     placedCuts, placedTts, sceneStart, sceneSpan, sceneAudio, sceneSpeech, totalDuration, scenes,
     speakerTurnGap, speakerTurns: turnGaps.turns, speakerTurnTotal: turnGaps.total,
+    pausePadded: turnGaps.padded, pausePaddedTotal: turnGaps.paddedTotal, boundarySnaps: snaps,
   };
+}
+
+// ---------------------------------------------------------------------------
+// 컷 전환 위치 스냅 — 「화면 전환이 급해서 앞뒤 대사에 쉼이 없다」의 국소 해
+// ---------------------------------------------------------------------------
+// 컷 길이는 콘티 계획 비율로 나뉘므로 경계가 발화 한복판이나 숨의 꼬리에 떨어진다
+// (ep2 v1 실측: 3:03 지점 CUT-26→27 경계 183.344s가 장영실 대사 안의 0.628초 숨
+//  182.894~183.522s의 **끝에서 0.178초 앞**에 있었다 — 화면이 바뀌자마자 목소리가 이어진다).
+// 실측 발화 런의 여집합(조용한 창)을 구해, 경계를 그 창의 **앞쪽**으로 옮긴다. 새 그림이
+// 자리 잡을 시간을 벌어 준다. 총 길이·장면 경계·A2V 앵커는 절대 건드리지 않는다.
+const SNAP_TOLERANCE_SECONDS = 1.5;   // 이보다 먼 조용한 창까지 끌고 가지 않는다
+const SNAP_MIN_QUIET_SECONDS = 0.28;  // 이보다 짧은 틈은 전환 자리로 쓰지 않는다
+const SNAP_ENTRY_SECONDS = 0.1;       // 조용한 창 시작에서 이만큼 뒤에 전환을 둔다
+const SNAP_MIN_CUT_SECONDS = 1.2;     // 스냅으로 컷이 이보다 짧아지지 않게 한다
+
+function buildQuietWindows(placedTts, totalDuration) {
+  const speech = [];
+  for (const seg of placedTts) {
+    const runs = seg.speechRuns;
+    if (Array.isArray(runs) && runs.length > 0) {
+      for (const [from, to] of runs) speech.push([seg.start + from, seg.start + to]);
+    } else {
+      speech.push([seg.start, seg.start + seg.duration]);
+    }
+  }
+  speech.sort((a, b) => a[0] - b[0]);
+  const merged = [];
+  for (const span of speech) {
+    const last = merged[merged.length - 1];
+    if (last && span[0] <= last[1] + 0.001) last[1] = Math.max(last[1], span[1]);
+    else merged.push([...span]);
+  }
+  const quiet = [];
+  let at = 0;
+  for (const [from, to] of merged) {
+    if (from > at + 0.001) quiet.push([at, from]);
+    at = Math.max(at, to);
+  }
+  if (totalDuration > at + 0.001) quiet.push([at, totalDuration]);
+  return quiet;
+}
+
+function snapCutBoundariesToQuiet(placedCuts, placedTts, warnings) {
+  const quiet = buildQuietWindows(placedTts, placedCuts[placedCuts.length - 1]?.end ?? 0);
+  if (quiet.length === 0) return [];
+  const moves = [];
+  for (let i = 1; i < placedCuts.length; i += 1) {
+    const prev = placedCuts[i - 1];
+    const cur = placedCuts[i];
+    // 장면 경계는 옮기지 않는다(장면 스팬·휴지 계약). A2V 앵커·고정 길이 컷도 제외.
+    if (prev.scene !== cur.scene) continue;
+    if (prev.pinned || cur.pinned) continue;
+    if (Number.isFinite(prev.fixedDuration) || Number.isFinite(cur.fixedDuration)) continue;
+
+    const boundary = cur.start;
+    let best;
+    for (const [qs, qe] of quiet) {
+      if (qe - qs < SNAP_MIN_QUIET_SECONDS) continue;
+      const target = Math.min(qs + SNAP_ENTRY_SECONDS, qe - SNAP_ENTRY_SECONDS);
+      const distance = Math.abs(target - boundary);
+      if (distance > SNAP_TOLERANCE_SECONDS) continue;
+      if (!best || distance < best.distance) best = { target, distance, quiet: [qs, qe] };
+    }
+    if (!best || best.distance < 0.05) continue;
+
+    const target = round(best.target);
+    const prevDuration = round(target - prev.start);
+    const curDuration = round(cur.end - target);
+    if (prevDuration < SNAP_MIN_CUT_SECONDS || curDuration < SNAP_MIN_CUT_SECONDS) continue;
+    // 배속 하한(0.85) 계약 — 늘리는 쪽만 검사한다. 이미 하한을 밑도는 컷은 더 나빠지지 않을 때만 허용.
+    const fits = (cut, duration) => {
+      if (duration <= cut.duration + 0.001) return true;                  // 짧아지면 트림뿐 — 항상 안전
+      const source = effectiveSourceLength(cut);
+      if (!Number.isFinite(source)) return true;
+      return duration <= Math.max(cut.duration, source / MIN_FIT_SPEED) + 0.001;
+    };
+    if (!fits(prev, prevDuration) || !fits(cur, curDuration)) continue;
+
+    moves.push({
+      cutId: cur.id, from: boundary, to: target,
+      delta: round(target - boundary), quiet: best.quiet,
+    });
+    prev.duration = prevDuration;
+    prev.end = target;
+    cur.start = target;
+    cur.duration = curDuration;
+  }
+  if (moves.length > 0) {
+    const worst = moves.slice().sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 3);
+    warnings.push(
+      `컷 전환 스냅 ${moves.length}건 — 발화 한복판·숨 꼬리의 경계를 조용한 창 앞쪽으로 이동`
+      + `(최대 이동: ${worst.map((m) => `${m.cutId} ${m.from.toFixed(3)}→${m.to.toFixed(3)}`).join(' · ')})`,
+    );
+  }
+  return moves;
 }
 
 function buildProject({
@@ -2284,12 +2470,22 @@ function buildProject({
 
     const units = splitSentences(dialogue.text).flatMap(sentenceToCaptionTexts);
     const totalWeight = units.reduce((sum, text) => sum + captionWeight(text), 0);
-    let at = seg.start;
+    // 자막 창 = **클립 경계가 아니라 실측 발화 창**. TTS 선단·말단 무음을 그대로 자막에 쓰면
+    // 자막이 목소리보다 최대 0.76s 먼저 뜨고 1.19s 더 남는다(ep2 v1 인간 지적 「자막 안 맞음」·
+    // 「대사 안 나옴」). 리드 가드만큼만 미리 띄우고 테일 가드만큼만 붙잡는다.
+    const lead = Math.max(0, seg.speechLead ?? 0);
+    const trail = Math.max(0, seg.speechTrail ?? 0);
+    const rawStart = seg.start + Math.max(0, lead - CAPTION_LEAD_GUARD);
+    const rawEnd = seg.start + seg.duration - Math.max(0, trail - CAPTION_TRAIL_GUARD);
+    const capStart = round(rawStart);
+    const capEnd = round(Math.max(rawEnd, rawStart + CAPTION_MIN_WINDOW));
+    const capSpan = capEnd - capStart;
+    let at = capStart;
     units.forEach((text, unitIndex) => {
       const isLast = unitIndex === units.length - 1;
       const end = isLast
-        ? round(seg.start + seg.duration)
-        : round(at + (seg.duration * captionWeight(text)) / totalWeight);
+        ? capEnd
+        : round(at + (capSpan * captionWeight(text)) / totalWeight);
       captions.push({
         id: `caption-${seg.assetId.toLowerCase()}-${unitIndex + 1}`,
         start: round(at),
@@ -2400,6 +2596,7 @@ function buildProject({
   }
   const a2Clips = [];
   const BGM_MIN_REPEAT_TAIL = 4;   // 이보다 짧은 자투리는 반복하지 않는다(짧은 조각 재진입 = 부자연)
+  const BGM_FADE_IN_SECONDS = 2;   // 구간 첫 조각의 진입 페이드(하드 스타트가 대사와 충돌하는 것을 막는다)
   assetsDoc.bgm.forEach((track, index) => {
     const segment = segments[index];
     const span = round(segment.end - segment.start);
@@ -2426,13 +2623,28 @@ function buildProject({
         duration: placement.duration,
         color: '#818cf8',
       });
+      const keyframes = [];
+      // 첫 조각은 앞 2초 페이드인. 종전에는 페이드아웃만 있어 **BGM이 하드 스타트**했고,
+      // ep2에서는 그 시점이 대사 시작과 정확히 같은 프레임이었다(0.000s = N01-01 시작,
+      // 132.547s = N05-01 시작). 인간 검수 「0~9초 소리 겹침」의 직접 원인이라 진입을 완만하게 만든다.
+      // 반복 조각(repeatIndex>0)은 이어 붙어야 하므로 페이드인 없음.
+      if (repeatIndex === 0) {
+        const fadeIn = round(Math.min(BGM_FADE_IN_SECONDS, placement.duration / 3));
+        if (fadeIn > 0.05) {
+          keyframes.push(
+            { id: `kf-${clip.id}-in-a`, property: 'volume', time: 0, value: 0, easing: 'linear' },
+            { id: `kf-${clip.id}-in-b`, property: 'volume', time: fadeIn, value: 1, easing: 'linear' },
+          );
+        }
+      }
       // 마지막 조각만 끝 2초 페이드(구간 경계 클릭 방지). 중간 반복은 이어 붙어야 하므로 페이드 없음.
       if (repeatIndex === placements.length - 1) {
-        clip.keyframes = [
+        keyframes.push(
           { id: `kf-${clip.id}-fade-a`, property: 'volume', time: round(Math.max(0, placement.duration - 2)), value: 1, easing: 'linear' },
           { id: `kf-${clip.id}-fade-b`, property: 'volume', time: placement.duration, value: 0, easing: 'linear' },
-        ];
+        );
       }
+      if (keyframes.length > 0) clip.keyframes = keyframes.sort((a, b) => a.time - b.time);
       a2Clips.push(clip);
     });
 
@@ -2596,6 +2808,15 @@ function buildProject({
     chapterIndex += 1;
   }
 
+  const masterAudio = MASTER_AUDIO_BY_PRODUCTION[productionId];
+  decisions.push(
+    masterAudio
+      ? `마스터 라우드니스 단 적용: I=${masterAudio.loudnessLufs} LUFS / TP=${masterAudio.truePeakDb} dBTP `
+        + '(rule-before-export 명시 방출 — project-store 기본 규칙 병합 차단)'
+      : ' 마스터 라우드니스 단 미적용(프로덕션 미등재) — rule-before-export를 파라미터 없이 방출해 '
+        + '기본 규칙(I=-14/TP=-1.5) 병합을 차단한다(규칙 도입 전 동작 재현)',
+  );
+
   // 프로젝트 조립(두 사이클 공통) — 마커 확정 후 호출
   const finalizeProject = () => {
     const project = {
@@ -2620,7 +2841,21 @@ function buildProject({
       ],
       markers,
       captions,
-      automation: [],
+      // 마스터 라우드니스 단은 프로덕션별 옵트인이다(위 MASTER_AUDIO_BY_PRODUCTION 주석 참조).
+      // 규칙 자체는 항상 방출해 project-store의 기본 규칙 병합을 차단한다 — 미등재 프로덕션은
+      // 라우드니스 파라미터가 없으므로 renderer가 loudnorm·alimiter를 아예 붙이지 않는다.
+      automation: [{
+        id: 'rule-before-export',
+        name: 'Caption, loudness, color pass',
+        provider: 'local',
+        trigger: 'before-export',
+        targetTrackIds: ['track-v1', 'track-a1'],
+        parameters: {
+          captions: true,
+          colorMatch: true,
+          ...(MASTER_AUDIO_BY_PRODUCTION[productionId] ?? {}),
+        },
+      }],
       plugins: [],
       exportProfiles: buildExportProfiles(),
     };
@@ -3062,6 +3297,24 @@ async function main() {
       }
       seg.duration = round(measured);
     }
+    // 발화 구간 실측 — 자막 동기(§캡션)와 컷 전환 위치(§전환 스냅)의 원천.
+    let silenceProbed = 0;
+    for (const seg of assetsDoc.tts) {
+      const probe = await probeSilence(seg.path, seg.duration ?? seg.docDuration);
+      if (!probe) continue;
+      seg.speechLead = probe.lead;
+      seg.speechTrail = probe.trail;
+      seg.speechRuns = probe.speech;
+      silenceProbed += 1;
+    }
+    if (silenceProbed > 0) {
+      const leadSum = round(assetsDoc.tts.reduce((sum, seg) => sum + (seg.speechLead ?? 0), 0));
+      const trailSum = round(assetsDoc.tts.reduce((sum, seg) => sum + (seg.speechTrail ?? 0), 0));
+      console.log(
+        `발화 구간 실측: ${silenceProbed}/${assetsDoc.tts.length}개 — 선단 무음 합 ${leadSum}s · 말단 무음 합 ${trailSum}s `
+        + '(자막은 발화에 정렬, 오디오 배치는 불변)',
+      );
+    }
   } else {
     resolveCutAssets(cuts, sourceMap, assetsDoc);
   }
@@ -3150,13 +3403,26 @@ async function main() {
   // 자체 검증 출력: 총 길이 정합
   const ttsTotal = round(assetsDoc.tts.reduce((sum, seg) => sum + seg.duration, 0));
   const turnTotal = timeline.speakerTurnTotal ?? 0;
-  const expected = round(ttsTotal + turnTotal + (timeline.scenes.length - 1) * SCENE_PAUSE_SECONDS + ENDING_MARGIN_SECONDS);
+  const pauseTotal = timeline.pausePaddedTotal ?? 0;
+  const expected = round(
+    ttsTotal + turnTotal + pauseTotal
+    + (timeline.scenes.length - 1) * SCENE_PAUSE_SECONDS + ENDING_MARGIN_SECONDS,
+  );
   console.log('\n--- duration self-check ---');
   console.log(`TTS 실측 합계: ${ttsTotal}s`);
   if (timeline.speakerTurns !== undefined) {
     console.log(`화자 교대 간격: ${timeline.speakerTurns}회 × ${timeline.speakerTurnGap}s = ${turnTotal}s (장면 내 교대만)`);
   }
-  console.log(`기대 총 길이 = 실측 + 교대 간격 ${turnTotal}s + 장면 휴지 ${(timeline.scenes.length - 1)}×${SCENE_PAUSE_SECONDS}s + 엔딩 마진 ${ENDING_MARGIN_SECONDS}s = ${expected}s`);
+  if (timeline.pausePadded) {
+    console.log(
+      `쉼 하한 보정: ${timeline.pausePadded}쌍 × 평균 ${round(timeline.pausePaddedTotal / timeline.pausePadded)}s = `
+      + `${timeline.pausePaddedTotal}s (들리는 쉼 ${MIN_AUDIBLE_PAUSE_SECONDS}s 하한 — 실측 무음 합산 후 부족분만)`,
+    );
+  }
+  if (timeline.boundarySnaps?.length) {
+    console.log(`컷 전환 스냅: ${timeline.boundarySnaps.length}건 (조용한 창 앞쪽으로 이동 — 총 길이 불변)`);
+  }
+  console.log(`기대 총 길이 = 실측 + 교대 간격 ${turnTotal}s + 쉼 하한 보정 ${pauseTotal}s + 장면 휴지 ${(timeline.scenes.length - 1)}×${SCENE_PAUSE_SECONDS}s + 엔딩 마진 ${ENDING_MARGIN_SECONDS}s = ${expected}s`);
   console.log(`타임라인 총 길이: ${project.duration}s → ${Math.abs(project.duration - expected) < 0.01 ? 'OK' : `+${round(project.duration - expected)}s (A2V 고정 길이 흡수분)`}`);
   for (const scene of timeline.scenes) {
     console.log(`  N${String(scene).padStart(2, '0')}: start ${timeline.sceneStart.get(scene)}s / span ${round(timeline.sceneSpan.get(scene))}s (audio ${round(timeline.sceneAudio.get(scene))}s)`);
