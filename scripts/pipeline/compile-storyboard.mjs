@@ -27,6 +27,20 @@
  * A3 SFX:
  *   --sfx-duck-db <db>       대사 구간 SFX 덕킹 (음수, 기본 0 = 덕킹 없음). 03-assets 권고 -3~-6
  *
+ * S6 산출물 가드 4종 (scripts/pipeline/guards/*, **기본 on**):
+ *   ① 최종 산출물 스펙 어서션 — 렌더 직후 해상도·fps·코덱·오디오 샘플레이트/채널·길이를 실측 대조.
+ *      프로파일이 오디오 규격을 선언하지 않으면 납품 기준선(48kHz/2ch)으로 판정한다.
+ *   ② 페어 정합 — 컷 ↔ TTS 세그먼트 ↔ 클립 파일의 번호·바인딩, 보정 표의 프로덕션 색인 범위.
+ *   ③ 정지 프레임 검출 — 모션 클립의 도입부·전체 freeze(ffmpeg freezedetect).
+ *   ④ 발화 구간 정렬 — silencedetect 실측으로 자막 창을 잡고, 실제 방출된 창을 사후 검증.
+ *   --no-guards              가드 전체 off (긴급 우회 — 사유 기록 필수)
+ *   --guards-warn-only       ERROR를 warn으로 강등 (스테이징 컴파일)
+ *   --freeze-scan full|head|off   가드 ③ 스캔 범위 (기본 full — 모션 클립이 있을 때)
+ *   --strict-profile-audio   프로파일 오디오 규격 결손을 ERROR로 (기본 warn)
+ *   --delivery-audio 48000/2 산출물 오디오 판정 기준선
+ *   --output-duration-tolerance <s>  산출물 길이 허용 오차 (기본 1.0)
+ *   리포트: <workdir>\guard-report-compile.json · guard-report-render-<profile>.json
+ *
  * 사이클 모드 (--cycle, 기본 v3):
  *  - v3 (현행, 콘티 v3 59컷 / LTX-2.3): 전 컷이 24fps 실모션 클립. 슬로우 배속·Ken Burns 없음.
  *  - v2 (레거시, 콘티 v2 45컷 / WAN 16fps): 정지 이미지 + I2V 0.5× 슬로우 + Ken Burns.
@@ -61,6 +75,16 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
+
+// S6 산출물 가드 4종(스펙 어서션·페어 정합·정지 검출·발화 정렬) — scripts/pipeline/guards/*
+// 발화 구간 실측/자막 창/조용한 창 계산은 **가드 모듈이 원천**이다. 여기에 같은 로직을 다시 두지 않는다.
+import {
+  auditExportProfiles, assertOutputSpec, DELIVERY_BASELINE,
+  checkPairIntegrity, checkClipFreeze,
+  probeSpeechWindow, speechCaptionWindow, buildQuietWindows, checkSpeechAlignment,
+  CAPTION_LEAD_GUARD, CAPTION_TRAIL_GUARD, CAPTION_MIN_WINDOW,
+  mergeGuardReports, downgradeErrors, formatGuardBundle, toJsonReport,
+} from './guards/index.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -386,7 +410,15 @@ const BOOLEAN_FLAGS = new Set([
   'upscaled', 'kenburns', 'offline', 'no-insert-cuts',
   // 스테이징 컴파일용(에셋 미생성 단계) — 기본 off. 켜면 반드시 경고로 남는다.
   'allow-pending-a2v', 'allow-pending-bgm',
+  // S6 산출물 가드 4종 — **기본 on**. 끄는 쪽이 명시적 선택이어야 한다(조용한 통과 금지).
+  //   --no-guards         가드 전체 off (긴급 우회 — 반드시 사유를 기록할 것)
+  //   --guards-warn-only  ERROR를 warn으로 강등(스테이징 컴파일)
+  //   --strict-profile-audio  프로파일 오디오 규격 결손을 ERROR로 (기본 warn)
+  'no-guards', 'guards-warn-only', 'strict-profile-audio',
 ]);
+
+// 가드 ③ 정지 검출 스캔 모드. full = 클립 전체 + 도입부 / head = 도입부만 / off = 검사 안 함.
+const FREEZE_SCAN_MODES = new Set(['full', 'head', 'off']);
 
 function parseArgs(argv) {
   const args = {
@@ -417,7 +449,20 @@ function parseArgs(argv) {
   if (!['clip', 'still'].includes(args.prefer)) {
     throw new Error(`--prefer must be clip|still (got ${args.prefer})`);
   }
+  if (args['freeze-scan'] !== undefined && !FREEZE_SCAN_MODES.has(args['freeze-scan'])) {
+    throw new Error(`--freeze-scan must be one of ${[...FREEZE_SCAN_MODES].join('|')} (got ${args['freeze-scan']})`);
+  }
   return args;
+}
+
+// --delivery-audio 48000/2 → { audioSampleRate: 48000, audioChannels: 2 }
+function parseDeliveryAudio(raw) {
+  if (raw === undefined) return undefined;
+  const [rate, channels] = String(raw).split('/').map(Number);
+  if (!Number.isFinite(rate) || !Number.isFinite(channels) || rate <= 0 || channels <= 0) {
+    throw new Error('--delivery-audio must look like <sampleRate>/<channels> (예: 48000/2)');
+  }
+  return { audioSampleRate: rate, audioChannels: channels };
 }
 
 // ffprobe 실측 (문서 표보다 파일이 원천 — 채택 테이크 교체로 표가 stale일 수 있다)
@@ -439,55 +484,9 @@ async function probeDuration(filePath) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// 발화 구간 실측 — 자막 동기·컷 전환 위치의 유일한 원천
-// ---------------------------------------------------------------------------
-// TTS wav에는 앞뒤로 무음 패딩이 붙어 있다(ep2 109파일 실측: 선단 합 15.17s · 말단 합 49.27s,
-// 최대 선단 0.757s · 최대 말단 1.193s). 클립 경계를 그대로 자막 창으로 쓰면 자막이 최대 0.76초
-// **먼저 뜨고** 1.19초 **더 남는다** — 인간 검수 지적 「자막 안 맞음」·「대사 안 나옴」의 실체다.
-// 그래서 파일마다 무음 구간을 실측해 ①자막을 발화에 붙이고 ②컷 전환을 조용한 지점으로 옮긴다.
-const SILENCE_NOISE_DB = -45;      // 무음 판정 임계(TTS 노이즈 플로어보다 충분히 위)
-const SILENCE_MIN_SECONDS = 0.1;   // 이보다 짧은 무음은 발화의 일부(파열음 앞 폐쇄)로 본다
-
-let ffmpegAvailable = true;
-async function probeSilence(filePath, duration) {
-  if (!ffmpegAvailable || !Number.isFinite(duration) || !existsSync(filePath)) return undefined;
-  let stderr;
-  try {
-    ({ stderr } = await execFileAsync('ffmpeg', [
-      '-hide_banner', '-nostats', '-i', filePath,
-      '-af', `silencedetect=n=${SILENCE_NOISE_DB}dB:d=${SILENCE_MIN_SECONDS}`,
-      '-f', 'null', '-',
-    ], { maxBuffer: 16 * 1024 * 1024 }));
-  } catch (error) {
-    if (String(error?.code) === 'ENOENT') {
-      ffmpegAvailable = false;
-      console.warn('  warn: ffmpeg not found — 발화 구간 실측을 건너뜁니다(자막은 클립 경계 기준)');
-    }
-    return undefined;
-  }
-  const starts = [...String(stderr).matchAll(/silence_start:\s*(-?[\d.]+)/g)].map((m) => Number(m[1]));
-  const ends = [...String(stderr).matchAll(/silence_end:\s*(-?[\d.]+)/g)].map((m) => Number(m[1]));
-  const silences = [];
-  for (let i = 0; i < starts.length; i += 1) {
-    const start = Math.max(0, starts[i]);
-    const end = Math.min(duration, ends[i] ?? duration);
-    if (end > start + 0.001) silences.push([round(start), round(end)]);
-  }
-  const lead = silences.length > 0 && silences[0][0] < 0.001 ? silences[0][1] : 0;
-  const trail = silences.length > 0 && silences[silences.length - 1][1] > duration - 0.001
-    ? round(duration - silences[silences.length - 1][0])
-    : 0;
-  // 발화 런 = 무음의 여집합
-  const speech = [];
-  let at = 0;
-  for (const [start, end] of silences) {
-    if (start > at + 0.001) speech.push([round(at), round(start)]);
-    at = Math.max(at, end);
-  }
-  if (duration > at + 0.001) speech.push([round(at), round(duration)]);
-  return { lead: round(lead), trail, silences, speech };
-}
+// 발화 구간 실측(silencedetect)은 guards/speech-window.mjs가 원천이다 — 가드 ④의 정식 함수로
+// 승격했고(`probeSpeechWindow`), 자막 창 계산(`speechCaptionWindow`)·조용한 창 계산
+// (`buildQuietWindows`)도 같은 모듈이 소유한다. 여기에 사본을 두면 두 로직이 갈라진다.
 
 async function probeHasAudioStream(filePath) {
   if (!ffprobeAvailable || !existsSync(filePath)) return undefined;
@@ -1484,10 +1483,8 @@ function alignScriptDialoguesToSegments(scriptDialogues, ttsSegments, warnings =
 
 // 문장 단위 분할 → 줄바꿈(줄당 ~30자) → 최대 2줄 캡션 단위로 묶기
 const CAPTION_LINE_MAX = 30;
-// 자막 창 가드 — 발화 앞뒤로 이만큼만 여유를 준다(무음 패딩 전체를 자막에 쓰지 않는다).
-const CAPTION_LEAD_GUARD = 0.1;
-const CAPTION_TRAIL_GUARD = 0.25;
-const CAPTION_MIN_WINDOW = 0.5;
+// 자막 창 가드(CAPTION_LEAD_GUARD/TRAIL_GUARD/MIN_WINDOW)는 guards/speech-window.mjs 소유 —
+// 가드 ④가 같은 상수로 사후 검증하므로 값이 갈라지지 않는다.
 
 function splitSentences(text) {
   return text.split(/(?<=[.?!])\s+/u).map((sentence) => sentence.trim()).filter(Boolean);
@@ -2104,32 +2101,7 @@ const SNAP_MIN_QUIET_SECONDS = 0.28;  // 이보다 짧은 틈은 전환 자리�
 const SNAP_ENTRY_SECONDS = 0.1;       // 조용한 창 시작에서 이만큼 뒤에 전환을 둔다
 const SNAP_MIN_CUT_SECONDS = 1.2;     // 스냅으로 컷이 이보다 짧아지지 않게 한다
 
-function buildQuietWindows(placedTts, totalDuration) {
-  const speech = [];
-  for (const seg of placedTts) {
-    const runs = seg.speechRuns;
-    if (Array.isArray(runs) && runs.length > 0) {
-      for (const [from, to] of runs) speech.push([seg.start + from, seg.start + to]);
-    } else {
-      speech.push([seg.start, seg.start + seg.duration]);
-    }
-  }
-  speech.sort((a, b) => a[0] - b[0]);
-  const merged = [];
-  for (const span of speech) {
-    const last = merged[merged.length - 1];
-    if (last && span[0] <= last[1] + 0.001) last[1] = Math.max(last[1], span[1]);
-    else merged.push([...span]);
-  }
-  const quiet = [];
-  let at = 0;
-  for (const [from, to] of merged) {
-    if (from > at + 0.001) quiet.push([at, from]);
-    at = Math.max(at, to);
-  }
-  if (totalDuration > at + 0.001) quiet.push([at, totalDuration]);
-  return quiet;
-}
+// buildQuietWindows()는 guards/speech-window.mjs 소유(가드 ④ 승격분) — 여기서는 import해 쓴다.
 
 function snapCutBoundariesToQuiet(placedCuts, placedTts, warnings) {
   const quiet = buildQuietWindows(placedTts, placedCuts[placedCuts.length - 1]?.end ?? 0);
@@ -2472,13 +2444,13 @@ function buildProject({
     const totalWeight = units.reduce((sum, text) => sum + captionWeight(text), 0);
     // 자막 창 = **클립 경계가 아니라 실측 발화 창**. TTS 선단·말단 무음을 그대로 자막에 쓰면
     // 자막이 목소리보다 최대 0.76s 먼저 뜨고 1.19s 더 남는다(ep2 v1 인간 지적 「자막 안 맞음」·
-    // 「대사 안 나옴」). 리드 가드만큼만 미리 띄우고 테일 가드만큼만 붙잡는다.
-    const lead = Math.max(0, seg.speechLead ?? 0);
-    const trail = Math.max(0, seg.speechTrail ?? 0);
-    const rawStart = seg.start + Math.max(0, lead - CAPTION_LEAD_GUARD);
-    const rawEnd = seg.start + seg.duration - Math.max(0, trail - CAPTION_TRAIL_GUARD);
-    const capStart = round(rawStart);
-    const capEnd = round(Math.max(rawEnd, rawStart + CAPTION_MIN_WINDOW));
+    // 「대사 안 나옴」). 계산은 가드 ④ 모듈(speechCaptionWindow)이 소유한다 — 같은 함수로
+    // 컴파일 후 사후 검증까지 하므로 「배치와 검증이 갈라지는」 구조를 만들지 않는다.
+    const window = speechCaptionWindow(seg, {
+      leadGuard: CAPTION_LEAD_GUARD, trailGuard: CAPTION_TRAIL_GUARD, minWindow: CAPTION_MIN_WINDOW,
+    });
+    const capStart = window.start;
+    const capEnd = window.end;
     const capSpan = capEnd - capStart;
     let at = capStart;
     units.forEach((text, unitIndex) => {
@@ -3280,6 +3252,7 @@ async function main() {
 
   // 입력 검증 + 컷별 에셋 해석
   const preferStill = args.prefer === 'still';
+  let silenceProbed = 0;
   if (isV3) {
     await resolveCutAssetsV3(cuts, assetsDoc, args, sourceMap, warnings);
     // TTS 실측을 파일에서 재측정 — 03-assets 표는 채택 테이크 교체 후 stale일 수 있다.
@@ -3297,10 +3270,10 @@ async function main() {
       }
       seg.duration = round(measured);
     }
-    // 발화 구간 실측 — 자막 동기(§캡션)와 컷 전환 위치(§전환 스냅)의 원천.
-    let silenceProbed = 0;
+    // 발화 구간 실측 — 자막 동기(§캡션)와 컷 전환 위치(§전환 스냅)의 원천. 가드 ④ 모듈이 소유.
+    // 실측 성공 건수는 가드 ④가 「정렬을 아예 못 했다」를 판정하는 근거이므로 main 스코프에 남긴다.
     for (const seg of assetsDoc.tts) {
-      const probe = await probeSilence(seg.path, seg.duration ?? seg.docDuration);
+      const probe = await probeSpeechWindow(seg.path, seg.duration ?? seg.docDuration);
       if (!probe) continue;
       seg.speechLead = probe.lead;
       seg.speechTrail = probe.trail;
@@ -3435,6 +3408,12 @@ async function main() {
   // 러닝타임 게이트 판정 (01-script §길이 게이트) — 기본 480~510초, --duration-gate로 변경
   const gateRaw = args['duration-gate'] ?? '480-510';
   const [gateMin, gateMax] = String(gateRaw).split('-').map(Number);
+  // 렌더 산출물에 대한 게이트 어서션은 **명시 지정했을 때만** 건다. 기본값에서는 컴파일 단
+  // 경고 + 「산출물 길이 == 타임라인 길이(±1s)」 어서션으로 게이트가 전이적으로 보장된다.
+  const renderDurationGate = args['duration-gate'] !== undefined
+    && Number.isFinite(gateMin) && Number.isFinite(gateMax)
+    ? [gateMin, gateMax]
+    : undefined;
   if (Number.isFinite(gateMin) && Number.isFinite(gateMax)) {
     const inGate = project.duration >= gateMin && project.duration <= gateMax;
     console.log(`러닝타임 게이트 ${gateMin}~${gateMax}s: ${project.duration}s → ${inGate ? 'PASS' : 'OUT OF GATE'}`);
@@ -3444,6 +3423,79 @@ async function main() {
         + '--speaker-turn-gap / --scene-pause / --ending-margin 조정(또는 --target-duration으로 자동 해) 필요',
       );
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // S6 산출물 가드 (컴파일 단) — 힉스필드 조립기의 4종 개념을 우리 구조로 재구현한 것
+  // ---------------------------------------------------------------------------
+  // ② 페어 정합 · ③ 정지 프레임 · ④ 발화 정렬 사후 검증 + ① 프로파일 규격 선언 감사.
+  // ①의 본 검사(실제 파일 대조)는 render 단계 뒤에서 한다 — 여기서는 선언 결손만 드러낸다.
+  // ERROR가 하나라도 있으면 저장·프리플라이트·렌더로 넘어가지 않고 non-zero exit.
+  const guardsEnabled = !args['no-guards'];
+  let guardBundle;
+  if (guardsEnabled) {
+    const guardStartedAt = Date.now();
+    // 정지 검사 대상은 **실제로 타임라인에 올라간 모션 클립**뿐이다.
+    // 정지 이미지 폴백(--prefer still, 클립 없는 컷)과 v2 Ken Burns는 의도된 정지라 제외한다.
+    const motionClips = isV3 && !preferStill
+      ? cuts.filter((cut) => cutUsesClip(cut, preferStill)).map((cut) => ({
+        id: cut.id, path: cut.clipAsset.path, duration: cut.clipAsset.duration,
+      }))
+      : [];
+    const freezeScan = args['freeze-scan'] ?? (motionClips.length > 0 ? 'full' : 'off');
+
+    // 자막 창 사후 검증용 — 세그먼트별 나레이션 자막의 최소 start·최대 end.
+    // (상단 오버레이 카드 `caption-card-*`는 컷 구간이 원천이므로 제외한다)
+    const captionWindows = new Map();
+    for (const seg of timeline.placedTts ?? []) {
+      const prefix = `caption-${String(seg.assetId).toLowerCase()}-`;
+      const own = project.captions.filter((caption) => caption.id.startsWith(prefix));
+      if (own.length === 0) continue;
+      captionWindows.set(seg.assetId, {
+        start: Math.min(...own.map((caption) => caption.start)),
+        end: Math.max(...own.map((caption) => caption.end)),
+        count: own.length,
+      });
+    }
+
+    const guardReports = [
+      auditExportProfiles(project.exportProfiles, { strict: Boolean(args['strict-profile-audio']) }),
+      checkPairIntegrity({
+        productionId: assetsDoc.productionId,
+        cuts,
+        ttsSegments: assetsDoc.tts,
+        a2vTable: assetsDoc.a2vTable,
+        sfxAssets,
+        cutAdjustments: S6_CUT_ADJUSTMENTS,
+        sfxAdjustments: SFX_CUT_ADJUSTMENTS,
+        adjustmentsSource: args['cut-adjustments'] ? 'external-json' : 'production-table',
+      }),
+      await checkClipFreeze(motionClips, { scan: freezeScan }),
+      checkSpeechAlignment({
+        segments: timeline.placedTts ?? [],
+        captionWindows,
+        probedCount: silenceProbed,
+      }),
+    ];
+    guardBundle = mergeGuardReports(guardReports);
+    if (args['guards-warn-only']) downgradeErrors(guardBundle);
+
+    console.log(`\n--- S6 산출물 가드 (컴파일 단, ${round((Date.now() - guardStartedAt) / 1000)}s) ---`);
+    for (const line of formatGuardBundle(guardBundle)) console.log(`  ${line}`);
+    await writeFile(
+      path.join(workdir, 'guard-report-compile.json'),
+      JSON.stringify(toJsonReport(guardBundle, {
+        stage: 'compile', productionId: assetsDoc.productionId, cycle, freezeScan,
+      }), null, 2),
+    );
+    if (guardBundle.counts.error > 0) {
+      console.error(`\nGUARD FAILED: error ${guardBundle.counts.error}건 — 저장·렌더로 진행하지 않습니다`);
+      process.exitCode = 1;
+      await writeFile(projectPath, JSON.stringify(project, null, 2));
+      return;
+    }
+  } else {
+    console.log('\n--- S6 산출물 가드: --no-guards로 전체 비활성 (사유를 기록하십시오) ---');
   }
 
   // 스키마 검증 (수용 테스트 게이트)
@@ -3536,6 +3588,7 @@ async function main() {
     const jobStatePath = path.join(workdir, `render-job-${profileId}.json`);
 
     let jobId = args.job;
+    let renderedOutputPath;
     if (!jobId && existsSync(jobStatePath)) {
       const saved = JSON.parse(await readFile(jobStatePath, 'utf8'));
       if (saved.jobId && !['completed', 'failed', 'cancelled'].includes(saved.lastStatus ?? '')) {
@@ -3574,6 +3627,7 @@ async function main() {
       await writeFile(jobStatePath, JSON.stringify({ jobId, profileId, lastStatus: snapshotJob.status, progress, outputPath: snapshotJob.outputPath }, null, 2));
       if (snapshotJob.status === 'completed') {
         console.log(`render DONE: ${snapshotJob.outputPath}`);
+        renderedOutputPath = snapshotJob.outputPath;
         break;
       }
       if (snapshotJob.status === 'failed' || snapshotJob.status === 'cancelled') {
@@ -3582,6 +3636,41 @@ async function main() {
         return;
       }
       await new Promise((resolvePause) => setTimeout(resolvePause, 5000));
+    }
+
+    // -------------------------------------------------------------------
+    // 가드 ① 최종 산출물 스펙 어서션 — 렌더 「완료」와 「규격대로 나왔다」는 다르다.
+    // ep2에서 landscape-hd에 오디오 규격이 없어 96kHz 모노가 나왔는데도 파이프라인은
+    // 정상 완료를 보고했다. 여기서 실제 파일을 재서 대조하고, 어긋나면 실패로 끝낸다.
+    // -------------------------------------------------------------------
+    if (guardsEnabled && renderedOutputPath) {
+      const outputReport = await assertOutputSpec({
+        outputPath: renderedOutputPath,
+        profile: renderProfile,
+        expectedDurationSec: project.duration,
+        durationToleranceSec: Number(args['output-duration-tolerance'] ?? 1.0),
+        durationGate: renderDurationGate,
+        baseline: { ...DELIVERY_BASELINE, ...(parseDeliveryAudio(args['delivery-audio']) ?? {}) },
+      });
+      const outputBundle = mergeGuardReports([outputReport]);
+      if (args['guards-warn-only']) downgradeErrors(outputBundle);
+      console.log('\n--- S6 산출물 가드 (렌더 후처리) ---');
+      for (const line of formatGuardBundle(outputBundle)) console.log(`  ${line}`);
+      await writeFile(
+        path.join(workdir, `guard-report-render-${profileId}.json`),
+        JSON.stringify(toJsonReport(outputBundle, {
+          stage: 'render', productionId: assetsDoc.productionId, profileId,
+          outputPath: renderedOutputPath,
+        }), null, 2),
+      );
+      if (outputBundle.counts.error > 0) {
+        console.error(
+          `\nOUTPUT SPEC ASSERTION FAILED: error ${outputBundle.counts.error}건 — `
+          + '이 산출물은 납품하지 마십시오(프로파일 규격 확인 후 재렌더)',
+        );
+        process.exitCode = 1;
+        return;
+      }
     }
   }
 }
