@@ -313,6 +313,198 @@ const INJECTIONS = [
       ),
     expectNot: ['D-1', 'D-3'],
   },
+
+  // ── 항목 D: 대사 전용 검사 축
+  {
+    name: 'D/지적 구간 회귀 — ep2 승인본 N08(선임·윤담)이 실제로 검출된다',
+    which: 'ep2',
+    expect: ['DLG-PARALLEL', 'DLG-ABSTRACT-HANJA', 'DLG-SUBJECT-REPEAT', 'DLG-VAGUE-REFERENT', 'DLG-NO-CONCRETE'],
+    expectScene: 'N08',
+  },
+  {
+    name: 'D/오탐 통제 — ep2 승인본 축 D WARN은 N08에만 몰린다',
+    which: 'ep2',
+    customAssert: (report) => {
+      const warns = report.findings.filter((f) => f.ruleId.startsWith('DLG-') && f.severity !== 'INFO');
+      const other = warns.filter((f) => f.scene !== 'N08');
+      return other.length === 0 ? null : `N08 밖 검출 ${other.length}건: ${other.map((f) => `${f.scene}/${f.ruleId}`).join(', ')}`;
+    },
+  },
+  {
+    name: 'D/오탐 통제 — ep1(하이브리드·대사 소수)에서 축 D 검출 0',
+    which: 'ep1',
+    opts: { allow: ['LEN-DURATION-BAND'] },
+    customAssert: (report) => {
+      const warns = report.findings.filter((f) => f.ruleId.startsWith('DLG-') && f.severity !== 'INFO');
+      return warns.length === 0 ? null : `검출 ${warns.length}건: ${warns.map((f) => `${f.scene}/${f.ruleId}`).join(', ')}`;
+    },
+  },
+  {
+    name: 'D/DLG-PARALLEL — 기계적 대구 주입(구체 요소 없음)',
+    which: 'ep2',
+    mutate: (s) =>
+      replaceSpeechBlock(s, '## 장면 05 (N05)', [
+        '선임: 여기까지가 어제의 뜻이다. 이제부터가 오늘의 뜻이다.',
+      ]),
+    expectScene: 'N05',
+    expect: ['DLG-PARALLEL'],
+    expectSeverity: 'WARN',
+  },
+  {
+    name: 'D/DLG-PARALLEL — 구체 요소가 있는 대구는 INFO로 강등(의도된 리듬 보호)',
+    which: 'ep2',
+    customAssert: (report) => {
+      const hit = report.findings.find((f) => f.ruleId === 'DLG-PARALLEL' && f.scene === 'N06');
+      if (!hit) return 'N06 대구(종은 인형이 칩니다/인형은 물이 칩니다) 미검출';
+      return hit.severity === 'INFO' ? null : `심각도 ${hit.severity} ≠ INFO`;
+    },
+  },
+  {
+    name: 'D/DLG-ABSTRACT-HANJA — 구어 부적합 추상 한자어 주입',
+    which: 'ep2',
+    mutate: (s) =>
+      replaceSpeechBlock(s, '## 장면 05 (N05)', [
+        '선임: 이 일은 우리가 수행한다.',
+        '윤담: 무엇을 확보합니까.',
+      ]),
+    expectScene: 'N05',
+    expect: ['DLG-ABSTRACT-HANJA'],
+  },
+  {
+    name: 'D/DLG-ABSTRACT-HANJA — 시대극 한자어 화이트리스트는 미검출(서운관·호군·직무·시각)',
+    which: 'ep2',
+    mutate: (s) =>
+      replaceSpeechBlock(s, '## 장면 05 (N05)', [
+        '선임: 서운관 생도의 직무는 시각을 지키는 일이다.',
+        '윤담: 호군 나리의 품계는 정사품입니까.',
+      ]),
+    expectScene: 'N05',
+    expectNot: ['DLG-ABSTRACT-HANJA'],
+  },
+  {
+    name: 'D/DLG-SUBJECT-REPEAT — 주어 반복 + 현재형 단문 나열 주입',
+    which: 'ep2',
+    mutate: (s) =>
+      replaceSpeechBlock(s, '## 장면 05 (N05)', [
+        '선임: 우리는 듣는다.',
+        '선임: 우리는 옮긴다.',
+      ]),
+    expectScene: 'N05',
+    expect: ['DLG-SUBJECT-REPEAT'],
+    expectSeverity: 'WARN',
+  },
+  {
+    name: 'D/DLG-NO-CONCRETE — 추상 대사 연속 주입(축 D 핵심)',
+    which: 'ep2',
+    mutate: (s) =>
+      replaceSpeechBlock(s, '## 장면 05 (N05)', [
+        '선임: 우리의 일은 그렇게 정해진 것이다.',
+        '윤담: 그러면 그것은 무엇을 뜻합니까.',
+        '선임: 뜻은 뜻대로 남을 뿐이다.',
+        '윤담: 저는 아직 잘 모르겠습니다.',
+      ]),
+    expectScene: 'N05',
+    expect: ['DLG-NO-CONCRETE'],
+    expectSeverity: 'WARN',
+  },
+  {
+    name: 'D/DLG-NO-CONCRETE — 구체 요소가 한 줄만 있어도 연쇄가 끊긴다(오탐 억제 검증)',
+    which: 'ep2',
+    mutate: (s) =>
+      replaceSpeechBlock(s, '## 장면 05 (N05)', [
+        '선임: 우리의 일은 그렇게 정해진 것이다.',
+        '윤담: 저 종채를 쥐고 기다립니까.',
+        '선임: 뜻은 뜻대로 남을 뿐이다.',
+        '윤담: 저는 아직 잘 모르겠습니다.',
+      ]),
+    expectScene: 'N05',
+    expectNot: ['DLG-NO-CONCRETE'],
+  },
+  {
+    name: 'D/DLG-VAGUE-REFERENT — 지시어 과다 + 구체 요소 0',
+    which: 'ep2',
+    mutate: (s) =>
+      replaceSpeechBlock(s, '## 장면 05 (N05)', [
+        '선임: 그 일은 이것이 대신한다.',
+      ]),
+    expectScene: 'N05',
+    expect: ['DLG-VAGUE-REFERENT'],
+  },
+  {
+    name: 'D/DLG-REGISTER-MISMATCH — 선언 어투(윤담=합쇼체) ↔ 하오체 발화',
+    which: 'ep2',
+    mutate: (s) =>
+      replaceSpeechBlock(s, '## 장면 05 (N05)', [
+        '윤담: 저 살대가 무엇이오.',
+      ]),
+    expectScene: 'N05',
+    expect: ['DLG-REGISTER-MISMATCH'],
+  },
+  {
+    name: 'D/DLG-REGISTER-MISMATCH — 상대 높임 전환(선임의 합쇼체 alt)은 미검출',
+    which: 'ep2',
+    customAssert: (report) => {
+      const hits = report.findings.filter(
+        (f) => f.ruleId === 'DLG-REGISTER-MISMATCH' && f.severity !== 'INFO',
+      );
+      return hits.length === 0
+        ? null
+        : `선임이 김빈 앞에서 합쇼체로 전환하는 라인이 오탐: ${hits.map((f) => f.evidence).slice(0, 3).join(' | ')}`;
+    },
+  },
+  {
+    name: 'D/--strict-dialogue — 핵심 규칙 ERROR 승격',
+    which: 'ep2',
+    opts: { strictDialogue: true },
+    expect: ['DLG-NO-CONCRETE'],
+    expectSeverity: 'ERROR',
+  },
+  {
+    name: 'D/기본 심각도 — 옵션 없이는 ERROR 0(승인본 무회귀 보장)',
+    which: 'ep2',
+    customAssert: (report) => {
+      const errs = report.findings.filter((f) => f.ruleId.startsWith('DLG-') && f.severity === 'ERROR');
+      return errs.length === 0 ? null : `ERROR ${errs.length}건`;
+    },
+  },
+  {
+    name: 'D/네거티브 — [사실] 대사(세종 실록 수록 발언)에 위반 어휘를 심어도 미검출',
+    which: 'ep2',
+    mutate: (s) =>
+      must(s, '  - 세종: 이번에 스스로 치는 궁루를 만들었다.').replace(
+        '  - 세종: 이번에 스스로 치는 궁루를 만들었다.',
+        '  - 세종: 그 일은 이것이 보증한다. 그 뜻은 이것이 담보한다.',
+      ),
+    forbidEvidence: ['그 일은 이것이 보증한다', '그 뜻은 이것이 담보한다'],
+  },
+  {
+    name: 'D/네거티브 — [사실] 낭독 대사(김빈 서문)에 위반 어휘를 심어도 미검출',
+    which: 'ep2',
+    mutate: (s) =>
+      must(s, '  - 김빈: 실로 우리 동방에 전에 없던 훌륭한 제도이다.').replace(
+        '  - 김빈: 실로 우리 동방에 전에 없던 훌륭한 제도이다.',
+        '  - 김빈: 그 일은 이것이 보증한다.',
+      ),
+    forbidEvidence: ['그 일은 이것이 보증한다'],
+  },
+  {
+    name: 'D/네거티브 — 내레이터 실록 인용 낭독부는 축 D 비대상',
+    which: 'ep2',
+    mutate: (s) =>
+      must(s, '  - 내레이터: 간의와 맞추어 보면 털끝만큼도 어긋나지 않았다.').replace(
+        '  - 내레이터: 간의와 맞추어 보면 털끝만큼도 어긋나지 않았다.',
+        '  - 내레이터: 그 일은 이것이 보증한다. 그 뜻은 이것이 담보한다.',
+      ),
+    forbidEvidence: ['그 일은 이것이 보증한다', '그 뜻은 이것이 담보한다'],
+  },
+  {
+    name: 'D/제외 범위 — `대사가 전달하는 사실은 [사실]`은 화자 제외 신호가 아니다',
+    which: 'ep2',
+    customAssert: (report) =>
+      report.stats.dialogueLines >= 100
+        ? null
+        : `검사 대상 대사 ${report.stats.dialogueLines}줄 — 구조 표기를 제외 신호로 오독하면 대사가 통째로 빠진다(기대 100줄 이상)`,
+  },
 ];
 
 // ─────────────────────────────────────────── 실행
@@ -361,17 +553,28 @@ for (const c of INJECTIONS) {
     const found = report.findings;
     const problems = [];
     for (const id of c.expect || []) {
-      const hits = found.filter((f) => f.ruleId === id);
+      const hits = found.filter((f) => f.ruleId === id && (!c.expectScene || f.scene === c.expectScene));
       if (hits.length === 0) {
-        problems.push(`${id} 미검출`);
+        problems.push(`${id} 미검출${c.expectScene ? `(장면 ${c.expectScene})` : ''}`);
       } else if (c.expectSeverity && !hits.some((h) => h.severity === c.expectSeverity)) {
         problems.push(`${id} 심각도 ${hits[0].severity} ≠ 기대 ${c.expectSeverity}`);
       }
     }
+    if (c.customAssert) {
+      const detail = c.customAssert(report);
+      if (detail) problems.push(detail);
+    }
     for (const id of c.expectNot || []) {
-      if (found.some((f) => f.ruleId === id && f.severity !== 'INFO')) {
-        problems.push(`${id} 오탐(검출되면 안 됨)`);
+      if (found.some((f) => f.ruleId === id && f.severity !== 'INFO' && (!c.expectScene || f.scene === c.expectScene))) {
+        problems.push(`${id} 오탐(검출되면 안 됨)${c.expectScene ? `(장면 ${c.expectScene})` : ''}`);
       }
+    }
+    // 주입 문구가 어떤 위반 근거에도 등장하지 않아야 한다(장면 단위 스코프가 불가능한 네거티브용)
+    for (const marker of c.forbidEvidence || []) {
+      const hit = found.find(
+        (f) => f.severity !== 'INFO' && String(f.evidence || '').includes(marker),
+      );
+      if (hit) problems.push(`주입 문구가 ${hit.ruleId} 근거에 등장 — 제외 규약 미작동`);
     }
     record(c.name, problems.length === 0, problems.join(' / '));
   } catch (e) {

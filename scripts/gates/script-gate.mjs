@@ -10,16 +10,20 @@
  *   A. 기계적 계약 — TTS lint / 훅 / 분량·길이 / 태그 전수 / 복선 회수 / 2인칭 / 나레이터 비중 / 화자 로스터
  *   B. 서사 구조   — through-line 선언·분포 / reorder test 근사 지표 / 장면별 정보 밀도
  *   C. 문장 품질   — 한국어 AI-티 패턴(내레이션 산문 한정, 실록 인용 낭독부 제외)
+ *   D. 대사 품질   — 캐릭터 대사 전용(기계적 대구 / 구어 부적합 추상 한자어 / 주어 반복 /
+ *                    정보 없는 추상 대사 연속 / 지시어 공전 / 화자 어투 불일치)
  *
  * 규율
  *   - 대본 원문 수정 금지(검사 전용).
  *   - 음절·길이 계산은 전부 결정론(정규식 한글 음절 카운트). LLM 산수 금지.
- *   - 규칙 데이터는 rules/script-rules.json · rules/script-style-patterns.json으로 분리.
+ *   - 규칙 데이터는 rules/script-rules.json · rules/script-style-patterns.json ·
+ *     rules/script-dialogue-patterns.json으로 분리.
  *
  * 사용법
  *   node scripts/gates/script-gate.mjs <script.md> [옵션]
  *     --json                  기계 판독용 JSON 출력
  *     --strict-style          항목 C의 S1 패턴을 ERROR로 승격
+ *     --strict-dialogue       항목 D의 핵심 규칙을 ERROR로 승격
  *     --require-through-line  through_line 미선언을 ERROR로 승격
  *     --sps=auto|design|sohee_min|sohee_max|clone   장면 길이 대조용 프로파일(기본 auto)
  *     --allow=RULE-ID[,...]   특정 규칙을 WARN으로 강등(승인본 유예용)
@@ -38,6 +42,18 @@ import {
   countSyllables,
   isLiteraryQuoteSentence,
 } from './lib/script-md-parser.mjs';
+import {
+  structuralSimilarity,
+  collectDynamicProperNouns,
+  concreteElements,
+  isConcrete,
+  classifyEnding,
+  deixisCount,
+  subjectTokens,
+  isPresentTense,
+  parseQuotedFactScope,
+  normalizeForQuoteMatch,
+} from './lib/script-dialogue.mjs';
 import {
   sceneDuration,
   totalDuration,
@@ -883,11 +899,355 @@ function checkStyle(doc, style, rules, report, opts) {
   }
 }
 
+// ───────────────────────────────────────────────────────────── 항목 D (대사 전용)
+
+/**
+ * 규칙 데이터(JSON)를 정규식·집합으로 한 번만 컴파일한다.
+ * 임계값·사전은 전부 rules/script-dialogue-patterns.json이 원천 — 여기에 하드코딩하지 않는다.
+ */
+function buildDialogueContext(doc, dlg) {
+  const c = dlg.concreteness;
+  const noConcrete = dlg.rules.find((r) => r.id === 'DLG-NO-CONCRETE');
+  const vague = dlg.rules.find((r) => r.id === 'DLG-VAGUE-REFERENT');
+  const subjRule = dlg.rules.find((r) => r.id === 'DLG-SUBJECT-REPEAT');
+
+  return {
+    concreteness: c,
+    properNouns: collectDynamicProperNouns(doc, c),
+    properNounRes: c.proper_noun_patterns.map((p) => new RegExp(p)),
+    numeralRes: c.numeral_patterns.map((p) => new RegExp(p)),
+    actionVerbRes: c.action_verb_patterns.map((p) => new RegExp(p)),
+    objectExclusionRes: (c.object_noun_exclusions?.patterns || []).map((p) => new RegExp(p, 'g')),
+    endingOrder: dlg.endings.order,
+    endingRes: Object.fromEntries(
+      Object.entries(dlg.endings.classes).map(([k, v]) => [k, v.map((p) => new RegExp(p))]),
+    ),
+    deixisRes: vague.detect.deixis_patterns.map((p) => new RegExp(p, 'g')),
+    deixisExclusions: vague.detect.deixis_exclusions,
+    subjectLexicon: subjRule.detect.subject_lexicon,
+    subjectPrefix: subjRule.detect.subject_lexeme_prefix || '',
+    subjectParticle: subjRule.detect.subject_particle_pattern,
+    presentTense: subjRule.detect.present_tense,
+    presentTenseRes: subjRule.detect.present_tense.terminal_patterns.map((p) => new RegExp(p)),
+    noConcreteCfg: noConcrete.detect,
+  };
+}
+
+/** 화자별 어투 프로파일 해석 — JSON 명시 프로파일 우선, 없으면 머리 메모 로스터에서 유도. */
+function resolveRegisterProfiles(doc, dlg) {
+  const cfg = dlg.register_profiles;
+  const explicit = cfg.profiles.map((p) => ({ ...p, re: new RegExp(p.match) }));
+
+  const derived = new Map();
+  const dcfg = cfg.derive_from_head_memo;
+  if (dcfg) {
+    const key = Object.keys(doc.headMemo).find((k) => new RegExp(dcfg.roster_key_pattern).test(k));
+    if (key) {
+      const raw = doc.headMemo[key];
+      for (const m of raw.matchAll(/([가-힣[\]]{2,12})\s*[（(]([^)）]*)[)）]/g)) {
+        const name = m[1].replace(/[[\]]/g, '').replace(/^[^가-힣]*/, '').trim();
+        const desc = m[2];
+        for (const [kw, cls] of Object.entries(dcfg.keyword_map)) {
+          if (desc.includes(kw)) {
+            if (!derived.has(name)) derived.set(name, new Set());
+            derived.get(name).add(cls);
+          }
+        }
+      }
+    }
+  }
+
+  return (speaker) => {
+    for (const p of explicit) {
+      if (p.re.test(speaker)) return { label: p.label, allowed: new Set([...p.primary, ...p.alt]), primary: new Set(p.primary), source: 'rules' };
+    }
+    for (const [name, set] of derived) {
+      if (name && (speaker.includes(name) || name.includes(speaker))) {
+        return { label: `머리 메모 로스터 유도(${[...set].join('·')})`, allowed: new Set(set), primary: new Set(set), source: 'head_memo' };
+      }
+    }
+    return null;
+  };
+}
+
+/**
+ * 검사 대상 대사 스트림을 만든다.
+ * 제외: 내레이터 / 문면이 실록 인용인 [사실] 대사(화자 단위·문장 단위) / 초단문 응답(예·네).
+ */
+function collectDialogueTargets(doc, dlg, rules) {
+  const excludeSpeakers = new Set(dlg.scope.exclude_speakers);
+  const exemptSet = new Set(dlg.scope.exempt_short_utterances);
+  const scenes = [];
+
+  for (const scene of doc.scenes) {
+    const quoted = parseQuotedFactScope(scene, dlg.scope);
+    const entries = [];
+    for (const line of scene.speech) {
+      const speaker = line.speaker || rules.narrator_name;
+      const isNarrator = excludeSpeakers.has(speaker);
+      const speakerExcluded =
+        dlg.scope.exclude_fact_tagged_speakers && quoted.speakers.has(speaker);
+
+      const sentences = [];
+      for (const sentence of line.sentences) {
+        const norm = normalizeForQuoteMatch(sentence);
+        if (dlg.scope.exclude_fact_quoted_sentences && quoted.sentences.has(norm)) continue;
+        sentences.push(sentence);
+      }
+
+      const bare = String(line.text).replace(/[.!?…\s]/g, '');
+      const isExempt =
+        exemptSet.has(bare) || countSyllables(line.text) <= dlg.scope.exempt_max_syllables;
+
+      entries.push({
+        scene,
+        line,
+        speaker,
+        sentences,
+        isNarrator,
+        excluded: isNarrator || speakerExcluded || sentences.length === 0,
+        exempt: isExempt,
+      });
+    }
+    scenes.push({ scene, entries, quoted });
+  }
+  return scenes;
+}
+
+function checkDialogue(doc, dlg, rules, report, opts) {
+  const ctx = buildDialogueContext(doc, dlg);
+  const profileOf = resolveRegisterProfiles(doc, dlg);
+  const streams = collectDialogueTargets(doc, dlg, rules);
+  const byId = Object.fromEntries(dlg.rules.map((r) => [r.id, r]));
+
+  const promote = new Set(opts.strictDialogue ? dlg.strict_promotes_to_error : []);
+  const sevOf = (ruleId, fallback) => {
+    const base = fallback || dlg.severity_default;
+    if (base === 'INFO') return 'INFO';
+    return promote.has(ruleId) ? 'ERROR' : base;
+  };
+
+  const active = streams.flatMap((s) => s.entries.filter((e) => !e.excluded));
+  report.stats.dialogueLines = active.length;
+  report.stats.dialogueSentences = active.reduce((a, e) => a + e.sentences.length, 0);
+  report.stats.dialogueSyllables = active.reduce((a, e) => a + countSyllables(e.line.text), 0);
+  report.stats.dialogueExcludedLines = streams.flatMap((s) => s.entries.filter((e) => e.excluded && !e.isNarrator)).length;
+  report.stats.dialogueFindings = {};
+
+  const bump = (id) => {
+    report.stats.dialogueFindings[id] = (report.stats.dialogueFindings[id] || 0) + 1;
+  };
+
+  for (const { scene, entries } of streams) {
+    // 대사 스트림(내레이터·제외 라인이 끊는다) — 문장 단위
+    const sentStream = [];
+    for (const e of entries) {
+      if (e.excluded) {
+        sentStream.push(null); // 스트림 절단 마커
+        continue;
+      }
+      if (e.exempt) continue; // 초단문 응답은 투명 통과
+      for (const s of e.sentences) sentStream.push({ entry: e, sentence: s });
+    }
+
+    // ── DLG-PARALLEL — 동일 화자 인접 문장의 구조 과잉 대칭
+    const pr = byId['DLG-PARALLEL'];
+    for (let i = 0; i + 1 < sentStream.length; i += 1) {
+      const a = sentStream[i];
+      const b = sentStream[i + 1];
+      if (!a || !b) continue;
+      if (pr.detect.same_speaker_only && a.entry.speaker !== b.entry.speaker) continue;
+      const sim = structuralSimilarity(a.sentence, b.sentence, pr.detect);
+      if (sim.score < pr.detect.similarity_threshold) continue;
+      const bothConcrete = isConcrete(a.sentence, ctx) && isConcrete(b.sentence, ctx);
+      const severity = pr.detect.downgrade_to_info_if_concrete && bothConcrete
+        ? 'INFO'
+        : sevOf(pr.id, pr.severity);
+      if (severity !== 'INFO') bump(pr.id);
+      report.add(
+        severity,
+        pr.id,
+        scene.id,
+        `${pr.label} — 유사도 ${round(sim.score, 2)} (임계 ${pr.detect.similarity_threshold})${bothConcrete ? ' · 구체 요소 있음 → 의도된 리듬 가능' : ''}`,
+        `${a.entry.speaker}: ${a.sentence} ⟂ ${b.sentence} [어절 ${sim.parts.tokens} · 말음일치 ${sim.parts.tail} · 종결일치 ${sim.parts.ending}]`,
+        pr.fix,
+        a.entry.line.lineNo,
+      );
+    }
+
+    // ── DLG-ABSTRACT-HANJA — 구어 부적합 추상 한자어
+    const ah = byId['DLG-ABSTRACT-HANJA'];
+    const whitelist = ah.whitelist.terms;
+    const stripWhite = (s) => {
+      let t = String(s);
+      for (const w of whitelist) t = t.split(w).join(' ');
+      return t;
+    };
+    const tier2Hits = [];
+    for (const item of sentStream) {
+      if (!item) continue;
+      const stripped = stripWhite(item.sentence);
+      const t1 = ah.lexicon_tier1.filter((w) => stripped.includes(w));
+      if (t1.length >= ah.detect.threshold) {
+        bump(ah.id);
+        report.add(
+          sevOf(ah.id, ah.severity),
+          ah.id,
+          scene.id,
+          `${ah.label} — ${t1.join('·')}`,
+          `${item.entry.speaker}: ${item.sentence}`,
+          ah.fix,
+          item.entry.line.lineNo,
+        );
+      }
+      const t2 = ah.lexicon_tier2.filter((w) => stripped.includes(w));
+      if (t2.length) tier2Hits.push({ item, words: t2 });
+    }
+    if (tier2Hits.length >= ah.tier2_threshold) {
+      report.add(
+        'INFO',
+        ah.id,
+        scene.id,
+        `${ah.label}(추상 명사 tier2) — 장면 내 ${tier2Hits.length}문장`,
+        tier2Hits.slice(0, 4).map((h) => `${h.item.entry.speaker}: ${h.words.join('·')}`).join(' | '),
+        ah.fix,
+        scene.lineNo,
+      );
+    }
+
+    // ── DLG-SUBJECT-REPEAT — 동일 주어 반복 + 현재형 종결
+    const sr = byId['DLG-SUBJECT-REPEAT'];
+    const seen = new Map(); // subject -> [{idx, item}]
+    for (let i = 0; i < sentStream.length; i += 1) {
+      const item = sentStream[i];
+      if (!item) { seen.clear(); continue; }
+      if (sr.detect.require_present_tense && !isPresentTense(item.sentence, ctx)) continue;
+      for (const subj of subjectTokens(item.sentence, ctx)) {
+        const list = seen.get(subj) || [];
+        list.push({ idx: i, item });
+        seen.set(subj, list);
+      }
+    }
+    for (const [subj, list] of seen) {
+      for (let i = 0; i + sr.detect.min_repeats - 1 < list.length; i += 1) {
+        const group = list.slice(i, i + sr.detect.min_repeats);
+        const span = group[group.length - 1].idx - group[0].idx;
+        if (span >= sr.detect.window) continue;
+        const anyConcrete = group.some((g) => isConcrete(g.item.sentence, ctx));
+        const severity = sr.detect.downgrade_to_info_if_any_concrete && anyConcrete
+          ? 'INFO'
+          : sevOf(sr.id, sr.severity);
+        if (severity !== 'INFO') bump(sr.id);
+        report.add(
+          severity,
+          sr.id,
+          scene.id,
+          `${sr.label} — 주어 "${subj}" ${group.length}회 / 인접 ${span + 1}문장${anyConcrete ? ' · 구체 요소 있음 → 의도된 아나포라 가능' : ''}`,
+          group.map((g) => `${g.item.entry.speaker}: ${g.item.sentence}`).join(' ⟂ '),
+          sr.fix,
+          group[0].item.entry.line.lineNo,
+        );
+        break; // 장면·주어당 1건만 보고
+      }
+    }
+
+    // ── DLG-VAGUE-REFERENT — 지시어만 있고 지시 대상이 없다
+    const vr = byId['DLG-VAGUE-REFERENT'];
+    for (const item of sentStream) {
+      if (!item) continue;
+      const dx = deixisCount(item.sentence, ctx);
+      if (dx.count < vr.detect.min_deixis) continue;
+      if (vr.detect.require_zero_concrete && isConcrete(item.sentence, ctx)) continue;
+      bump(vr.id);
+      report.add(
+        sevOf(vr.id, vr.severity),
+        vr.id,
+        scene.id,
+        `${vr.label} — 지시어 ${dx.count}개(${dx.found.join('·')}) · 구체 요소 0`,
+        `${item.entry.speaker}: ${item.sentence}`,
+        vr.fix,
+        item.entry.line.lineNo,
+      );
+    }
+
+    // ── DLG-NO-CONCRETE — 추상 대사 연속(축 D 핵심)
+    const nc = byId['DLG-NO-CONCRETE'];
+    let run = [];
+    const flushRun = () => {
+      if (run.length >= nc.detect.min_consecutive_lines) {
+        const syl = run.reduce((a, e) => a + countSyllables(e.line.text), 0);
+        if (syl >= nc.detect.min_run_syllables) {
+          bump(nc.id);
+          report.add(
+            sevOf(nc.id, nc.severity),
+            nc.id,
+            scene.id,
+            `${nc.label} — 연속 ${run.length}줄 / ${syl}음절에 고유명사·수치·사물·구체 동작이 0`,
+            run.map((e) => `${e.speaker}: ${e.line.text}`).join(' / '),
+            nc.fix,
+            run[0].line.lineNo,
+          );
+        }
+      }
+      run = [];
+    };
+    for (const e of entries) {
+      if (e.excluded) { flushRun(); continue; }
+      if (e.exempt) continue;
+      const concrete = e.sentences.some((s) => isConcrete(s, ctx));
+      if (concrete) flushRun();
+      else run.push(e);
+    }
+    flushRun();
+
+    // ── DLG-REGISTER-MISMATCH — 선언 어투 ↔ 실제 종결어미
+    const rm = byId['DLG-REGISTER-MISMATCH'];
+    for (const e of entries) {
+      if (e.excluded || e.exempt) continue;
+      const prof = profileOf(e.speaker);
+      if (!prof) continue;
+      const classes = new Set();
+      for (const sentence of e.sentences) {
+        const cls = classifyEnding(sentence, ctx);
+        classes.add(cls);
+        if (cls && !prof.allowed.has(cls)) {
+          bump(rm.id);
+          report.add(
+            sevOf(rm.id, rm.severity),
+            rm.id,
+            scene.id,
+            `${rm.label} — ${e.speaker} 선언 "${prof.label}" ↔ 실제 ${cls}`,
+            `${e.speaker}: ${sentence}`,
+            rm.fix,
+            e.line.lineNo,
+          );
+        }
+      }
+      if (rm.detect.flag_intra_line_mix && classes.size > 1) {
+        const known = [...classes].filter(Boolean);
+        if (known.length > 1 && known.every((c) => prof.allowed.has(c))) {
+          bump(rm.id);
+          report.add(
+            sevOf(rm.id, 'INFO'),
+            rm.id,
+            scene.id,
+            `${rm.label} — ${e.speaker} 한 라인 안에서 화계 혼용(${known.join('↔')})`,
+            `${e.speaker}: ${e.line.text}`,
+            rm.fix,
+            e.line.lineNo,
+          );
+        }
+      }
+    }
+  }
+}
+
 // ───────────────────────────────────────────────────────────── 실행
 
 export function runGate(filePath, options = {}) {
   const rules = options.rules || loadJson('rules/script-rules.json');
   const style = options.style || loadJson('rules/script-style-patterns.json');
+  const dialogue = options.dialogue || loadJson('rules/script-dialogue-patterns.json');
   const source = fs.readFileSync(filePath, 'utf8');
   const doc = parseScript(source);
   const report = new Report(options.allow || []);
@@ -914,6 +1274,8 @@ export function runGate(filePath, options = {}) {
   checkReorderAndDensity(doc, rules, report);
   // C
   checkStyle(doc, style, rules, report, options);
+  // D
+  checkDialogue(doc, dialogue, rules, report, options);
 
   report.findings.sort((a, b) => {
     const s = SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity];
@@ -936,6 +1298,7 @@ function formatText(result, quiet) {
   out.push(`길이      : ${Object.entries(report.stats.durations).map(([k, v]) => `${k}=${v}초`).join(' · ')}  (장면 대조 프로파일: ${report.stats.spsProfileUsed})`);
   out.push(`나레이터  : ${report.stats.narratorShare}% · 2인칭 ${report.stats.secondPerson}회 · 복선 ${report.stats.foreshadowCount ?? '-'}건`);
   out.push(`항목 C 대상: 내레이션 ${report.stats.styleSentences}문장 / ${report.stats.styleSyllables}음절 (실록 인용 낭독부·[사실] 대사 제외)`);
+  out.push(`항목 D 대상: 대사 ${report.stats.dialogueLines}줄 / ${report.stats.dialogueSentences}문장 / ${report.stats.dialogueSyllables}음절 (내레이터·[사실] 인용 대사 ${report.stats.dialogueExcludedLines}줄 제외)`);
   out.push('');
 
   const groups = quiet ? ['ERROR'] : ['ERROR', 'WARN', 'INFO'];
@@ -959,11 +1322,12 @@ function formatText(result, quiet) {
 }
 
 function parseArgs(argv) {
-  const opts = { file: null, json: false, quiet: false, strictStyle: false, requireThroughLine: false, sps: 'auto', allow: [] };
+  const opts = { file: null, json: false, quiet: false, strictStyle: false, strictDialogue: false, requireThroughLine: false, sps: 'auto', allow: [] };
   for (const arg of argv) {
     if (arg === '--json') opts.json = true;
     else if (arg === '--quiet') opts.quiet = true;
     else if (arg === '--strict-style') opts.strictStyle = true;
+    else if (arg === '--strict-dialogue') opts.strictDialogue = true;
     else if (arg === '--require-through-line') opts.requireThroughLine = true;
     else if (arg.startsWith('--sps=')) opts.sps = arg.slice(6);
     else if (arg.startsWith('--allow=')) opts.allow = arg.slice(8).split(',').map((s) => s.trim()).filter(Boolean);
