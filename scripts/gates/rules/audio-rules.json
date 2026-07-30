@@ -1,0 +1,124 @@
+{
+  "$schema": "./prompt-gate-rules.schema.md",
+  "kind": "audio",
+  "model": "LTX-2.3 오디오 (ltx23_audio_only.json — textonly/scene/dialogue 3모드) · ACE-Step 1.5 turbo (BGM)",
+  "doc": "게이트 ① 오디오 프롬프트 규칙 — 근거는 ep2 03-assets §SFX 실증 A·B, §BGM 실증 D. ⚠ 이미지·영상과 달리 오디오에서는 말소리 억제 부정문이 실제로 작동한다(혼입 0건) — 부정문 금지 규칙을 오디오에 이식하지 말 것.",
+  "rules": [
+    {
+      "id": "AUD-SFX-TEXTONLY",
+      "severity": "ERROR",
+      "title": "SFX는 textonly 모드",
+      "applies_to": {
+        "field": "mode",
+        "flags_any": [
+          "sfx"
+        ]
+      },
+      "detect": {
+        "type": "regex_absent",
+        "pattern": "^textonly$",
+        "flags": "i"
+      },
+      "why": "교차 진단 2건에서 소리는 프롬프트를 따랐고 이미지를 따르지 않았다(종 프롬프트+물 이미지 → 충격음, 물 프롬프트+종 이미지 → 연속 노이즈). A↔V 크로스어텐션을 차단하는 textonly에서도 의도한 소리가 정상 산출됐고(r2 7컷 전량), 오히려 스펙트럼 중심이 2098Hz → 613Hz로 낮아져 종·쇠북에 적합했다.",
+      "fix": "mode를 `textonly` 로 설정하고 컷 이미지는 SFX 그래프에 넘기지 않는다. ⚠ 예외 후보 1건 — 다중 미세 사건(물방울)의 연속 텍스처는 textonly에서 백색소음으로 붕괴(CUT-09, n=1, ep3 확인 요망)."
+    },
+    {
+      "id": "AUD-LEVEL-PROMPT",
+      "severity": "ERROR",
+      "title": "레벨·클리핑은 프롬프트로 통제 불가",
+      "applies_to": {
+        "field": "prompt"
+      },
+      "detect": {
+        "type": "regex",
+        "pattern": "\\bno\\s+clipping\\b|\\bclipping\\b|\\bheadroom\\b|\\bpeak\\s+level\\b|\\bloudness\\b|\\bnormali[sz]ed?\\b|\\b-?\\d+\\s*d[Bb]\\b|\\bLUFS\\b|\\bkeep\\s+the\\s+volume\\b|\\bquieter\\b|\\blouder\\b",
+        "flags": "gi"
+      },
+      "why": "억제어는 레벨을 낮춘 것이 아니라 음색을 바꿨고 레벨은 따라 움직였을 뿐이다 — `no clipping` 평문을 넣은 bgm-06은 클리핑이 2824 → 22822로 **8배 역행**했고 bgm-03은 피크 −30.57dB로 붕괴했다. LTX 오디오·ACE-Step 양쪽에서 동일 결론(ep2 실증 D).",
+      "fix": "프롬프트에서 레벨 어휘를 전부 제거하고, `AudioAdjustVolume` 노드를 VAEDecode 뒤·Save 앞에 −6dB로 넣어 저장 시 클램핑을 원천 차단한다(r3 4구간 전량 클리핑 0)."
+    },
+    {
+      "id": "AUD-SUPPRESS-STACK",
+      "severity": "ERROR",
+      "title": "억제어 중첩 시 가청 수준 명시 필수",
+      "applies_to": {
+        "field": "prompt"
+      },
+      "detect": {
+        "type": "regex_pair",
+        "pattern": "\\bno\\s+sub-?bass\\b|\\brestrained\\s+dynamics\\b|\\bvery\\s+quiet\\b|\\balmost\\s+silence\\b|\\bminimal\\b",
+        "with": "\\bclearly\\s+audible\\b|\\bat\\s+a\\s+normal\\s+recording\\s+level\\b|\\bpresent\\s+and\\s+audible\\b",
+        "with_mode": "absent",
+        "flags": "i"
+      },
+      "why": "억제어를 겹쳐 쓰면 트랙이 가청 이하로 붕괴한다 — bgm-03 r2는 `no sub-bass` + `restrained dynamics` 중첩으로 피크 −30.57dB · SNR 2.6dB가 됐고, SFX CUT-05의 `almost silence` 도 같은 유형이다. 가청 수준 명시 절로 SNR 2.6→41.5dB 해소.",
+      "fix": "억제어와 함께 `clearly audible and present at a normal recording level` 을 반드시 병기한다."
+    },
+    {
+      "id": "AUD-SPEECH-SUPPRESS",
+      "severity": "WARN",
+      "title": "SFX·BGM은 말소리 억제 평문 권장 (오디오 전용 예외)",
+      "applies_to": {
+        "field": "prompt"
+      },
+      "detect": {
+        "type": "regex_absent",
+        "pattern": "no\\s+voices|no\\s+speech|no\\s+singing|no\\s+vocals|instrumental\\s+only",
+        "flags": "i"
+      },
+      "why": "⚠ 이미지·영상 규칙과 명시적으로 구분되는 지점 — 오디오에서는 `No voices. No speech.` 억제가 실제로 작동한다. r1 10컷 + r2 7컷 + textonly 4 + 진단 3 전량에서 한국어 음절 0건, BGM 6트랙도 한국어 음절 0건.",
+      "fix": "positive 평문 말미에 `No voices. No speech.`(BGM은 `instrumental only, no singing`)를 넣는다."
+    },
+    {
+      "id": "AUD-EVENT-SPEC",
+      "severity": "WARN",
+      "title": "SFX는 사건 수·발생 시각·가청 수준 명시",
+      "applies_to": {
+        "field": "prompt",
+        "flags_any": [
+          "sfx"
+        ]
+      },
+      "detect": {
+        "type": "regex_absent",
+        "pattern": "\\b(?:one|two|three|four|five|six|seven|eight|nine|ten|\\d+)\\s+(?:strikes?|hits?|beats?|taps?|drops?|impacts?|tolls?|clicks?)",
+        "flags": "i"
+      },
+      "why": "SFX의 음향 사건은 프롬프트가 결정한다(실증 A). 사건 수를 명시하지 않으면 타수가 어긋난다 — r1 계측에서 타수 결손이 반복 검출됐고 r2 재생성 7컷은 사건 수 명시로 교정했다.",
+      "fix": "`three evenly spaced deep bell strikes, the first at 0.5 seconds, clearly audible` 처럼 사건 수·시각·가청 수준을 적는다."
+    },
+    {
+      "id": "AUD-TONE-OK",
+      "severity": "WARN",
+      "title": "음색·대역 배분은 프롬프트로 지시 (실효 확인)",
+      "applies_to": {
+        "field": "prompt",
+        "flags_any": [
+          "bgm"
+        ]
+      },
+      "detect": {
+        "type": "regex_absent",
+        "pattern": "register|low\\s+middle|mid-?range|weight\\s+comes\\s+from|sub-?bass|frequency|band|timbre|bright|warm|dark\\s+timbre",
+        "flags": "i"
+      },
+      "why": "레벨은 제어되지 않지만 음색은 제어된다 — 저역 억제어로 bgm-04 <120Hz 93.4%→26.5%, bgm-03 77.5%→16.6%. 종소리 SFX와의 대역 충돌도 프롬프트로 해소(bgm-05 종대역 25.57%→0.36%).",
+      "fix": "`the weight comes from the low middle register` 처럼 대역 배분을 명시한다. 특히 타종 SFX가 얹히는 구간은 종 대역을 비운다."
+    },
+    {
+      "id": "AUD-DIALOGUE-ROUTE",
+      "severity": "ERROR",
+      "title": "대사 직접 생성 경로 금지",
+      "applies_to": {
+        "field": "mode"
+      },
+      "detect": {
+        "type": "regex",
+        "pattern": "^dialogue$|^speech$",
+        "flags": "i"
+      },
+      "why": "LTX 오디오 대사 직접 생성은 합격선 미달로 판정됐다 — 전사 일치율 최고 형식(F3)도 0.9653에 그치고, 무엇보다 음색이 호출마다 다른 사람이 된다(실증 C). 길이 제어·배경음도 구조적 결손.",
+      "fix": "대사는 TTS 클론(+best-of-N, 유사도 기준) 경로로 생성한다. LTX 오디오는 SFX 전용."
+    }
+  ]
+}

@@ -1,0 +1,345 @@
+{
+  "$schema": "./prompt-gate-rules.schema.md",
+  "kind": "image",
+  "model": "Z-Image Turbo (z_image_turbo_bf16, 8 steps, cfg 1.0, res_multistep/simple, shift 3.0)",
+  "doc": "게이트 ① 이미지 프롬프트 규칙 — 근거는 [[스타일-history-drama-v3]] §검증 이력 및 ep1/ep2 03-assets §검증·§환류. 새 실증이 나오면 이 파일에 규칙만 추가한다(코드 무수정).",
+  "rules": [
+    {
+      "id": "IMG-STYLE-TOKEN",
+      "severity": "ERROR",
+      "title": "{STYLE} 변수로 시작",
+      "applies_to": {
+        "field": "image_prompt"
+      },
+      "detect": {
+        "type": "regex_absent",
+        "pattern": "^\\s*\\{STYLE(_NOFIGURE)?\\}",
+        "flags": ""
+      },
+      "why": "S4 치환 계약 — 콘티의 image_prompt는 {STYLE} 또는 {STYLE_NOFIGURE} 변수로 시작해야 S4가 스타일 토큰을 문자열 치환한다(스타일-history-drama-v3 §사용 규약 1).",
+      "fix": "컴파일본 맨 앞에 `{STYLE}, ` (무인 컷은 `{STYLE_NOFIGURE}, `)를 붙인다."
+    },
+    {
+      "id": "IMG-NOFIGURE-TOKEN",
+      "severity": "ERROR",
+      "title": "무인 컷은 {STYLE_NOFIGURE} 강제",
+      "applies_to": {
+        "field": "image_prompt",
+        "flags_any": [
+          "nofigure_intent"
+        ]
+      },
+      "detect": {
+        "type": "regex_absent",
+        "pattern": "^\\s*\\{STYLE_NOFIGURE\\}",
+        "flags": ""
+      },
+      "why": "cfg 1.0에서는 인물 어휘를 빼도 {STYLE} 토큰 내부의 인물 절(anatomy·expressions·costume)이 캐릭터를 소환한다(ep1 r3 0/18). 인물 절을 제거한 변형 토큰 사용 시 18/18 전승.",
+      "fix": "`{STYLE}` → `{STYLE_NOFIGURE}` 로 교체하고, 무인 서술은 장면 어휘(empty·deserted)로 쓴다."
+    },
+    {
+      "id": "IMG-NEG-PERSON",
+      "severity": "ERROR",
+      "title": "인물 부정 어휘 금지",
+      "applies_to": {
+        "field": "image_prompt"
+      },
+      "detect": {
+        "type": "regex",
+        "pattern": "\\bno\\s+(?:human\\s+)?(?:people|person|persons|humans?|figures?|one\\b|men\\b|women\\b|bystanders?|onlookers?)|\\bnobody\\b|\\bno\\s+one\\b|\\bunmanned\\b|\\bdevoid\\s+of\\s+(?:people|figures|humans)|\\bwithout\\s+(?:any\\s+)?(?:people|figures|humans|persons)",
+        "flags": "gi"
+      },
+      "why": "cfg 1.0에서 negative guidance가 수학적으로 무효이므로 `no human figure`·`nobody`·`unmanned` 류 무인 서술은 오히려 인물 토큰을 긍정 주입한다 — ep1 r2 실증 0/18 vs 변형 토큰 18/18.",
+      "fix": "부정 대신 장면 어휘로 — `deserted courtyard`, `an empty approach road`, `the hall stands empty`. 인물 절 제거는 {STYLE_NOFIGURE} 토큰이 담당한다."
+    },
+    {
+      "id": "IMG-NEG-SOFT",
+      "severity": "WARN",
+      "title": "완곡형 인물 부정 어휘",
+      "applies_to": {
+        "field": "image_prompt"
+      },
+      "detect": {
+        "type": "regex",
+        "pattern": "\\bnot\\s+a\\s+single\\s+[a-z ]{0,20}(?:figure|person|soul)\\b|\\bempty\\s+of\\s+(?:people|figures)",
+        "flags": "gi"
+      },
+      "why": "인물 명사를 부정문 안에서 호명하는 형태 — ep2 CUT-03 채택본에 잔존하며 실해는 확인되지 않았으나 IMG-NEG-PERSON과 동일 계열 리스크다(cfg 1.0 명명 소환).",
+      "fix": "`not a single other figure anywhere` → `the road behind them runs empty into the dark` 처럼 상태 서술로 재작성."
+    },
+    {
+      "id": "IMG-NEG-GENERIC",
+      "severity": "WARN",
+      "title": "장면 요소 부정 어휘",
+      "applies_to": {
+        "field": "image_prompt"
+      },
+      "detect": {
+        "type": "regex",
+        "pattern": "\\bno\\s+(?!text\\b|letters?\\b|lettering\\b|watermark\\b|modern\\b|hangul\\b|korean\\s+letters\\b)[a-z]{3,}",
+        "flags": "gi"
+      },
+      "why": "cfg 1.0에서 명명된 명사는 부정문 안에 있어도 인코딩된다(ep2 실증 A의 일반화). no-text 계열 4종만 {STYLE} 토큰의 확정 계약으로 예외 허용한다.",
+      "fix": "빼려는 요소 대신 원하는 결과 상태를 명사로 서술 — `no red stains` → `clean pale fresh wood fibers`."
+    },
+    {
+      "id": "IMG-CU-PORTRAIT-VARIANT",
+      "severity": "ERROR",
+      "title": "MCU/CU 단독 인물 컷은 portrait-painterly 선언",
+      "applies_to": {
+        "field": "style_variant",
+        "flags_all": [
+          "closeup",
+          "single_figure"
+        ],
+        "flags_none": [
+          "hands"
+        ]
+      },
+      "detect": {
+        "type": "regex_absent",
+        "pattern": "portrait-painterly",
+        "flags": "i"
+      },
+      "why": "{STYLE} 토큰의 `fully realistic human anatomy and proportions with lifelike detail` 절이 인물 클로즈업에서 사진 프라이어를 소환한다 — ep1 인물 29컷 중 실사 드리프트 9 + 경계 4. 꼬리 제거 변형 + 유화 어휘 병행 시 11/11 해소.",
+      "fix": "컷에 `- **style_variant**: portrait-painterly` 를 추가한다(S4가 치환 시 `with lifelike detail` 꼬리를 제거)."
+    },
+    {
+      "id": "IMG-CU-OIL-VOCAB",
+      "severity": "ERROR",
+      "title": "MCU/CU 단독 인물 컷은 유화 렌더 어휘 병행",
+      "applies_to": {
+        "field": "image_prompt",
+        "flags_all": [
+          "closeup",
+          "single_figure"
+        ],
+        "flags_none": [
+          "hands"
+        ]
+      },
+      "detect": {
+        "type": "regex_absent",
+        "pattern": "hand-painted oil painting|impasto|canvas texture",
+        "flags": "i"
+      },
+      "why": "꼬리 제거(②)만으로는 MCU 단독 인물 컷의 실사 드리프트가 해소되지 않았고, 유화 렌더 어휘(hand-painted oil painting, visible impasto brush strokes, canvas texture) 추가가 결정타였다(ep1 07·11·13·14).",
+      "fix": "컴파일본 말미에 `hand-painted oil painting with visible impasto brush strokes and canvas texture` 를 추가한다."
+    },
+    {
+      "id": "IMG-CU-LIFELIKE-TAIL",
+      "severity": "ERROR",
+      "title": "인물 클로즈업 컷에 lifelike detail 꼬리 금지",
+      "applies_to": {
+        "field": "image_prompt",
+        "flags_any": [
+          "closeup",
+          "hands"
+        ]
+      },
+      "detect": {
+        "type": "regex",
+        "pattern": "with lifelike detail",
+        "flags": "gi"
+      },
+      "why": "해당 꼬리가 사진 프라이어를 소환하는 당사자 절이다(ep1 S4 화풍 보정 패스 원인 진단). 시드 단독 변경은 무효(0/11).",
+      "fix": "`with lifelike detail` 을 제거하고 페인터리 강화 절(`visible expressive brush strokes, textured painterly rendering`)로 대체한다."
+    },
+    {
+      "id": "IMG-HANDS-VARIANT",
+      "severity": "ERROR",
+      "title": "손 클로즈업은 hands-only 선언",
+      "applies_to": {
+        "field": "style_variant",
+        "flags_any": [
+          "hands"
+        ]
+      },
+      "detect": {
+        "type": "regex_absent",
+        "pattern": "hands-only",
+        "flags": "i"
+      },
+      "why": "손 CU에서 인물 주어를 남기면 얼굴이 침입한다 — ep1 CUT-07·32 각 4/4·3/3 실패로 S6 크롭 필수 플래그. hands-only 재서술이 화풍·얼굴 미노출을 동시 해소했다(CUT-34).",
+      "fix": "컷에 `- **style_variant**: hands-only` 를 추가하고 컴파일본을 손 주어로 재서술한다."
+    },
+    {
+      "id": "IMG-HANDS-SUBJECT",
+      "severity": "ERROR",
+      "title": "손 컷에 인물 주어·얼굴 프레이밍 금지",
+      "applies_to": {
+        "field": "image_prompt",
+        "flags_any": [
+          "hands"
+        ]
+      },
+      "detect": {
+        "type": "regex",
+        "pattern": "\\b(?:his|her|their)\\s+face\\b|\\bface\\s+(?:outside|out\\s+of)\\s+the\\s+frame\\b|\\bportrait\\s+of\\b|\\blooking\\s+(?:at|into)\\s+the\\s+camera\\b|\\b(?:a|an|the)\\s+(?:old|young|elderly|middle-aged)?\\s*(?:man|woman|official|scholar|craftsman|artisan)\\s+(?:sits|stands|kneels|holds|leans|works)",
+        "flags": "gi"
+      },
+      "why": "`face outside the frame` + 인물 주어 조합은 cfg 1.0에서 무효 — 시트처럼 hands-only 서술만 신뢰 가능(ep1 신규 진단).",
+      "fix": "인물 주어를 제거하고 손을 주어로 — `a man sits holding the bowl` → `two bare hands cupping the bowl`. 소유격(`a young man's bare hands`)은 허용."
+    },
+    {
+      "id": "IMG-FACE-BEHIND-REQ",
+      "severity": "ERROR",
+      "title": "얼굴 미노출 계약 컷은 directly behind 필수",
+      "applies_to": {
+        "field": "image_prompt",
+        "flags_all": [
+          "face_hidden"
+        ],
+        "flags_none": [
+          "hands",
+          "nofigure_intent"
+        ]
+      },
+      "detect": {
+        "type": "regex_absent",
+        "pattern": "directly behind|from behind, ",
+        "flags": "i"
+      },
+      "why": "얼굴 미노출은 `seen from directly behind` 만 신뢰 가능하다 — ep1 C-1 실증 3전 3승, 측면 0승.",
+      "fix": "컴파일본에 `seen from directly behind` 를 넣고, 두부 실물 서술(`his bare head showing only a topknot`)을 병행한다."
+    },
+    {
+      "id": "IMG-FACE-SIDEPROFILE",
+      "severity": "ERROR",
+      "title": "얼굴 미노출 계약 컷에 side profile·역광 조합 금지",
+      "applies_to": {
+        "field": "image_prompt",
+        "flags_all": [
+          "face_hidden"
+        ]
+      },
+      "detect": {
+        "type": "regex",
+        "pattern": "\\bside\\s+profile\\b|\\bprofile\\s+view\\b|\\bin\\s+profile\\b",
+        "flags": "gi"
+      },
+      "why": "`side profile` + 역광(backlit) 지시는 cfg 1.0에서 얼굴 노출을 억제하지 못한다 — ep1 시트 진단 0/3 실패.",
+      "fix": "`side profile, backlit` → `seen from directly behind` 로 교체한다."
+    },
+    {
+      "id": "IMG-HAT-SHAPE",
+      "severity": "ERROR",
+      "title": "관모 등장 컷은 실물 형태 서술 의무",
+      "applies_to": {
+        "field": "image_prompt",
+        "flags_any": [
+          "hat"
+        ],
+        "flags_none": [
+          "figurine"
+        ]
+      },
+      "detect": {
+        "type": "regex_absent",
+        "pattern": "wings?\\s+(?:extending|lying|pointing|swept|sweeping)|two\\s+(?:flat|narrow|small|rounded)\\s+wings|rounded\\s+box|neck\\s+guard|swept\\s+backward|soft\\s+cloth\\s+cap|fitting\\s+close\\s+to\\s+the\\s+head|showing\\s+only\\s+a\\s+(?:small\\s+)?(?:black\\s+)?topknot",
+        "flags": "i"
+      },
+      "why": "`black samo hat` 서술만으로는 부족하고 진홍 단령과 결합 시 갓(넓은 brim) prior가 이긴다 — ep1 12컷 잔존, ep2 r0 20컷 갓형. 실물 형태(2단 돔 + 후방 수평 익 2매)를 긍정 서술해야 한다.",
+      "fix": "사모 `a black sammo hat with two flat wings extending horizontally backward from the sides of the crown` / 익선관 `two small rounded wings lying flat and swept backward over the back of the crown` / 투구 `whose brim and neck guard sweep backward` 를 넣는다."
+    },
+    {
+      "id": "IMG-HAT-NEGATION",
+      "severity": "ERROR",
+      "title": "관모 서술에 부정 표현 금지",
+      "applies_to": {
+        "field": "image_prompt",
+        "flags_any": [
+          "hat"
+        ],
+        "flags_none": [
+          "figurine"
+        ]
+      },
+      "detect": {
+        "type": "regex",
+        "pattern": "\\bnot\\s+(?:upward|upwards|wide|round|a\\s+gat)\\b|\\bno\\s+brim\\b|\\bwithout\\s+a\\s+brim\\b|\\bnever\\s+becomes\\b|\\bnot\\s+wide-brimmed\\b",
+        "flags": "gi"
+      },
+      "why": "cfg 1.0에서 `brim`·`wide-brimmed`·`never becomes` 를 호명하면 갓 형상이 오히려 소환된다. 관모 교정 성공 문안은 부정 표현을 한 글자도 쓰지 않았다(ep2 I2V 2차 CUT-37 r2).",
+      "fix": "부정 표현을 전부 삭제하고 원하는 형상만 긍정 서술한다."
+    },
+    {
+      "id": "IMG-HAT-EDIT-ROUTE",
+      "severity": "WARN",
+      "title": "전신·착좌·군상 관모 컷은 나노바나나 편집 경로 플래그",
+      "applies_to": {
+        "field": "image_prompt",
+        "flags_all": [
+          "hat"
+        ],
+        "flags_any": [
+          "fullbody",
+          "seated",
+          "crowd",
+          "back_view"
+        ],
+        "flags_none": [
+          "figurine"
+        ]
+      },
+      "detect": {
+        "type": "regex_absent",
+        "pattern": "나노바나나|nanobanana|edit-route|hat-edit",
+        "flags": "i"
+      },
+      "why": "조선 관모는 Z-Image 단독으로 불가하다 — 정면 MCU에서만 신문안이 통하고(3/3) 전신·착좌·군상·뒷모습에서는 갓 prior가 이긴다. 시드 변경은 무효(0/4). 나노바나나 편집 경로가 14/15(93.3%) 1발 성공.",
+      "fix": "컷 의도에 `나노바나나 편집 경로` 를 명시하고 쿼터 예산(일일 한도)을 컷 계획에 반영한다."
+    },
+    {
+      "id": "IMG-CROWD-DIVERSITY",
+      "severity": "ERROR",
+      "title": "군상 컷은 인물 다양성 어휘 필수",
+      "applies_to": {
+        "field": "image_prompt",
+        "flags_any": [
+          "crowd"
+        ]
+      },
+      "detect": {
+        "type": "regex_absent",
+        "pattern": "differ\\s+from\\s+one\\s+another|different\\s+(?:ages|heights|builds?|postures?|patterns?|shoulder\\s+widths)|\\bdifferently\\b|varying\\s+ages|of\\s+all\\s+ages|young\\s+and\\s+old|beardless|clean-shaven|beards?\\s+of\\s+different|in\\s+his\\s+(?:twenties|thirties|forties|fifties|sixties|seventies)|each\\s+(?:one\\s+)?different|varied|varying|no\\s+two\\s+alike|differing|mixed\\s+ages|assorted",
+        "flags": "i"
+      },
+      "why": "군상 컷에서 동일 얼굴 복제가 ep1 게시본 육안 결함으로 지적됐다. 연령대·수염 형태·체형·복색·자세를 분산 서술한 ep2는 7/7 전수 달성, 복제 0건(CUT-45 7인·CUT-36 12개체).",
+      "fix": "`figures of different ages and builds, some with full beards and some clean-shaven, robes in varied muted tones, each in a different posture` 를 추가한다."
+    },
+    {
+      "id": "IMG-TEXT-SUBJECT",
+      "severity": "WARN",
+      "title": "문자 피사체 컷은 나노바나나 경로",
+      "applies_to": {
+        "field": "image_prompt"
+      },
+      "detect": {
+        "type": "regex",
+        "pattern": "\\b(?:hangul|korean\\s+letters|legible\\s+(?:text|characters)|readable\\s+(?:text|inscription)|carved\\s+inscription\\s+reading|a\\s+signboard\\s+reading|written\\s+text\\s+saying)\\b",
+        "flags": "gi"
+      },
+      "why": "Z-Image는 유사 한글·유사 한자 글리프 결함이 있어 문자 피사체 컷을 신설하면 no-text 위반이 발생한다(ep2 r0 6건). 실제 문자가 필요한 컷은 나노바나나 편집 경로가 표준이다.",
+      "fix": "문자 렌더가 필요하면 나노바나나 경로로 돌리고, Z-Image 컷에서는 문자 어휘를 제거한다."
+    },
+    {
+      "id": "IMG-A2V-VERTICAL-ANCHOR",
+      "severity": "WARN",
+      "title": "A2V 소스 컷은 배경 수직 기준선 필요",
+      "applies_to": {
+        "field": "image_prompt",
+        "flags_any": [
+          "a2v"
+        ]
+      },
+      "detect": {
+        "type": "regex_absent",
+        "pattern": "pillar|column|door\\s?frame|doorframe|lattice|window\\s+frame|post\\b|beam\\b|screen\\s+panel|shelf",
+        "flags": "i"
+      },
+      "why": "A2V는 조건 이미지가 프레임 0에만 주입돼 기하 앵커가 약하다. 배경에 강한 수직 기준선(기둥·격자문)이 있는 컷은 프레임 락 절로 푸시인이 해소됐고(CUT-21 6.4%→0%), 저주파 원경 배경 컷은 악화됐다(CUT-16 4.2%→6.4%).",
+      "fix": "컴파일본 배경 서술에 기둥·문틀·격자창 등 수직 기준선을 1개 이상 넣는다."
+    }
+  ]
+}

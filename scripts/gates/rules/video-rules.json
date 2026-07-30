@@ -1,0 +1,238 @@
+{
+  "$schema": "./prompt-gate-rules.schema.md",
+  "kind": "video",
+  "model": "LTX-2.3 22B distilled 1.1 Q4_K_M GGUF (I2V/A2V, 2단 euler, cfg 1.0, NAG)",
+  "doc": "게이트 ① 영상 프롬프트 규칙 — 근거는 ep1 03-assets §I2V 환류, ep2 03-assets §프롬프트 계약 실증 A·B, §실증 C(이동 함의어), §실증 D(A2V 프레이밍). cfg 1.0 + NAG의 GGUF 비호환으로 negative prompt는 구조적으로 무효다.",
+  "rules": [
+    {
+      "id": "VID-NEG-001",
+      "severity": "ERROR",
+      "title": "부정문 전면 금지",
+      "applies_to": {
+        "field": "motion_prompt"
+      },
+      "detect": {
+        "type": "regex",
+        "pattern": "\\bwith\\s+no\\s+[a-z]|\\bno\\s+(?:change|movement|motion|darkening|camera|drift|shift|clipping)\\b|\\bdoes\\s+not\\b|\\bdo\\s+not\\b|\\bdon't\\b|\\bnever\\b|\\bwithout\\s+[a-z]|\\bnothing\\s+(?:else\\s+)?moves\\b|\\bnot\\s+(?:move|moving|change|changing)\\b",
+        "flags": "gi"
+      },
+      "why": "negative prompt가 구조적으로 무효다 — NAG가 GGUF와 비호환이고 cfg 1.0에서 CFGGuider가 negative를 무시한다. positive 안의 부정문도 그대로 긍정 개념으로 인코딩된다(ep2 실증 A: `with no darkening at the end` 절 자체가 말미 조도 붕괴를 유발, CUT-07 0.45 → 어휘 제거 시 1.03).",
+      "fix": "억제는 불변량의 긍정 서술로만 — `with no change of pose` → `keeping exactly the same standing pose in every frame`, `no camera movement` 은 camera 필드의 고정 어휘로만 허용."
+    },
+    {
+      "id": "VID-DARK-VOCAB",
+      "severity": "ERROR",
+      "title": "어둠 어휘 금지",
+      "applies_to": {
+        "field": "motion_prompt"
+      },
+      "detect": {
+        "type": "regex",
+        "pattern": "\\b(?:dark|darker|darkness|darkening|darkens|dim|dims|dimming|dimmer|fade|fades|fading|night|nightfall|black|blackens|unlit|shadowy)\\b",
+        "flags": "gi"
+      },
+      "why": "cfg 1.0에서 어둠 어휘가 말미 암전을 소환한다. 부정 강화 대조군(x1)은 더 악화됐고, `dark/dim/fade/night/black` 계열을 전량 제거하고 밝기를 긍정문으로만 서술한 대조군(x2)이 2/2 완전 해소했다(ep2 실증 A — CUT-07·09·12·23 4컷 실증).",
+      "fix": "어둠 어휘를 삭제하고 밝기를 긍정 서술로 — `inner darkness` → `deep interior of the gateway`, `in the darkness behind` → `in the deep shade behind`, `ink darkens` → `ink deepens`."
+    },
+    {
+      "id": "VID-STYLE-SELFDESTRUCT",
+      "severity": "ERROR",
+      "title": "스타일 절 자기파괴 어휘 금지",
+      "applies_to": {
+        "field": "motion_prompt"
+      },
+      "detect": {
+        "type": "regex",
+        "pattern": "\\bmatte\\s+painting\\b|\\bhanji[- ]beige\\b|\\bhanji\\b|\\bink[- ]wash\\b|\\bblank\\s+paper\\b|\\bbeige\\s+paper\\b|\\bpaper\\s+sheet\\b|\\bsheet\\s+of\\s+paper\\b|\\bpaper\\s+texture\\b|\\bcanvas\\s+texture\\b|\\bon\\s+canvas\\b|\\bsketch\\w*\\b|\\bline\\s+drawing\\b|\\bdoodle\\b|\\bparchment\\b",
+        "flags": "gi"
+      },
+      "why": "조건 이미지 앵커가 시간축으로 감쇠하면서 화면이 스타일 절이 호명한 대상 그 자체로 수렴한다 — 「한지-베이지 낙서 평면」 붕괴 8컷 실증. 어휘 제거 후 CUT-44 2.48→1.02, CUT-52 2.24→0.88 등 전량 해소(ep2 실증 B).",
+      "fix": "화풍은 매체 명사가 아니라 붓질·채도 서술로 — `matte painting, hanji-beige palette` → `a moving concept-art illustration with visible brushwork and muted desaturated colours`. S4 정지 이미지 토큰과 I2V 토큰을 단계별로 분리한다."
+    },
+    {
+      "id": "VID-TIME-ENDPOINT",
+      "severity": "ERROR",
+      "title": "시간 종점 호명 금지",
+      "applies_to": {
+        "field": "motion_prompt"
+      },
+      "detect": {
+        "type": "regex",
+        "pattern": "\\bat\\s+the\\s+end\\b|\\bby\\s+the\\s+end\\b|\\bat\\s+the\\s+finish\\b|\\bin\\s+the\\s+(?:last|final)\\s+frames?\\b|\\bthe\\s+(?:last|final)\\s+frame\\b|\\btoward\\s+the\\s+end\\b|\\bfinally\\b",
+        "flags": "gi"
+      },
+      "why": "프레임 락·노출 고정 절이 `at the end as at the beginning` 으로 '끝'을 명시 호명하는 순간 말미 붕괴가 재발동한다 — A2V CUT-40 r1 노출비 0.163(사실상 암전), CUT-16 r2 0.368(ep2 실증 D).",
+      "fix": "전 프레임 균등 서술형으로만 — `just as brightly lit at the end` → `the exposure is even and identical in every single frame`."
+    },
+    {
+      "id": "VID-RISK-VOCAB",
+      "severity": "ERROR",
+      "title": "위험 어휘 (아티팩트 소환)",
+      "applies_to": {
+        "field": "motion_prompt"
+      },
+      "detect": {
+        "type": "regex",
+        "pattern": "\\bcrack(?:ed|s|ing)?\\b|\\bfrozen\\b|\\bfreeze[sd]?\\b|\\btwists?\\b|\\btwisting\\b|\\bshatter(?:ed|s|ing)?\\b",
+        "flags": "gi"
+      },
+      "why": "상태 형용사가 시각 아티팩트를 소환한다 — `cracked hands` 가 균열 드로잉을 소환(ep1 CUT-31 스킨 크랙 붕괴), `frozen moment` 가 찢긴 종이 프레임-인-프레임을 소환(CUT-37), `twists` 가 회전 프라이어로 작용(CUT-02 f1 회전 도망 → 어휘 제거 후 f2 채택).",
+      "fix": "결과 상태를 동사로 서술 — `the beam twists and cracks` → `the beam splits open along the grain, pale fibres tearing outward`."
+    },
+    {
+      "id": "VID-CAMERA-IN-MOTION",
+      "severity": "ERROR",
+      "title": "카메라 절은 정확히 1개 (motion_prompt에 카메라 어휘 금지)",
+      "applies_to": {
+        "field": "motion_prompt"
+      },
+      "detect": {
+        "type": "regex",
+        "pattern": "\\b(?:dolly|push(?:es|ing)?\\s+in|pull(?:s|ing)?\\s+back|crane|jib|orbit|arc\\s+(?:left|right|around)|zoom(?:s|ing)?\\b|whip\\s+pan|rack\\s+focus|the\\s+camera\\s+(?:moves|drifts|pans|tilts|tracks|slides|rises|descends))\\b",
+        "flags": "gi"
+      },
+      "why": "카메라 지시가 camera 필드와 motion_prompt 양쪽에 있으면 혼합 모션이 발생한다. 콘티 계약상 I2V 프롬프트의 카메라 절은 문말 1개(camera 필드 승계)뿐이다.",
+      "fix": "카메라 어휘를 motion_prompt에서 삭제하고 camera 필드 하나로 통일한다."
+    },
+    {
+      "id": "VID-MOTION-IMPLIED",
+      "severity": "ERROR",
+      "title": "정지 요구 컷의 이동 함의어",
+      "applies_to": {
+        "field": "motion_prompt",
+        "flags_all": [
+          "static_camera"
+        ]
+      },
+      "detect": {
+        "type": "regex",
+        "pattern": "\\bgestures?\\s+(?:once\\s+)?toward\\b|\\bturns?\\s+(?:his|her|their)\\s+head\\s+[a-z ]{0,24}toward\\b|\\bturns?\\s+toward\\b|\\bsteps?\\s+(?:through|into|forward|out|toward|back|aside)\\b|\\bsettles?\\s+into\\b|\\bwalks?\\b|\\bstrides?\\b|\\bmoves?\\s+(?:to|toward|across|close|closer)\\b|\\bcrosses?\\s+to\\b|\\bapproaches?\\b|\\bturns?\\s+(?:around|away)\\b|\\bleans?\\s+(?:in|forward)\\s+toward\\b|\\bwithdraws?\\b|\\bdraws?\\s+back\\b|\\bpulls?\\s+back\\b|\\breaches?\\s+(?:out|toward|for)\\b|\\bshifts?\\s+(?:his|her|their)\\s+stance\\b",
+        "flags": "gi"
+      },
+      "why": "cfg 1.0의 LTX는 방향·이동 함의어를 실제 보행·회전으로 실현하며, 같은 문장의 억제 절(`stay standing in place`)은 이를 막지 못한다 — 관모 교정 2차 12컷 중 9컷이 동일 계열로 실패(ep2 실증 C). 보강 절만으로는 4컷만 해소.",
+      "fix": "이미 완료된 상태로 다시 쓴다(REPHRASE) — `steps through the doorway` → `has already come to a stop just inside the doorway and stands facing the camera`. 억제 절은 방어선이지 해결책이 아니다."
+    },
+    {
+      "id": "VID-A2V-CAMERA",
+      "severity": "ERROR",
+      "title": "A2V 컷 카메라는 static/slow dolly 한정",
+      "applies_to": {
+        "field": "camera",
+        "flags_any": [
+          "a2v"
+        ]
+      },
+      "detect": {
+        "type": "regex_absent",
+        "pattern": "static|slow\\s+dolly",
+        "flags": "i"
+      },
+      "why": "A2V는 조건 이미지가 프레임 0에만 주입되고 나머지 시간축은 오디오 라텐트와 함께 풀리므로 I2V보다 기하 앵커가 약하다 — 카메라 절이 static인데도 4~6% 푸시인이 발생했다(ep2 실증 D).",
+      "fix": "camera 필드를 `Static — static tripod shot, no camera movement` 또는 slow dolly로 한정한다."
+    },
+    {
+      "id": "VID-A2V-FRAMELOCK-END",
+      "severity": "ERROR",
+      "title": "A2V 프레임 락 절에 시간 종점 표현 금지",
+      "applies_to": {
+        "field": "motion_prompt",
+        "flags_any": [
+          "a2v"
+        ]
+      },
+      "detect": {
+        "type": "regex",
+        "pattern": "as\\s+at\\s+the\\s+beginning|same\\s+.{0,20}\\s+at\\s+the\\s+end",
+        "flags": "gi"
+      },
+      "why": "프레임 락 절의 효과는 1/2에 불과했고(CUT-21 해소·CUT-16 악화), `at the end as at the beginning` 형태는 말미 암전을 신규 유발했다(CUT-40 r1 0.163).",
+      "fix": "`his head occupying exactly the same area of the picture in every single frame` 형으로 쓴다."
+    },
+    {
+      "id": "VID-CROWD-COUNT",
+      "severity": "WARN",
+      "title": "군상 컷은 개체 수 유지 긍정 서술",
+      "applies_to": {
+        "field": "motion_prompt",
+        "flags_any": [
+          "crowd"
+        ]
+      },
+      "detect": {
+        "type": "regex_absent",
+        "pattern": "all\\s+(?:three|four|five|six|seven|eight|nine|ten|twelve|of\\s+them)|every\\s+one\\s+of\\s+them|the\\s+same\\s+number|each\\s+of\\s+the\\s+\\w+\\s+(?:stays|remains|keeps)",
+        "flags": "i"
+      },
+      "why": "군상 컷에서 인원이 말미에 감소한다 — CUT-45 7인 → 3~4인(3테이크 소진, 미해소 플래그).",
+      "fix": "`all seven figures stay inside the frame throughout` 처럼 개체 수를 긍정으로 못 박는다."
+    },
+    {
+      "id": "VID-HAT-KEEP",
+      "severity": "WARN",
+      "title": "관모 등장 컷은 사모 형상 유지 절 필요",
+      "applies_to": {
+        "field": "motion_prompt",
+        "flags_any": [
+          "hat"
+        ]
+      },
+      "detect": {
+        "type": "regex_absent",
+        "pattern": "\\bcap\\b|\\bwings?\\b|\\bhelmet\\b",
+        "flags": "i"
+      },
+      "why": "관모 교정은 이미지에서 끝나지 않는다 — 모션 단계에서 브림이 재출현했다(CUT-37 r1 측면 사모의 익이 원형 브림으로 재해석). 사모 형상 긍정 서술 절을 넣은 r2에서 완전 소거.",
+      "fix": "`the cap keeps exactly this compact silhouette and this size in every single frame of the shot` 계열 절을 추가한다(brim·wide-brimmed 등 부정·금지 표현은 쓰지 않는다)."
+    },
+    {
+      "id": "VID-EXPOSURE-CLAUSE",
+      "severity": "WARN",
+      "title": "광원 강조 컷은 노출 고정 절 필요",
+      "applies_to": {
+        "field": "motion_prompt"
+      },
+      "detect": {
+        "type": "regex_pair",
+        "pattern": "\b(?:lamp|lantern|torch|torchlight|candle|light\\s+shaft|sunlight|daylight|glow|flame)\\w*\b",
+        "with": "light\\s+level\\s+stays|brightness\\s+stays|exposure\\s+is\\s+even|equally\\s+(?:bright|lit)|stays\\s+constant|lighting\\s+stays|just\\s+as\\s+brightly\\s+lit",
+        "with_mode": "absent",
+        "flags": "i"
+      },
+      "why": "노출 드리프트는 소스 휘도에 따라 방향이 갈린다(고휘도 하강·저휘도 붕괴/상승). 소스 평균 휘도 기반 분기 절이 유효했다 — 노출 안정 37/49.",
+      "fix": "고휘도 소스는 `the last frames are just as brightly lit as the first`(단 시간 종점 호명 금지 규칙과 충돌하지 않게 `every single frame` 형 사용), 중휘도는 `the exposure is even and identical in every frame`."
+    },
+    {
+      "id": "VID-SEATED-DRIFT",
+      "severity": "WARN",
+      "title": "착좌 인물 컷 기립 드리프트 방어",
+      "applies_to": {
+        "field": "motion_prompt",
+        "flags_any": [
+          "seated"
+        ]
+      },
+      "detect": {
+        "type": "regex_absent",
+        "pattern": "stays?\\s+seated|remains?\\s+seated|keeps?\\s+sitting|seated\\s+throughout",
+        "flags": "i"
+      },
+      "why": "착좌 소스는 기립 프라이어가 강하다 — ep1 CUT-16 3테이크 중 3회 발현(억제 절·negative 무효), ep2 CUT-13 말미 상체 기립 경향.",
+      "fix": "`stays seated on the mat throughout` 계열 긍정 절을 넣고, 인물 2인 이상 컷은 콘티 단계에서 duration을 짧게 잡는다."
+    },
+    {
+      "id": "VID-INSERT-STILL",
+      "severity": "WARN",
+      "title": "지면·활자 인서트 컷은 스틸 + 최소 모션",
+      "applies_to": {
+        "field": "motion_prompt"
+      },
+      "detect": {
+        "type": "regex",
+        "pattern": "\\b(?:glyph|character|inscription|column\\s+of\\s+type|printed\\s+line|calligraph)\\w*\\b",
+        "flags": "gi"
+      },
+      "why": "인서트 지면 컷은 I2V 시 글리프가 무너진다 — ep1 CUT-38, ep2 CUT-14·39·60 재현(2컷 미해소 잔존). 나노바나나 스틸 + 최소 모션 경로가 안전하다.",
+      "fix": "모션을 조도·먼지 수준으로 최소화하거나 S6 정지컷 대체를 콘티에 명시한다."
+    }
+  ]
+}

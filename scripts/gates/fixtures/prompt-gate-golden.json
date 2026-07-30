@@ -1,0 +1,365 @@
+{
+  "doc": "게이트 ① 골든 케이스 — ①과거 실패 프롬프트가 실제로 걸리는가 ②현행 채택본이 통과하는가. 각 케이스의 evidence 필드는 ep1/ep2 03-assets·스타일-history-drama-v3의 실증 출처다. prompt-gate.test.mjs가 소비한다.",
+  "fail": [
+    {
+      "id": "G-IMG-NEG-PERSON",
+      "evidence": "ep1 r2 — `no human figure` 류 무인 서술 0/18(인물 침입 전량), 변형 토큰 18/18",
+      "expect": ["IMG-NEG-PERSON"],
+      "record": {
+        "kind": "image",
+        "shot_type": "WS(보루각 야간)",
+        "intent": "무인 정경 — 인물 없음",
+        "image_prompt": "{STYLE_NOFIGURE}, night exterior of a three-bay Joseon pavilion, lamp light along the lattice doors, no human figure anywhere in the courtyard, nobody on the stone steps, moonlight on the roof tiles"
+      }
+    },
+    {
+      "id": "G-IMG-NOFIGURE-TOKEN",
+      "evidence": "ep1 r3 0/18 — 인물 어휘를 빼도 {STYLE} 토큰 내부 인물 절이 캐릭터를 소환",
+      "expect": ["IMG-NOFIGURE-TOKEN"],
+      "record": {
+        "kind": "image",
+        "shot_type": "EWS(도성 야경)",
+        "intent": "무인 스케일 설정 컷 — 인물 없음",
+        "image_prompt": "{STYLE}, extreme wide high-angle night view over a walled capital, an endless sea of dark tiled roofs, deserted streets, low mist pooling between the houses"
+      }
+    },
+    {
+      "id": "G-IMG-STYLE-TOKEN",
+      "evidence": "S4 치환 계약 — 스타일-history-drama-v3 §사용 규약 1",
+      "expect": ["IMG-STYLE-TOKEN"],
+      "record": {
+        "kind": "image",
+        "shot_type": "WS(보루각 주간)",
+        "intent": "주간 외관",
+        "image_prompt": "wide daylight shot of a small three-bay Joseon palace pavilion with painted dancheong beams, deserted courtyard stones"
+      }
+    },
+    {
+      "id": "G-IMG-CU-LIFELIKE",
+      "evidence": "ep1 S4 화풍 보정 — 인물 29컷 중 실사 드리프트 9 + 경계 4. `with lifelike detail` 꼬리 제거 + 유화 어휘 병행 시 11/11 해소",
+      "expect": ["IMG-CU-LIFELIKE-TAIL", "IMG-CU-OIL-VOCAB", "IMG-CU-PORTRAIT-VARIANT"],
+      "record": {
+        "kind": "image",
+        "shot_type": "MCU(윤담)",
+        "intent": "시점 인물 확립 컷",
+        "style_variant": "",
+        "image_prompt": "{STYLE}, medium close-up of a slender Joseon cadet in his late teens with lifelike detail, daylight from a lattice door modelling one side of his face, the dim pavilion interior soft behind him"
+      }
+    },
+    {
+      "id": "G-IMG-HANDS",
+      "evidence": "ep1 CUT-07·32 손 CU 4/4·3/3 얼굴 침입 — `face outside the frame` + 인물 주어는 cfg 1.0에서 무효",
+      "expect": ["IMG-HANDS-SUBJECT", "IMG-HANDS-VARIANT"],
+      "record": {
+        "kind": "image",
+        "shot_type": "CU(손)",
+        "intent": "손 모티프",
+        "style_variant": "",
+        "image_prompt": "{STYLE}, close-up of an old craftsman's hands turning a bronze fitting, the man sits hunched over the workbench with his face outside the frame, warm lamplight raking across the knuckles"
+      }
+    },
+    {
+      "id": "G-IMG-FACE-SIDEPROFILE",
+      "evidence": "ep1 C-1 시트 진단 — `side profile` + 역광은 얼굴 노출을 억제하지 못함(0/3). `directly behind`만 3/3",
+      "expect": ["IMG-FACE-SIDEPROFILE", "IMG-FACE-BEHIND-REQ"],
+      "record": {
+        "kind": "image",
+        "shot_type": "MS(장영실) — 얼굴 미노출 계약",
+        "intent": "얼굴 미노출 유지",
+        "image_prompt": "{STYLE}, medium shot of an older Joseon official in side profile, backlit against a bright open doorway so his features fall into shadow, a deep crimson round-collar robe"
+      }
+    },
+    {
+      "id": "G-IMG-HAT-SHAPE",
+      "evidence": "ep1 관모 12컷 잔존 / ep2 r0 20컷 갓형 — `black samo hat` 서술만으로는 갓 prior가 이긴다",
+      "expect": ["IMG-HAT-SHAPE"],
+      "record": {
+        "kind": "image",
+        "shot_type": "MS(문관)",
+        "intent": "관모 등장 컷",
+        "image_prompt": "{STYLE}, medium shot of a Joseon civil official in a deep crimson round-collar robe wearing a black samo hat, standing in a dim pavilion interior, daylight from the open doors"
+      }
+    },
+    {
+      "id": "G-IMG-HAT-NEGATION",
+      "evidence": "ep2 I2V 2차 CUT-37 r2 — 브림 소거는 부정 표현을 한 글자도 쓰지 않은 긍정 문안으로 달성",
+      "expect": ["IMG-HAT-NEGATION"],
+      "record": {
+        "kind": "image",
+        "shot_type": "MCU(생도)",
+        "intent": "관모 등장 컷",
+        "style_variant": "portrait-painterly",
+        "image_prompt": "{STYLE}, medium close-up of a young cadet wearing a plain black soft cloth cap fitting close to the head with no brim, hand-painted oil painting with visible impasto brush strokes and canvas texture"
+      }
+    },
+    {
+      "id": "G-IMG-CROWD",
+      "evidence": "ep1 게시본 육안 결함 ② 군상 동일 얼굴 복제 — ep2는 다양성 어휘로 7/7 전수 달성",
+      "expect": ["IMG-CROWD-DIVERSITY"],
+      "record": {
+        "kind": "image",
+        "shot_type": "WS(정승 군상)",
+        "intent": "군상 컷",
+        "image_prompt": "{STYLE}, wide shot of a Joseon royal audience hall, two rows of officials standing with their backs to camera facing the distant throne dais, dust turning in the window light"
+      }
+    },
+    {
+      "id": "G-VID-NEG-END",
+      "evidence": "ep2 실증 A — `with no darkening at the end` 절 자체가 말미 조도 붕괴를 유발(CUT-07 0.45 · CUT-09 0.29 · CUT-12 0.31 · CUT-23 0.31)",
+      "expect": ["VID-NEG-001", "VID-TIME-ENDPOINT"],
+      "record": {
+        "kind": "video",
+        "camera": "Static — static tripod shot, no camera movement",
+        "motion_prompt": "the lantern flames breathe slowly and the lighting level stays constant throughout with no darkening at the end"
+      }
+    },
+    {
+      "id": "G-VID-DARK",
+      "evidence": "ep2 실증 A — dark/dim/fade/night/black 계열 전량 제거한 대조군 x2가 2/2 완전 해소",
+      "expect": ["VID-DARK-VOCAB"],
+      "record": {
+        "kind": "video",
+        "camera": "Static — static tripod shot, no camera movement",
+        "motion_prompt": "the two figures hold their positions while the inner darkness behind them deepens and the lamp dims a little"
+      }
+    },
+    {
+      "id": "G-VID-STYLE",
+      "evidence": "ep2 실증 B — 스타일 절이 호명한 매체 어휘로 화면이 수렴(「한지-베이지 낙서 평면」 붕괴 8컷)",
+      "expect": ["VID-STYLE-SELFDESTRUCT"],
+      "record": {
+        "kind": "video",
+        "camera": "Static — static tripod shot, no camera movement",
+        "motion_prompt": "a slow drift of air across the courtyard, matte painting quality preserved, hanji-beige palette holding steady, ink-wash edges softening"
+      }
+    },
+    {
+      "id": "G-VID-RISK-CRACKED",
+      "evidence": "ep1 CUT-31 — `cracked hands` 어휘가 균열 드로잉(스킨 크랙)을 소환",
+      "expect": ["VID-RISK-VOCAB"],
+      "record": {
+        "kind": "video",
+        "camera": "Static — static tripod shot, no camera movement",
+        "motion_prompt": "the cracked hands tighten on the mallet shaft, the tendons lifting under the skin"
+      }
+    },
+    {
+      "id": "G-VID-RISK-FROZEN",
+      "evidence": "ep1 CUT-37 — `frozen moment` 어휘가 찢긴 종이 프레임-인-프레임 환각을 소환",
+      "expect": ["VID-RISK-VOCAB"],
+      "record": {
+        "kind": "video",
+        "camera": "Static — static tripod shot, no camera movement",
+        "motion_prompt": "the whole scene holds as a frozen moment while the lamp flame alone keeps breathing"
+      }
+    },
+    {
+      "id": "G-VID-RISK-TWISTS",
+      "evidence": "ep1 CUT-02 f1 — `twists` 가 회전 프라이어로 작용, 어휘 제거 후 f2 채택",
+      "expect": ["VID-RISK-VOCAB"],
+      "record": {
+        "kind": "video",
+        "camera": "Crash Zoom — sudden fast crash zoom onto the brass joint",
+        "motion_prompt": "the wooden beam twists and a crack races through the lacquer around the brass joint, splinters bursting outward"
+      }
+    },
+    {
+      "id": "G-VID-MOTION-IMPLIED-STEPS",
+      "evidence": "ep2 실증 C — `steps through the doorway` 가 실제 보행으로 실현, 같은 문장의 억제 절은 무력(12컷 중 9컷 동일 계열 실패)",
+      "expect": ["VID-MOTION-IMPLIED", "VID-NEG-001"],
+      "record": {
+        "kind": "video",
+        "camera": "Handheld — subtle handheld camera sway",
+        "motion_prompt": "the scholar steps through the doorway and stops, the paper sheaf shifting in his arms, he stays standing with no change of pose"
+      }
+    },
+    {
+      "id": "G-VID-MOTION-IMPLIED-GESTURE",
+      "evidence": "ep2 실증 C — `gestures once toward the pavilion` 가 이동·회전으로 실현(CUT-08)",
+      "expect": ["VID-MOTION-IMPLIED"],
+      "record": {
+        "kind": "video",
+        "camera": "Handheld — subtle handheld camera sway",
+        "motion_prompt": "the older official speaks and gestures once toward the pavilion, robe hems stirring in a light breeze, the light level stays constant"
+      }
+    },
+    {
+      "id": "G-VID-CAMERA-DUP",
+      "evidence": "카메라 절은 문말 1개 — 복수 지시 시 혼합 모션(콘티 §모션 본체 선언)",
+      "expect": ["VID-CAMERA-IN-MOTION"],
+      "record": {
+        "kind": "video",
+        "camera": "Static — static tripod shot, no camera movement",
+        "motion_prompt": "the water surface trembles while the camera slowly pushes in toward the bronze vessel"
+      }
+    },
+    {
+      "id": "G-VID-A2V-FRAMELOCK",
+      "evidence": "ep2 실증 D — 프레임 락 절의 `at the end as at the beginning` 이 말미 암전을 신규 유발(CUT-40 r1 노출비 0.163)",
+      "expect": ["VID-A2V-FRAMELOCK-END", "VID-TIME-ENDPOINT"],
+      "record": {
+        "kind": "video",
+        "a2v": true,
+        "camera": "Static — static tripod shot, no camera movement",
+        "motion_prompt": "the man speaks, his head occupying exactly the same area of the picture at the end as at the beginning"
+      }
+    },
+    {
+      "id": "G-VID-A2V-CAMERA",
+      "evidence": "ep2 실증 D — A2V는 기하 앵커가 약해 카메라 이동 시 프레이밍이 흐른다(카메라 문서 규칙 5)",
+      "expect": ["VID-A2V-CAMERA"],
+      "record": {
+        "kind": "video",
+        "a2v": true,
+        "camera": "Handheld — subtle handheld camera sway around the speaker",
+        "motion_prompt": "the man speaks, his shoulders settling, the lamp flame steady beside him, the light level stays constant"
+      }
+    },
+    {
+      "id": "G-AUD-SCENE-MODE",
+      "evidence": "ep2 SFX 실증 A — 교차 진단 2건에서 소리는 프롬프트를 따랐고 이미지를 따르지 않았다. scene 모드는 스펙트럼 중심이 613→2098Hz로 탁해진다",
+      "expect": ["AUD-SFX-TEXTONLY"],
+      "record": {
+        "kind": "audio",
+        "subkind": "sfx",
+        "mode": "scene",
+        "prompt": "three evenly spaced deep bronze bell strikes, clearly audible, long decay. No voices. No speech."
+      }
+    },
+    {
+      "id": "G-AUD-LEVEL",
+      "evidence": "ep2 BGM 실증 D — `no clipping` 평문으로 bgm-06 클리핑 2824 → 22822(8배 역행), bgm-03 피크 −30.57dB 붕괴",
+      "expect": ["AUD-LEVEL-PROMPT"],
+      "record": {
+        "kind": "audio",
+        "subkind": "bgm",
+        "mode": "textonly",
+        "prompt": "a sparse haegeum line over a low drone in the low middle register, no clipping, plenty of headroom, restrained dynamics, instrumental only"
+      }
+    },
+    {
+      "id": "G-AUD-SUPPRESS-STACK",
+      "evidence": "ep2 BGM 실증 D — bgm-03 r2가 `no sub-bass` + `restrained dynamics` 중첩으로 피크 −30.57dB · SNR 2.6dB 붕괴",
+      "expect": ["AUD-SUPPRESS-STACK"],
+      "record": {
+        "kind": "audio",
+        "subkind": "bgm",
+        "mode": "textonly",
+        "prompt": "a sparse geomungo figure, no sub-bass, restrained dynamics throughout, the weight comes from the low middle register, instrumental only, no singing"
+      }
+    },
+    {
+      "id": "G-AUD-DIALOGUE",
+      "evidence": "ep2 §대사 직접 생성 — 합격선 미달 판정(전사 일치율 최고 0.9653, 음색이 호출마다 다른 사람이 됨)",
+      "expect": ["AUD-DIALOGUE-ROUTE"],
+      "record": {
+        "kind": "audio",
+        "subkind": "sfx",
+        "mode": "dialogue",
+        "prompt": "삼십 대 문신이 낮고 떨리는 목소리로 말한다. one line of spoken Korean dialogue. No voices."
+      }
+    }
+  ],
+  "pass": [
+    {
+      "id": "P-IMG-NOFIGURE",
+      "evidence": "ep2 CUT-01 채택본 — {STYLE_NOFIGURE} + 장면 어휘(deserted)",
+      "record": {
+        "kind": "image",
+        "shot_type": "WS(종·북 실루엣)",
+        "intent": "무인 정경 — 인물은 화면 밖",
+        "image_prompt": "{STYLE_NOFIGURE}, wide night shot beneath the gate tower of a Joseon palace main gate, a large bronze bell and a large drum standing side by side on a wooden frame under the eaves, only two pitch torches burning, volumetric lantern light shafts through hazy air, deserted courtyard, cool moonlit stone paving, ominous quiet"
+      }
+    },
+    {
+      "id": "P-IMG-PORTRAIT",
+      "evidence": "ep2 CUT-21 계열 채택본 — portrait-painterly 선언 + 유화 렌더 어휘(부정 표현 제거본)",
+      "record": {
+        "kind": "image",
+        "shot_type": "MCU(윤담)",
+        "intent": "시점 인물 확립 컷 — MCU 단독 인물 페인터리 유지 규약 적용",
+        "style_variant": "portrait-painterly (S4 치환 시 `with lifelike detail` 꼬리 제거)",
+        "image_prompt": "{STYLE}, medium close-up of a slender Joseon cadet in his late teens with clear unlined skin, a plain black soft cloth cap fitting close to the head, a pale blue-grey round-collar robe, daylight from a lattice door modelling one side of his face, visible expressive brush strokes, textured painterly rendering, hand-painted oil painting with visible impasto brush strokes and canvas texture"
+      }
+    },
+    {
+      "id": "P-IMG-HANDS",
+      "evidence": "ep2 CUT-02 채택본 — hands-only 선언 + 손 주어(소유격 허용)",
+      "record": {
+        "kind": "image",
+        "shot_type": "ECU(종채 쥔 손)",
+        "intent": "hands-only 서술 — 인물 주어 제거",
+        "style_variant": "hands-only + portrait-painterly",
+        "image_prompt": "{STYLE}, extreme close-up of a young man's bare hands gripping a wooden bell mallet with a padded head, tendons standing out on the back of the hand but the palms smooth and uncallused, warm torchlight raking across the knuckles, visible expressive brush strokes, textured painterly rendering, hand-painted oil painting with visible impasto brush strokes and canvas texture"
+      }
+    },
+    {
+      "id": "P-IMG-FACE-BEHIND",
+      "evidence": "ep1 CUT-16-i3 채택본 — directly behind + 두부 실물 서술이 뒷모습·무관모 동시 달성",
+      "record": {
+        "kind": "image",
+        "shot_type": "MS(정후방 뒷모습) — 얼굴 미노출 문법 엄수",
+        "intent": "얼굴 미노출 유지",
+        "image_prompt": "{STYLE}, medium shot of an older Joseon official seen from directly behind, standing motionless in a dawn courtyard, his bare head showing only a small black topknot held with a pin, plain undyed hemp robe with soft folds, his whole head and face turned entirely away from camera"
+      }
+    },
+    {
+      "id": "P-IMG-HAT-SHAPE",
+      "evidence": "ep2 CUT-13 계열 채택본 — 사모 실물 형태 서술(2단 돔 + 후방 수평 익)",
+      "record": {
+        "kind": "image",
+        "shot_type": "MS(문관)",
+        "intent": "관모 실물 서술 의무",
+        "image_prompt": "{STYLE}, medium shot of a Joseon civil official in a deep crimson round-collar robe, a black sammo hat with two flat wings extending horizontally backward from the sides of the crown sitting square on his head, standing in a dim pavilion interior, daylight from the open doors"
+      }
+    },
+    {
+      "id": "P-IMG-CROWD",
+      "evidence": "ep2 CUT-45 채택본 — 군상 다양성 어휘 최고 성과(7인 전수 분산, 동일 얼굴 복제 0)",
+      "record": {
+        "kind": "image",
+        "shot_type": "MS(문마다 서는 사람들) — 군상",
+        "intent": "군상 다양성 어휘 의무",
+        "image_prompt": "{STYLE}, medium shot at night of six men taking up their posts along a palace wall, three in pale blue-grey cadet robes with plain black soft cloth caps and three in lamellar armour with iron helmets whose brims and neck guards sweep backward, the six clearly differ from one another — a very young beardless cadet, a wiry cadet in his twenties with a thin moustache, a stocky cadet with round shoulders, a grizzled soldier in his fifties with a full grey beard — different heights, builds and postures"
+      }
+    },
+    {
+      "id": "P-VID-BRIGHT-POSITIVE",
+      "evidence": "ep2 대조군 x2 — 어둠 어휘 전량 제거 + 밝기 긍정 서술로 CUT-07 0.45→1.03, CUT-23 0.31→1.08",
+      "record": {
+        "kind": "video",
+        "camera": "Static — static tripod shot, no camera movement",
+        "motion_prompt": "the torch flames breathe slowly, a thin ribbon of smoke rising, the exposure is even and identical in every single frame and the light level stays constant"
+      }
+    },
+    {
+      "id": "P-VID-REPHRASE",
+      "evidence": "ep2 실증 C — 이동 함의어를 이미 완료된 상태로 다시 쓰면(REPHRASE) 성공률이 올라간다",
+      "record": {
+        "kind": "video",
+        "camera": "Handheld — subtle handheld camera sway",
+        "motion_prompt": "the scholar has already come to a stop just inside the doorway and keeps facing the camera, the paper sheaf resting still in his arms, the lamp light level stays constant"
+      }
+    },
+    {
+      "id": "P-VID-A2V-EVERYFRAME",
+      "evidence": "ep2 실증 D 환류 — 프레이밍·노출 유지는 `every single frame` 형(전 프레임 균등 서술)으로만",
+      "record": {
+        "kind": "video",
+        "a2v": true,
+        "camera": "Static — static tripod shot, no camera movement",
+        "motion_prompt": "the official speaks with careful deference, his head occupying exactly the same area of the picture in every single frame, the lamp light level stays constant"
+      }
+    },
+    {
+      "id": "P-AUD-SFX",
+      "evidence": "ep2 SFX r2 채택 규약 — textonly 모드 + 사건 수·시각·가청 수준 명시 + 말소리 억제 평문(혼입 0건)",
+      "record": {
+        "kind": "audio",
+        "subkind": "sfx",
+        "mode": "textonly",
+        "prompt": "three evenly spaced deep bronze bell strikes, the first at 0.5 seconds, each with a long ringing decay, clearly audible and present at a normal recording level, the weight comes from the low middle register. No voices. No speech."
+      }
+    }
+  ]
+}
