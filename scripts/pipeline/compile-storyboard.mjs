@@ -23,6 +23,9 @@
  * 미디어 경로 (사이클 기본값 → 후보 존재 검사 → 인자 override):
  *   --cuts-dir / --clips-source-dir / --clips-upscaled-dir / --tts-dir / --sfx-dir
  *   --clips-dir              (구 인자) 업스케일 폴더 override — --clips-upscaled-dir과 동일
+ *   --media-root <dir>       에피소드 미디어 루트 명시(D10 트리 자동 탐색보다 우선).
+ *                            미지정 시 lib/media-paths.mjs findEpisodeRoot(production_id)로
+ *                            E:\danbi-media 표준 트리를 탐색하고, 없으면 구 배치로 폴백(ep1·ep2).
  *
  * A3 SFX:
  *   --sfx-duck-db <db>       대사 구간 SFX 덕킹 (음수, 기본 0 = 덕킹 없음). 03-assets 권고 -3~-6
@@ -75,6 +78,9 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
+
+// D10 콘텐츠 아웃풋 트리 계약(E:\danbi-media) — 트리 등재 프로덕션(ep3~)의 mediaRoot 해석.
+import { findEpisodeRoot } from './lib/media-paths.mjs';
 
 // S6 산출물 가드 4종(스펙 어서션·페어 정합·정지 검출·발화 정렬) — scripts/pipeline/guards/*
 // 발화 구간 실측/자막 창/조용한 창 계산은 **가드 모듈이 원천**이다. 여기에 같은 로직을 다시 두지 않는다.
@@ -151,6 +157,11 @@ const ROUND = 3;                     // 초 단위 소수 자릿수
 const COMFY_OUTPUT_ROOT = 'E:\\ai_tool\\ComfyUI\\output\\danbi';
 const TTS_OUTPUT_ROOT = 'E:\\ai_tool\\tts_make\\outputs\\danbi';
 
+// D10 콘텐츠 아웃풋 트리(E:\danbi-media\분류\소스\시리즈\에피소드) 인식 — lib/media-paths.mjs가 계약 원천.
+// production_id가 트리에 등재(episode.json 마커)되어 있으면 그 에피소드 루트를 mediaRoot·ttsRoot로 쓴다.
+// ep1·ep2는 등재하지 않으므로(D5 — 기존 자산 이동 금지) 종전 구 배치 경로가 그대로 동작한다.
+// 명시 지정은 --media-root <에피소드 루트> (트리 탐색보다 우선).
+
 // 폴더명은 사이클 속성이 아니라 **프로덕션 관례**다(ep1은 콘티 개정 접미 `-v3`, ep2 이후는 평명).
 // 따라서 사이클 기본값 + 후보 목록(존재하는 첫 폴더 채택) + CLI 인자 override 3단으로 해석한다.
 // 하드코딩된 리터럴을 남기지 않기 위해 모든 항목이 인자로 덮어쓸 수 있다.
@@ -160,19 +171,21 @@ const CYCLE_PATHS = {
     assetSuffix: '-v2',
   },
   v3: {
+    // 후보 선두의 0N-* 폴더명은 D10 표준 트리(ep3~)의 것이다 — 구 배치(ep1·ep2) 루트에는
+    // 실재하지 않으므로 존재 검사에서 자연히 종전 후보로 떨어진다(회귀 없음).
     cuts: 'cuts',
-    cutsCandidates: ['cuts-v3', 'cuts'],
+    cutsCandidates: ['02-cuts', 'cuts-v3', 'cuts'],
     clips: 'clips',
-    clipsCandidates: ['clips-v3', 'clips'],
+    clipsCandidates: ['03-clips', 'clips-v3', 'clips'],
     // 업스케일 산출 폴더. 03-assets §업스케일 섹션에 매핑 표가 append되면 그 표가 우선하고,
     // 없으면 `<clipsUpscaled>\CUT-NN.mp4` 규칙을 가정한다(--upscaled 사용 시).
     clipsUpscaled: 'clips-1080p',
-    clipsUpscaledCandidates: ['clips-v3-1080p', 'clips-1080p'],
+    clipsUpscaledCandidates: ['04-clips-1080p', 'clips-v3-1080p', 'clips-1080p'],
     tts: 'tts',
-    ttsCandidates: ['tts-v21', 'tts'],
+    ttsCandidates: ['05-tts', 'tts-v21', 'tts'],
     // 채택 SFX(A3 트랙 소스). 없는 프로덕션에서는 A3 트랙을 방출하지 않는다.
     sfx: 'sfx\\adopted',
-    sfxCandidates: ['sfx\\adopted', 'sfx'],
+    sfxCandidates: ['06-sfx\\adopted', '06-sfx', 'sfx\\adopted', 'sfx'],
     assetSuffix: '-v3',
   },
 };
@@ -1101,8 +1114,15 @@ function parseAssetsDocV3(markdown, { cycle, args = {}, pathLog = [] }) {
   const productionId = markdown.match(/^production_id:\s*(\S+)/m)?.[1];
   if (!productionId) throw new Error('03-assets.md: production_id not found');
 
-  const mediaRoot = path.join(COMFY_OUTPUT_ROOT, productionId);
-  const ttsProductionRoot = path.join(TTS_OUTPUT_ROOT, productionId);
+  // 미디어 루트 3단 해석: --media-root 명시 > D10 트리 탐색(episode.json 마커) > 구 배치(ep1·ep2).
+  // 트리 에피소드 루트는 단일 루트다(05-tts 포함) — tts도 같은 루트에서 해석한다.
+  const explicitRoot = args['media-root'] ? path.resolve(args['media-root']) : undefined;
+  const treeRoot = explicitRoot ?? findEpisodeRoot(productionId);
+  const mediaRoot = treeRoot ?? path.join(COMFY_OUTPUT_ROOT, productionId);
+  const ttsProductionRoot = treeRoot ?? path.join(TTS_OUTPUT_ROOT, productionId);
+  if (treeRoot) {
+    pathLog.push(`media root: D10 표준 트리 ${explicitRoot ? '(--media-root 명시)' : '(episode.json 탐색)'} → ${treeRoot}`);
+  }
   const paths = resolveCyclePaths(cycle, { mediaRoot, ttsProductionRoot, args, log: pathLog });
   const ttsRoot = path.resolve(ttsProductionRoot, paths.tts);
 
