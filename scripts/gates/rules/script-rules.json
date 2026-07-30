@@ -1,0 +1,156 @@
+{
+  "$schema_note": "게이트 ②(대본 QC) 규칙 데이터 — 항목 A(기계적 계약) + 항목 B(서사 구조). 코드 무수정 튜닝용.",
+  "version": "1.0.0",
+  "updated": "2026-07-30",
+  "source_of_truth": [
+    "20-productions/2026-07-13-jangyeongsil-silence/01-script.md §검증 (v2.1)",
+    "20-productions/2026-07-29-jagyeongnu-night/01-script.md §검증 (v1.0)",
+    "10-knowledge/topics/재미있는-글쓰기-기법.md 실행 규칙 24개"
+  ],
+
+  "narrator_name": "내레이터",
+
+  "duration": {
+    "_note": "음절 ÷ sps + 장면 휴지, 전체에 엔딩 마진 가산. 전부 결정론.",
+    "scene_pause_sec": 0.4,
+    "ending_margin_sec": 1.0,
+    "sps_profiles": {
+      "design": 3.8,
+      "sohee_min": 4.05,
+      "sohee_max": 4.08,
+      "clone": 4.51
+    },
+    "gate_profiles": ["sohee_min", "sohee_max"],
+    "gate_min_sec": 480,
+    "gate_max_sec": 510,
+    "declared_total_tolerance_sec": 1.0,
+    "declared_scene_tolerance_sec": 0.5
+  },
+
+  "tts_lint": {
+    "max_sentence_syllables": 55,
+    "max_commas_per_sentence": 2,
+    "forbidden": [
+      { "id": "TTS-DIGIT", "label": "아라비아 숫자", "pattern": "[0-9０-９]" },
+      { "id": "TTS-LATIN", "label": "로마자", "pattern": "[A-Za-zＡ-Ｚａ-ｚ]" },
+      { "id": "TTS-QUOTE", "label": "따옴표", "pattern": "[\"'‘’“”「」『』]" },
+      { "id": "TTS-PAREN", "label": "괄호", "pattern": "[()\\[\\]{}（）【】《》]" },
+      { "id": "TTS-EMOJI", "label": "이모지·장식 기호", "pattern": "[\\u2600-\\u27BF\\uFE0F\\uD83C-\\uDBFF][\\uDC00-\\uDFFF]?" }
+    ]
+  },
+
+  "hook": {
+    "first_sentence_max_syllables": 18,
+    "title_keyword_deadline_sec": 30,
+    "cold_open_scene_count": 2,
+    "forbidden_cold_open_patterns": [
+      "안녕하세요",
+      "반갑습니다",
+      "오늘은[^.]{0,20}(알아보|살펴보|다뤄|이야기해)",
+      "이번\\s*(시간|영상|편)에는",
+      "에\\s*대해\\s*(알아보|살펴보)",
+      "먼저\\s*간단히",
+      "구독[^.]{0,10}(눌러|부탁)",
+      "다음\\s*편에서는"
+    ]
+  },
+
+  "tags": {
+    "required_markers": ["[사실]", "[각색]"],
+    "evidence_patterns": [
+      "wda_\\d+_\\d+",
+      "\\[\\[[^\\]]+\\]\\]",
+      "\\b[A-Z]-\\d+\\b"
+    ]
+  },
+
+  "person": {
+    "second_person_max": 3,
+    "second_person_patterns": ["당신", "여러분", "그대"]
+  },
+
+  "narrator_share": {
+    "_note": "형식별 나레이터 발화 음절 비중 목표. 픽션 드라마는 00-scenario §5-1 계약(≤30%).",
+    "profiles": {
+      "하이브리드": { "min": 0.55, "max": 0.90 },
+      "픽션 드라마": { "min": 0.05, "max": 0.30 }
+    },
+    "default": { "min": 0.0, "max": 1.0 }
+  },
+
+  "roster": {
+    "_note": "장면 화자 필드 ↔ 실제 발화 화자 일치. 축약 표기(선임 ↔ 선임 생도)는 부분일치 허용.",
+    "head_memo_key_pattern": "화자\\s*로스터"
+  },
+
+  "scene_count": {
+    "profiles": {
+      "하이브리드": { "min": 10, "max": 14 },
+      "픽션 드라마": { "min": 12, "max": 16 }
+    },
+    "default": { "min": 7, "max": 20 }
+  },
+
+  "through_line": {
+    "_note": "항목 B. S2가 대본 머리에 선언해야 하는 신설 필드. 미선언은 WARN(소급 기입 금지 — 인간 승인 사항).",
+    "declaration_format": "> **through_line**: 물건=<사물명> | 심기=N03 | 상승=N09,N10 | 페이오프=N13",
+    "min_scene_occurrences": 3,
+    "payoff_last_fraction": 0.34,
+    "candidate_min_scenes": 3,
+    "candidate_report_count": 8,
+    "candidate_source": "speech",
+    "candidate_stopwords": [
+      "전환", "클로즈업", "재사용", "컷", "카메라", "화면", "연출", "구도", "실루엣", "부감",
+      "앙각", "인서트", "슬로", "모션", "톤", "조명", "등불", "야경", "원경", "근경", "정면",
+      "측면", "뒷모습", "얼굴", "시선", "어둠", "빛깔", "자막", "타이포"
+    ]
+  },
+
+  "reorder_test": {
+    "_note": "항목 B. 빌드 구간(훅 이후 ~ 클라이맥스 직전) 장면이 ①직전 결과 참조 ②새 정보 도입 둘 다 없으면 재배치 가능 = 나열 의심.",
+    "build_zone_start_scene": 3,
+    "climax_marker_patterns": ["클라이맥스", "절정", "페이오프", "훅\\s*질문[^.]{0,10}회수"],
+    "new_info_min_stems": 3,
+    "back_reference_patterns": [
+      "(^|\\s)그\\s",
+      "그것",
+      "그날",
+      "그때",
+      "그 밤",
+      "그러면",
+      "그래서",
+      "그러자",
+      "그런데",
+      "그리고",
+      "그러나",
+      "이제",
+      "다시",
+      "처음의",
+      "그 뒤",
+      "그 곁",
+      "이듬해",
+      "여기까지",
+      "마침내",
+      "이후",
+      "뒤에",
+      "훗날",
+      "반나절 전",
+      "지난해",
+      "(^|\\s)저\\s",
+      "(^|\\s)이\\s"
+    ]
+  },
+
+  "density": {
+    "_note": "항목 B. 신규 고유명사·수치 어간이 0인 장면 경고.",
+    "min_new_stems": 1
+  },
+
+  "stopwords": [
+    "그리고", "그러나", "그런데", "그러면", "그래서", "다만", "이제", "아직", "무엇", "어디",
+    "누가", "이것", "그것", "저것", "사람", "사람이", "오늘", "지금", "여기", "저기", "거기",
+    "우리", "당신", "여러분", "이런", "그런", "저런", "모든", "함께", "다시", "아주", "매우",
+    "정말", "가장", "처음", "마지막", "이야기", "때문", "동안", "위해", "대해", "통해",
+    "내레이터", "장면", "화면", "대사", "기록", "실록"
+  ]
+}

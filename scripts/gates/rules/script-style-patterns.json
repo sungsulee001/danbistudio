@@ -1,0 +1,86 @@
+{
+  "$schema_note": "게이트 ②(대본 QC) 항목 C — 한국어 AI-티 패턴. im-not-strange-ai(MIT, itssosunny) quick-rules v2.0의 분류 체계를 차용하되, 우리 문체 규약([[재미있는-글쓰기-기법]] 24규칙 · [[history-drama]])과 충돌하지 않는 패턴만 선별했다.",
+  "version": "1.0.0",
+  "updated": "2026-07-30",
+  "upstream": {
+    "name": "im-not-strange-ai",
+    "license": "MIT",
+    "taxonomy": ".claude/skills/im-not-strange-ai/references/quick-rules.md (v2.0)",
+    "note": "ID는 상류 taxonomy와 1:1 유지 — 승격·역추적 가능하게."
+  },
+
+  "scope": {
+    "_note": "검사 대상은 내레이션 산문뿐. 캐릭터 대사와 실록 인용 낭독부는 원문 보존 규약상 윤문 대상이 아니다.",
+    "speakers": ["내레이터"],
+    "exclude_literary_quote_sentences": true,
+    "exclude_fact_tagged_speakers": true
+  },
+
+  "severity_default": "WARN",
+  "strict_promotes_to_error": ["S1"],
+
+  "excluded_from_upstream": [
+    { "id": "D-5", "reason": "의인화 추상 주어는 이 채널의 핵심 모티프다(기록은 침묵합니다 / 시각이 걸어옵니다). 규약 충돌 → 제외." },
+    { "id": "G-1", "reason": "`~것입니다` 미래·추정형은 규칙 17 추정 화법의 필수 장치(였을 것입니다). 규약 충돌 → 제외." },
+    { "id": "G-2", "reason": "`~였을지도 모릅니다` 추정 화법 역시 규칙 17 이행 수단. 규약 충돌 → 제외." },
+    { "id": "C-11", "reason": "연결어미 뒤 쉼표는 TTS 호흡 지시다(쉼표 2개 이하 규약이 별도로 통제). 규약 충돌 → 제외." },
+    { "id": "E-2", "reason": "내레이션 합니다체 고정이 문체 규약이므로 동일 종결어미 연속은 의도. `~고 있다`만 별도 분리 채택." },
+    { "id": "E-7", "reason": "다중 화자 대본에서 화계 혼용은 인물 설계의 결과. 자동 판정 부적합." },
+    { "id": "J-1", "id2": "J-2", "reason": "마크다운 장식·따옴표 강조는 발화 라인에 존재할 수 없다(TTS lint가 이미 0건 강제)." },
+    { "id": "B-1", "id2": "B-2", "reason": "로마자는 TTS-LATIN이 ERROR로 이미 차단." },
+    { "id": "C-5", "id2": "C-9", "id3": "C-10", "reason": "이모지·번호 인덱싱·콜론 헤딩은 발화 라인 대상 아님(TTS-EMOJI가 이모지 담당)." },
+    { "id": "A-18", "reason": "명사 앞 좌향 관형구 길이는 형태소 분석 없이 결정론 판정이 불가하다(관형형 어미가 종성으로 실현). 인간 판단 잔존 항목으로 남긴다." },
+    { "id": "F-1", "id2": "F-2", "id3": "F-3", "reason": "상류 F 계열 중 중복 수식·동어 반복은 의도적 대구(규칙 24 리듬 설계)와 구분이 불가. 제외." }
+  ],
+
+  "patterns": [
+    { "id": "A-1", "category": "번역투", "severity": "S1", "threshold": 1, "label": "~에 대해(서)", "patterns": ["에\\s*대해서?\\b", "에\\s*대한\\b"], "fix": "목적격 조사로 직결(X에 대해 논의 → X를 논의)" },
+    { "id": "A-2", "category": "번역투", "severity": "S1", "threshold": 3, "label": "~를 통해 남발", "patterns": ["를\\s*통해", "을\\s*통해", "를\\s*통하여", "을\\s*통하여"], "fix": "~로, ~해서, ~함으로써로 분산" },
+    { "id": "A-3", "category": "번역투", "severity": "S1", "threshold": 1, "label": "~에 있어(서)", "patterns": ["에\\s*있어서?\\b"], "fix": "~에서, ~을 볼 때" },
+    { "id": "A-4", "category": "번역투", "severity": "S2", "threshold": 3, "label": "~라는 점에서", "patterns": ["라는\\s*점에서", "다는\\s*점에서"], "fix": "~서, ~라는 이유로" },
+    { "id": "A-5", "category": "번역투", "severity": "S2", "threshold": 2, "label": "~와 관련하여", "patterns": ["관련하여", "와\\s*관련된", "과\\s*관련된"], "fix": "~에, ~의" },
+    { "id": "A-6", "category": "번역투", "severity": "S2", "threshold": 3, "label": "~에 기반하여/바탕으로", "patterns": ["에\\s*기반하여", "을\\s*바탕으로", "를\\s*바탕으로"], "fix": "~로, ~을 보고" },
+    { "id": "A-7", "category": "번역투", "severity": "S1", "threshold": 1, "label": "가지고 있다 직역", "patterns": ["가지고\\s*있", "를\\s*가진다", "을\\s*가진다", "회의를\\s*가"], "fix": "형용사·동사로 환원(경쟁력을 가지고 있다 → 경쟁력이 강하다)" },
+    { "id": "A-8", "category": "번역투", "severity": "S1", "threshold": 1, "label": "이중 피동 ~되어진다", "patterns": ["되어진", "되어졌", "지어진다", "보여진", "쓰여진", "불려진"], "fix": "능동 또는 단일 피동" },
+    { "id": "A-9", "category": "번역투", "severity": "S2", "threshold": 3, "label": "~에 의해 피동", "patterns": ["에\\s*의해"], "fix": "행위자를 주어로" },
+    { "id": "A-10", "category": "번역투", "severity": "S2", "threshold": 3, "label": "~할 수 있다 남발", "patterns": ["할\\s*수\\s*있", "될\\s*수\\s*있", "ㄹ\\s*수\\s*있"], "fix": "단언 가능한 곳은 단언으로. 단 규칙 17 추정 화법은 예외" },
+    { "id": "A-11", "category": "번역투", "severity": "S2", "threshold": 3, "label": "~을 위해 목적절 남발", "patterns": ["을\\s*위해", "를\\s*위해", "기\\s*위해"], "fix": "~려고, ~위한" },
+    { "id": "A-15", "category": "번역투", "severity": "S2", "threshold": 2, "label": "인지 동사 직역(시사/제시/나타내)", "patterns": ["시사한다", "시사합니다", "제시한다", "나타내고\\s*있", "보여주고\\s*있"], "fix": "~에 따르면 ~이다로 분리" },
+    { "id": "A-16", "category": "번역투", "severity": "S1", "threshold": 5, "label": "영어 대명사 직역(그/그것/그들) 과다", "scope": "scene", "patterns": ["\\b그는\\b", "\\b그가\\b", "\\b그를\\b", "\\b그의\\b", "\\b그들", "\\b그녀"], "fix": "영형(생략) 또는 호칭·명사구로", "tension_note": "장영실 얼굴 미노출·무명 화법 때문에 의도적 사용이 있다. 장면 단위 5회 초과만 신호로 본다." },
+    { "id": "A-19", "category": "번역투", "severity": "S2", "threshold": 1, "label": "이중 조사 ~에서의/~으로의", "patterns": ["에서의", "으로의", "에로의", "에의", "으로부터의", "로부터의"], "fix": "절·구로 풀어쓰기" },
+
+    { "id": "C-7", "category": "구조", "severity": "S2", "threshold": 1, "label": "먼저·반면·결국 3단 공식", "scope": "sequence", "sequence": ["먼저", "반면", "결국"], "fix": "접속사 1~2개로 줄이거나 본문에 녹여 제거" },
+    { "id": "C-8", "category": "구조", "severity": "S2", "threshold": 2, "label": "A인가·B인가 대구 반복", "patterns": ["인가[^.]{0,20}인가", "일까[^.]{0,20}일까"], "fix": "한 번만 살리고 나머지는 평서문으로" },
+
+    { "id": "D-1", "category": "AI 관용구", "severity": "S1", "threshold": 2, "label": "결산 피벗(결론적으로/이를 통해/요약하면)", "patterns": ["결론적으로", "이를\\s*통해", "그러므로", "요약하면", "정리하면", "종합하면"], "fix": "다른 종결로 치환하거나 삭제" },
+    { "id": "D-2", "category": "AI 관용구", "severity": "S1", "threshold": 1, "label": "시사하는 바가 크다/주목할 만하다", "patterns": ["시사하는\\s*바", "주목할\\s*만", "눈여겨볼\\s*만"], "fix": "삭제 또는 구체 결론으로" },
+    { "id": "D-3", "category": "AI 관용구", "severity": "S1", "threshold": 1, "label": "본질적으로/핵심적으로", "patterns": ["본질적으로", "핵심적으로", "궁극적으로", "근본적으로"], "fix": "삭제" },
+    { "id": "D-4", "category": "AI 관용구", "severity": "S1", "threshold": 3, "label": "hype 어휘", "patterns": ["파격적", "압도적", "획기적", "치명적", "혁신적", "놀라운\\s*발전", "엄청난"], "fix": "구체 수치·사실로 환원(규칙 3 추상어 금지와 정합)" },
+    { "id": "D-6", "category": "AI 관용구", "severity": "S1", "threshold": 1, "label": "결말 공식(~할 때다/~해야 한다)", "patterns": ["할\\s*때입니다", "할\\s*때다", "해야\\s*합니다", "해야\\s*한다", "지금이야말로"], "fix": "평서로 닫거나 삭제" },
+    { "id": "D-7", "category": "AI 관용구", "severity": "S2", "threshold": 3, "label": "X에서 Y로 변환 공식 반복", "patterns": ["에서[^.]{1,12}으로\\s", "에서[^.]{1,12}로\\s"], "fix": "한 번만 살리고 나머지는 일반 서술" },
+
+    { "id": "E-1", "category": "리듬", "severity": "S2", "threshold": 1, "label": "문장 길이 균일(음절 표준편차 낮음)", "scope": "document-custom", "custom": "sentence_length_stdev", "min_stdev": 5.0, "fix": "단문 연타/장문을 의도적으로 섞어라(규칙 24)" },
+    { "id": "E-2b", "category": "리듬", "severity": "S2", "threshold": 3, "label": "진행형 ~고 있다 남발", "patterns": ["고\\s*있습니다", "고\\s*있었습니다", "고\\s*있다"], "fix": "단순 시제로 환원 가능하면 환원" },
+
+    { "id": "F-4", "category": "수식", "severity": "S2", "threshold": 12, "label": "한자어 명사화(-성/-적/-화) 누적", "patterns": ["[가-힣]{2,}성을", "[가-힣]{2,}성이", "[가-힣]{2,}적인", "[가-힣]{2,}적으로", "[가-힣]{2,}화를", "[가-힣]{2,}화가"], "fix": "동사·형용사 어근으로 환원" },
+    { "id": "F-5", "category": "수식", "severity": "S2", "threshold": 3, "label": "~적 N 추상 체인", "patterns": ["적\\s+[가-힣]{2,}"], "fix": "명사+명사 또는 풀어쓰기" },
+
+    { "id": "G-3", "category": "hedging", "severity": "S2", "threshold": 4, "label": "안전 균형 lexicon", "patterns": ["양쪽\\s*모두", "두\\s*가지\\s*모두", "장점도\\s*있지만", "신중하게", "균형을\\s*이"], "fix": "화자 입장으로 치환" },
+
+    { "id": "H-1", "category": "접속사", "severity": "S1", "threshold": 4, "label": "문두 접속사 남발", "scope": "sentence-initial", "patterns": ["^또한", "^따라서", "^즉", "^나아가", "^아울러", "^게다가", "^더욱이", "^한편"], "fix": "대량 제거 — 문장 자체가 흐름을 잡게(규칙 21)" },
+    { "id": "H-3", "category": "접속사", "severity": "S1", "threshold": 3, "label": "메타 진입(이는·이 점에서)", "scope": "sentence-initial", "patterns": ["^이는", "^이\\s*점에서", "^이\\s*관점에서", "^이\\s*말은", "^이러한"], "fix": "본문에 녹이거나 삭제" },
+    { "id": "H-4", "category": "접속사", "severity": "S2", "threshold": 2, "label": "즉 남발", "patterns": ["\\s즉\\s", "^즉\\s"], "fix": "1회로 제한" },
+
+    { "id": "I-1", "category": "형식명사", "severity": "S2", "threshold": 3, "label": "~인 것이다/한 것입니다 결말", "patterns": ["것입니다[.!?…]?\\s*$", "것이다[.!?…]?\\s*$", "것이었습니다[.!?…]?\\s*$"], "exclude": ["을\\s*것", "의\\s*것"], "exclude_note": "`~았을 것입니다`는 규칙 17 추정 화법, `~의 것이었습니다`는 소유 명사 것 — 둘 다 AI-티가 아니다.", "scope": "sentence", "fix": "평서형으로 직결" },
+    { "id": "I-2", "category": "형식명사", "severity": "S2", "threshold": 1, "label": "X은 ~라는 점에 있다", "patterns": ["점에\\s*있"], "fix": "X는 ~다 직설로" },
+    { "id": "I-3", "category": "형식명사", "severity": "S2", "threshold": 2, "label": "~다는 뜻이다/의미다", "patterns": ["다는\\s*뜻", "다는\\s*의미", "라는\\s*뜻", "라는\\s*의미"], "fix": "본문에 풀어 쓰기" },
+    { "id": "I-4", "category": "형식명사", "severity": "S2", "threshold": 3, "label": "권고형 결말 반복", "patterns": ["해야\\s*할\\s*것", "필요가\\s*있습니다", "바람직합니다"], "fix": "평서·단언으로" },
+
+    { "id": "SUNNY-1", "category": "Sunny", "severity": "S2", "threshold": 6, "label": "접미사 -적 과다", "patterns": ["[가-힣]{2,}적(?=[\\s은는이가을를의])"], "fix": "역할 없으면 명사·동사·형용사로 환원" },
+    { "id": "SUNNY-2", "category": "Sunny", "severity": "S2", "threshold": 2, "label": "조사 의 연쇄(2회 이상 한 문장)", "scope": "sentence-custom", "custom": "possessive_chain", "min_chain": 4, "fix": "명사구를 풀거나 하나를 뺀다" },
+    { "id": "SUNNY-3", "category": "Sunny", "severity": "S2", "threshold": 8, "label": "접미사 들 과다", "patterns": ["[가-힣]{2,}들(?=[\\s은는이가을를의,.])"], "fix": "실제 복수·분포가 아니면 뺀다" },
+    { "id": "SUNNY-4", "category": "Sunny", "severity": "S2", "threshold": 6, "label": "의존명사 것 과다", "patterns": ["\\s것[은는이가을를의]", "\\s것입니다", "\\s것이다"], "fix": "술어를 미루는 껍데기면 직결" },
+    { "id": "SUNNY-5", "category": "Sunny", "severity": "S2", "threshold": 6, "label": "있는/있다는 완충재", "patterns": ["\\s있는\\s", "있다는\\s"], "fix": "명사 앞 완충재면 뺀다" },
+    { "id": "SUNNY-7", "category": "Sunny", "severity": "S2", "threshold": 1, "label": "에게 있어/함에 있어", "patterns": ["에게\\s*있어", "함에\\s*있어", "하는\\s*데\\s*있어", "관계에\\s*있"], "fix": "쉬운 술어·조사로" }
+  ]
+}
