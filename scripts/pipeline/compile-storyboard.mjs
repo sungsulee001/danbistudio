@@ -573,7 +573,7 @@ function parseAssetsDoc(markdown) {
     } else if (type === 'bgm') {
       bgm.push({ assetId, path: filePath, duration: Number(durationSec), cutRange: cutId });
     } else if (type === 'sfx') {
-      const cut = cutId.match(/CUT-\d{2}/)?.[0];
+      const cut = cutId.match(/CUT-\d{2}[A-Z]?/)?.[0];
       if (!cut) throw new Error(`03-assets.md: sfx row ${assetId} has no cut_id`);
       const gainCell = line.match(/A3 게인\s*([+-−]?[\d.]+)/)?.[1];
       sfx.set(cut, {
@@ -694,7 +694,7 @@ function parseAdoptedCutFileTable(body, extension, headerPattern) {
   for (const line of body.split('\n')) {
     if (!isTableRow(line)) continue;
     const cells = cellsOf(line);
-    if (!/^CUT-\d{2}$/.test(cells[1] ?? '')) continue;
+    if (!/^CUT-\d{2}[A-Z]?$/.test(cells[1] ?? '')) continue;
     const file = lastMatch(stripStrike(cells[fileColumn ?? 2] ?? ''), CUT_FILE_RE);
     if (!file || !file.endsWith(extension)) continue;
     map.set(cells[1], { file, row: cells });
@@ -726,7 +726,7 @@ function parseCutFileOverrides(markdown, extension) {
       if (!isTableRow(line)) continue;
       if (REJECT_MARKERS.test(line)) continue;
       if (!/채택/.test(line)) continue;
-      const cut = line.match(/CUT-\d{2}/)?.[0];
+      const cut = line.match(/CUT-\d{2}[A-Z]?/)?.[0];
       if (!cut) continue;
       const file = lastMatch(stripStrike(line), CUT_FILE_RE);
       if (!file || !file.endsWith(extension)) continue;
@@ -875,7 +875,7 @@ function parseA2vTable(markdown) {
       continue;
     }
     if (column === null) continue;               // 대상 아닌 표의 CUT-NN 행 — 덮어쓰지 않는다
-    if (!/^CUT-\d{2}$/.test(cells[1] ?? '')) continue;
+    if (!/^CUT-\d{2}[A-Z]?$/.test(cells[1] ?? '')) continue;
     const fileRaw = lastMatch(stripStrike(cells[column.clip] ?? ''), CUT_FILE_RE);
     // 클립 열은 반드시 .mp4다 — 이미지 열을 잘못 집었을 때 조용히 넘어가지 않게 잠근다(ep2 회귀 원인).
     const file = fileRaw?.endsWith('.mp4') ? fileRaw : undefined;
@@ -918,7 +918,7 @@ function parseSfxGainTable(markdown) {
       const line = stripStrike(rawLine);
       if (REJECT_MARKERS.test(line)) continue;
       const cells = cellsOf(line);
-      const cutId = (cells[1] ?? '').match(/CUT-\d{2}/)?.[0];
+      const cutId = (cells[1] ?? '').match(/CUT-\d{2}[A-Z]?/)?.[0];
       if (!cutId) continue;
       const take = (cells[2] ?? '').match(/r\d+/)?.[0];
       const gainDb = numberCell(cells[5]);
@@ -946,7 +946,7 @@ function parseSfxLedgerRows(markdown) {
     if (!isTableRow(rawLine)) continue;
     const cells = cellsOf(stripStrike(rawLine));
     if (cells.length < 11 || cells[2] !== 'sfx') continue;
-    const cutId = (cells[3] ?? '').match(/CUT-\d{2}/)?.[0];
+    const cutId = (cells[3] ?? '').match(/CUT-\d{2}[A-Z]?/)?.[0];
     if (!cutId) continue;
     const gainCell = rawLine.match(/A3 게인\s*([+-−]?[\d.]+)/)?.[1];
     const gainDb = gainCell === undefined ? 0 : numberCell(gainCell);
@@ -1184,7 +1184,7 @@ function parseCutSourceMap(markdown) {
   const map = new Map();
   for (const line of section[1].split('\n')) {
     const cells = line.split('|').map((cell) => cell.trim());
-    if (cells.length < 5 || !/^CUT-\d{2}$/.test(cells[1])) continue;
+    if (cells.length < 5 || !/^CUT-\d{2}[A-Z]?$/.test(cells[1])) continue;
     map.set(cells[1], {
       source: cells[2],
       imageAssetId: cells[3],
@@ -1539,11 +1539,16 @@ function captionWeight(text) {
 
 function parseStoryboard(markdown) {
   const cuts = [];
-  const sections = markdown.split(/^### (CUT-\d{2})\s*$/m);
+  // 접미 컷(CUT-40A 등, ep2 v1.1 콘티 개정) 지원 — 종전 `CUT-\d{2}`는 접미 컷 헤딩을
+  // **조용히 건너뛰었다**(에러가 아니라 무시). 정렬 키는 parseS6InsertCuts와 동일 규약:
+  // base + 접미/100 (CUT-40A → 40.01 — 40과 41 사이).
+  const sections = markdown.split(/^### (CUT-\d{2}[A-Z]?)\s*$/m);
   for (let i = 1; i < sections.length; i += 2) {
     const id = sections[i];
     const body = sections[i + 1];
-    const no = Number(id.slice(4));
+    const base = Number(id.slice(4, 6));
+    const suffixRank = id.length > 6 ? id.charCodeAt(6) - 64 : 0; // A=1, B=2 ...
+    const no = base + suffixRank / 100;
     const field = (name) => body.match(new RegExp(`^- \\*\\*${name}\\*\\*:\\s*(.+)$`, 'm'))?.[1]?.trim();
 
     const durationPlan = Number(field('duration_seconds')?.match(/^([\d.]+)/)?.[1]);
@@ -3069,7 +3074,7 @@ function kenBurnsKeyframes(cut) {
   // 팬 방향 교차(1080p 기준 px — 렌더 페이로드에서 프로파일 비례 스케일):
   // 0: 우→좌, 1: 좌→우, 2: 하→상, 3: 상→하
   const PAN = 26;
-  const direction = cut.no % 4;
+  const direction = Math.floor(cut.no) % 4; // 접미 컷(no=40.01 등)도 정수 방향 사이클 유지
   const property = direction < 2 ? 'positionX' : 'positionY';
   const magnitude = direction < 2 ? PAN : Math.round(PAN * 0.7);
   const from = direction % 2 === 0 ? magnitude : -magnitude;

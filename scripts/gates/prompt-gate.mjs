@@ -65,7 +65,8 @@ export function loadRules(rulesDir = DEFAULT_RULES_DIR) {
 //    (`- 의도:` / `- 컴파일본:`)를 가진다. 컴파일러 리터럴은 읽기만 하고 건드리지 않는다.
 // ────────────────────────────────────────────────────────────────────────────
 
-const CUT_HEADING = /^#{2,4}\s+(CUT-\d{2,3})\s*$/;
+// 접미 컷(CUT-40A 등, ep2 v1.1) 지원 — 종전 정규식은 접미 컷 헤딩을 조용히 건너뛰었다.
+const CUT_HEADING = /^#{2,4}\s+(CUT-\d{2,3}[A-Z]?)\s*$/;
 const FIELD_LINE = /^-\s+\*\*([a-z_0-9]+)\*\*\s*:\s*(.*)$/i;
 const SUB_FIELD_LINE = /^\s{2,}-\s+(의도|컴파일본)\s*:\s*(.*)$/;
 const HEADING_ANY = /^(#{1,6})\s+/;
