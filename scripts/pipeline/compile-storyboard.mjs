@@ -78,7 +78,20 @@ let SPEAKER_TURN_GAP_SECONDS = 0;
 const ENDING_FADE_SECONDS = 1.0;  // 엔딩 페이드 길이 — 여백을 늘려도 페이드는 1초 고정
 const I2V_SPEED = 0.5;               // [v2 레거시 전용] WAN 16fps 소스 슬로우 (5.06s → 10.12s)
                                      // v3(LTX-2.3 24fps 실모션)에서는 사용하지 않는다 — 배속 1.0 고정.
-const BGM_TRACK_GAIN_DB = -14;       // 나레이션 대비 BGM 게인 (트랙 volumeDb 지원 확인됨)
+// 나레이션 대비 BGM 트랙 게인(트랙 volumeDb 지원 확인됨).
+// **프로덕션별 상수다** — 절대값이 아니라 "BGM 실효 LUFS − 나레이션 LUFS" 비(ep1 검증치 −7.31 LU)가
+// 유지해야 할 계약이고, BGM 소스의 정합 지점과 나레이션 레벨은 에피소드마다 다르다.
+//   ep1: 소스 평균 −15.09 LUFS · 나레이션 −21.78 LUFS → 게인 −14 (인간 검수 통과분, 그대로 보존)
+//   ep2: 소스 정합 −22.30 LUFS · 나레이션 −23.39 LUFS → 게인 −8.4
+//        (= 목표 실효 −30.70 − 소스 −22.30. 03-assets §BGM §러드니스 정합 + 게인 권고의 유도)
+// ep1에 −8.4를 쓰면 BGM이 5.6 LU 과대, ep2에 −14를 쓰면 5.6 LU 과소가 된다 —
+// 그래서 단일 상수를 두지 않고 production_id로 색인한다(미등재 프로덕션은 DEFAULT).
+const BGM_TRACK_GAIN_DB_DEFAULT = -14;
+const BGM_TRACK_GAIN_DB_BY_PRODUCTION = {
+  '2026-07-13-jangyeongsil-silence': -14,
+  '2026-07-29-jagyeongnu-night': -8.4,
+};
+let BGM_TRACK_GAIN_DB = BGM_TRACK_GAIN_DB_DEFAULT;
 // A3 SFX: 절대 레벨은 03-assets §A3 게인 표의 **컷별** volumeDb가 담당하므로 트랙 게인은 0dB이다.
 // (컷별 편차가 30dB에 달해 BGM식 트랙 일괄 게인으로는 표현할 수 없다 — 03-assets §S6 통합 설계)
 const SFX_TRACK_GAIN_DB = 0;
@@ -216,6 +229,73 @@ const S6_CUT_ADJUSTMENTS_BY_PRODUCTION = {
       advisory: '대안 테이크(r1 — 페인터리 최상이나 준정지) 인간 선택 여지',
     },
   },
+
+  // ── ep2 「자격루의 밤」 ─────────────────────────────────────────────────────
+  // 출처: 03-assets.md §I2V 1차 §S6 이관 플래그 / §I2V 2차 채택 12컷 비고 /
+  //       §컷 렌더 §S6 크롭 이관 목록 / §A2V §미해소 플래그 / §A2V §길이 처리와 S6 인계.
+  // 원칙: **수치가 문서에 있는 것만 자동 적용**한다(trimOut). 크롭 비율·트림 지점이 명시되지 않은
+  //       권고는 advisory로만 두어 경고 + todo 마커로 인간에게 넘긴다(임의 수치 발명 금지).
+  '2026-07-29-jagyeongnu-night': {
+    'CUT-04': {
+      advisory: '원경 현대풍 등주·점경 발광체 잔존(S4 승계) — 크롭 또는 비네팅 이관. 수치 미정',
+    },
+    'CUT-13': {
+      advisory: '좌측 모래시계(서양 사시계 = 시대착오) 3/3 잔존(S4 승계) — 좌측 크롭 필수. 비율 미정 — 편집기 육안 지정',
+    },
+    'CUT-14': {
+      advisory: '지면 글리프 변형 + 푸시인(나노바나나 스틸의 I2V 취약성, ep1 CUT-38 재현) — 정지컷 대체 검토',
+    },
+    'CUT-16': {
+      // A2V. 클립 9.042s가 콘티 9.0s를 덮으므로 길이 처리는 불요(§길이 처리 표). 푸시인만 이관.
+      advisory: 'A2V 푸시인 +4.2% · 말미 노출비 0.892(프레임 락·시드 3회 소진) — 앞구간 사용 또는 재생성 재개. 사용 구간 미정',
+    },
+    'CUT-18': {
+      trimOut: 7.95,
+      note: 'A2V 발화 종료 직후 컷 — 리드 패딩 0.300s + 보이스 7.649s = 7.949s (§길이 처리 "발화 후 정지 프레임 또는 조기 컷", CUT-21 명시값과 동일 규약)',
+    },
+    'CUT-20': {
+      advisory: '말미 회전으로 노년 인물 배면 노출 — 대사 컷 앞구간 사용 권장. 전환 지점 미정',
+    },
+    'CUT-21': {
+      trimOut: 3.50,
+      note: 'A2V 조기 컷 — 03-assets §길이 처리 명시값 "발화 종료 3.50초 지점"(발화 0.300~3.496s / 클립 말미 정지 2.880s 절단)',
+    },
+    'CUT-25': {
+      trimOut: 3.02,
+      note: 'A2V 발화 종료 직후 컷 — 리드 패딩 0.300s + 보이스 2.716s = 3.016s (§길이 처리)',
+    },
+    'CUT-27': {
+      advisory: '우상단 손 침입 3/3 잔존(S4 승계) — 상단 크롭 이관. 비율 미정',
+    },
+    'CUT-33': {
+      trimOut: 4.54,
+      note: 'A2V 발화 종료 직후 컷 — 리드 패딩 0.300s + 보이스 4.234s = 4.534s (§길이 처리)',
+    },
+    'CUT-39': {
+      advisory: '분할 프레임 변형·좌패널 내용 변화(나노바나나 스틸 취약성) — 정지컷 대체 검토',
+    },
+    'CUT-41': {
+      advisory: '★whip pan — 블러 구간에 스케치/낙서 아티팩트. 블러 구간 내 컷 전환 필수(ep1 CUT-28 동일 처리). 전환 프레임은 편집기에서 지정',
+    },
+    'CUT-51': {
+      advisory: '말미 심도 뒤 인물 정면화 — 장영실 얼굴 미노출 계약 위험. 말미 트림 또는 인간 확인 필요(트림 지점 미정). 전경 흑색 봉(가마채 오독) 하단 크롭도 S4 승계 이관',
+    },
+    'CUT-58': {
+      advisory: '손 침입 3/3 · 먹 획 글자형(no-text 경미 위반, S4 승계) — 상단 크롭 이관. 비율 미정',
+    },
+    'CUT-59': {
+      advisory: '말미 처마 아래 흐릿한 인영(무인 컷 침입) — 말미 트림 권장. 트림 지점 미정',
+    },
+    'CUT-60': {
+      advisory: '말미 한자 글리프 변형(지면 인서트 취약성) — 앞구간 사용 권장. 사용 구간 미정 (★dolly zoom은 실현 성공)',
+    },
+    'CUT-64': {
+      advisory: '가장자리 암전이 원형 아이리스로 과대 해석(3테이크 공통) — 말미 트림 권장. 트림 지점 미정',
+    },
+    'CUT-67': {
+      advisory: '좌측 천막형 물체 환각 3/3 + 우측 흰 파선(S4 승계) — 좌·우 크롭 이관. 비율 미정 — 편집기 육안 지정',
+    },
+  },
 };
 
 // main()에서 production_id(+--cut-adjustments)로 확정한다. 기본은 빈 표 = 자동 보정 없음.
@@ -236,7 +316,11 @@ const SFX_CUT_ADJUSTMENTS_BY_PRODUCTION = {
       advisory: '콘티 "릴레이는 소리가 주인공" — 기준 -18dBFS보다 +3~4dB 상향 검토(인간 청취 판단, 자동 적용 없음)',
     },
     'CUT-53': {
-      advisory: '콘티 "릴레이는 소리가 주인공" — 기준 -18dBFS보다 +3~4dB 상향 검토(인간 청취 판단, 자동 적용 없음)',
+      // 03-assets §BGM §S6 인계 플래그 5 — bgm-05-climax의 종소리 여유가 최소(+5.24dB)여서
+      // BGM을 깎는 대신 SFX 클립 게인을 올리는 쪽을 BGM 에이전트가 대안으로 제시했다(§A3는 클립별 게인 지원).
+      // 콘티 "릴레이는 소리가 주인공" 상향 검토(+3~4dB)와도 방향이 일치한다. 원 게인 −8.3 → −5.3.
+      gainOffsetDb: 3,
+      note: 'BGM §S6 인계 플래그 5 대안 적용 — 종소리 여유 최소(+5.24dB) 대응 + 콘티 "릴레이는 소리가 주인공"(원 게인 −8.3 → −5.3)',
     },
   },
 };
@@ -352,6 +436,23 @@ async function probeHasAudioStream(filePath) {
 const round = (value) => Number(value.toFixed(ROUND));
 
 // ---------------------------------------------------------------------------
+// 0. 개행 정규화 — **모든 vault 마크다운 파서 진입점의 유일한 통로**
+// ---------------------------------------------------------------------------
+// 이 컴파일러의 라인 단위 정규식 상당수는 `$` 앵커를 쓰면서 `m` 플래그가 없다. 대표적으로
+// sectionBody/sectionsBodies의 `/^(#{1,6})\s+(.*)$/`는 `split('\n')` 결과의 각 줄에 적용되므로
+// CRLF 파일에서는 줄 끝에 `\r`이 남는다. `.`는 `\r`을 매치하지 못하고 `m` 없는 `$`는 문자열 끝만
+// 인정하므로 **모든 헤딩이 미매치**되고(→ 섹션 파싱 전면 붕괴), parseScriptDialogues의
+// `:\n` 리터럴과 `(.+)$` 도 같은 방식으로 무너진다(→ "나레이션/대사 블록 없음" 오진).
+// DanbiVault는 `core.autocrlf=true`라 **체크아웃만으로 CRLF가 되어 재발**하므로,
+// 파일을 읽은 직후 한 곳에서 LF로 정규화한다(정규식 개별 수정은 재발을 막지 못한다).
+// .gitattributes(`*.md text eol=lf`)는 2차 방어선이다 — 이 정규화가 본질이다.
+const normalizeNewlines = (text) => String(text).replace(/\r\n?/g, '\n');
+
+async function readMarkdown(filePath) {
+  return normalizeNewlines(await readFile(filePath, 'utf8'));
+}
+
+// ---------------------------------------------------------------------------
 // 1. 입력 파싱
 // ---------------------------------------------------------------------------
 
@@ -436,13 +537,17 @@ const lastMatch = (text, regex) => {
 const cellsOf = (line) => line.split('|').map((cell) => cell.trim());
 const isTableRow = (line) => line.trimStart().startsWith('|') && !/^\s*\|[\s:|-]+\|\s*$/.test(line);
 
+// 헤딩 정규식. `(.*?)\s*$`는 CRLF 잔여 `\r`을 흡수하는 형태다 —
+// readMarkdown()이 이미 정규화하지만, 문자열이 다른 경로로 들어와도 헤딩 인식이 무너지지 않게 한다(§0).
+const HEADING_RE = /^(#{1,6})\s+(.*?)\s*$/;
+
 // 헤딩 술어에 맞는 첫 섹션 본문(다음 동급/상위 헤딩 전까지)
 function sectionBody(markdown, predicate) {
   const lines = markdown.split('\n');
   let start = -1;
   let level = 0;
   for (let i = 0; i < lines.length; i += 1) {
-    const heading = lines[i].match(/^(#{1,6})\s+(.*)$/);
+    const heading = lines[i].match(HEADING_RE);
     if (!heading) continue;
     if (start === -1) {
       if (predicate(heading[2])) {
@@ -466,7 +571,7 @@ function sectionsBodies(markdown, predicate, { after } = {}) {
   let start = -1;
   let level = 0;
   for (let i = Math.max(startIndex, 0); i < lines.length; i += 1) {
-    const heading = lines[i].match(/^(#{1,6})\s+(.*)$/);
+    const heading = lines[i].match(HEADING_RE);
     if (!heading) continue;
     if (start !== -1 && heading[1].length <= level) {
       bodies.push(lines.slice(start, i).join('\n'));
@@ -638,17 +743,64 @@ function parseTtsSegmentsV3(markdown) {
   return segments;
 }
 
+/**
+ * §A2V 립싱크 섹션 → 컷별 { 채택 클립 파일, 바인딩 TTS wav, 문서 길이 }.
+ *
+ * 열 위치도 섹션 구조도 **프로덕션마다 다르다** — 위치 하드코딩은 ep2에서 무너졌다:
+ *  - ep1 §A2V 립싱크 5컷(h3, 표 1개): | 컷 | 채택 파일 | 오디오(확정본) | seed | 프레임/실측 | …
+ *  - ep2 §A2V 립싱크 6컷(h2, 표 3개): | 컷 | 입력 이미지 | 입력 오디오(채택 확정본) | 채택 클립 | 시드 | 프레임/클립 | …
+ *    → 2열이 클립이 아니라 **입력 이미지(.png)** 이고, 같은 h2 섹션 안에
+ *      §실증 D 푸시인 표·§길이 처리 표가 **또 CUT-NN을 1열로 갖는다**. 종전 파서는 이 두 표의 행으로
+ *      좋은 행을 덮어써 file/audioFile을 undefined로 만들었다(= "바인딩된 TTS 세그먼트를 찾지 못했습니다").
+ *
+ * 그래서 ①표 단위로 헤더를 읽어 ②"채택 클립/파일" 열과 "오디오" 열을 **둘 다** 가진 표만 소비한다.
+ * 헤더가 없는 표(구 형식)만 종전처럼 2열=클립 / 3열=오디오로 폴백한다 — ep1 동작 보존.
+ */
+const A2V_CLIP_HEADER_RE = /채택\s*(클립|파일|영상)/;
+const A2V_AUDIO_HEADER_RE = /오디오/;
+const A2V_LENGTH_HEADER_RE = /프레임/;
+
+function parseA2vTableColumns(headerCells) {
+  // 오디오 열은 "입력 오디오(채택 확정본)"처럼 '채택'을 품을 수 있으므로 클립 열 탐색에서 먼저 배제한다.
+  const audio = headerCells.findIndex((cell, i) => i > 1 && A2V_AUDIO_HEADER_RE.test(cell));
+  const clip = headerCells.findIndex(
+    (cell, i) => i > 1 && i !== audio && A2V_CLIP_HEADER_RE.test(cell),
+  );
+  if (clip < 0 || audio < 0) return null;
+  const length = headerCells.findIndex((cell, i) => i > 1 && A2V_LENGTH_HEADER_RE.test(cell));
+  return { clip, audio, length: length > 1 ? length : 5 };
+}
+
 function parseA2vTable(markdown) {
   const body = sectionBody(markdown, (heading) => /A2V 립싱크/.test(heading));
   if (!body) return new Map();
+  const lines = body.split('\n');
+  const isHeaderRow = (line) => isTableRow(line) && /^컷/.test(cellsOf(line)[1] ?? '');
+  // 헤더 행이 하나도 없는 구 형식 문서만 위치 폴백(2열=클립 / 3열=오디오)을 쓴다.
+  const hasHeader = lines.some(isHeaderRow);
+  const LEGACY = { clip: 2, audio: 3, length: 5 };
+
   const map = new Map();
-  for (const line of body.split('\n')) {
-    if (!isTableRow(line)) continue;
+  let column = hasHeader ? null : LEGACY;
+  for (const line of lines) {
+    // 표 밖(빈 줄·본문·불릿)으로 나오면 열 해석을 리셋한다 — 다음 표에 전 표의 열을 물려주지 않는다.
+    if (!line.trimStart().startsWith('|')) {
+      column = hasHeader ? null : LEGACY;
+      continue;
+    }
+    if (!isTableRow(line)) continue;            // 구분선(|---|---|)
     const cells = cellsOf(line);
+    if (isHeaderRow(line)) {
+      column = parseA2vTableColumns(cells);      // null이면 이 표는 대상이 아니다
+      continue;
+    }
+    if (column === null) continue;               // 대상 아닌 표의 CUT-NN 행 — 덮어쓰지 않는다
     if (!/^CUT-\d{2}$/.test(cells[1] ?? '')) continue;
-    const file = lastMatch(stripStrike(cells[2] ?? ''), CUT_FILE_RE);
-    const audioFile = lastMatch(stripStrike(cells[3] ?? ''), TTS_FILE_RE);
-    const docDuration = Number(lastMatch(cells[5] ?? '', /([\d.]+)s/g)?.replace('s', ''));
+    const fileRaw = lastMatch(stripStrike(cells[column.clip] ?? ''), CUT_FILE_RE);
+    // 클립 열은 반드시 .mp4다 — 이미지 열을 잘못 집었을 때 조용히 넘어가지 않게 잠근다(ep2 회귀 원인).
+    const file = fileRaw?.endsWith('.mp4') ? fileRaw : undefined;
+    const audioFile = lastMatch(stripStrike(cells[column.audio] ?? ''), TTS_FILE_RE);
+    const docDuration = Number(lastMatch(cells[column.length] ?? '', /([\d.]+)s/g)?.replace('s', ''));
     map.set(cells[1], { file, audioFile, docDuration });
   }
   return map;
@@ -749,7 +901,11 @@ function parseSfxAssets(markdown, { mediaRoot, paths }) {
 // 업스케일 산출 매핑: 03-assets §업스케일 섹션(다른 에이전트 append 예정)의 표가 있으면 그것이 권위,
 // 없으면 `clips-v3-1080p\CUT-NN.mp4` 규칙을 가정한다(가정임을 로그로 명시).
 function parseUpscaleMap(markdown) {
-  const body = sectionBody(markdown, (heading) => /업스케일/.test(heading) && !/체인/.test(heading));
+  // 권위는 「매핑 표 (원본 → 1080p) — S6 소비 기준」 소절이다(ep1·ep2 공통 표기).
+  // 상위 헤딩은 "업스케일 … 체인 N클립"이라 종전의 `!/체인/` 술어로는 영원히 걸리지 않았고,
+  // 그래서 규칙 가정(`<upscaled>\CUT-NN.mp4`)으로만 동작했다 — 결과는 같았지만 표를 읽지 않았다.
+  const body = sectionBody(markdown, (heading) => /매핑 표/.test(heading) && /1080p/.test(heading))
+    ?? sectionBody(markdown, (heading) => /업스케일/.test(heading) && !/체인/.test(heading));
   if (!body) return null;
   const map = parseAdoptedCutFileTable(body, '.mp4', /채택|클립|파일|1080p/);
   return map.size > 0 ? new Map([...map].map(([cut, entry]) => [cut, entry.file])) : null;
@@ -1042,8 +1198,27 @@ async function resolveCutAssetsV3(cuts, assetsDoc, args, sourceMap, warnings) {
       if (cut.a2vSegmentKey && boundKey && cut.a2vSegmentKey !== boundKey) {
         throw new Error(`${cut.id}: A2V 세그먼트 불일치 — 콘티 ${cut.a2vSegmentKey} / 03-assets ${boundKey}`);
       }
+      // 콘티가 장면 수준(ep2 "N04")만 적은 경우: 03-assets 표의 오디오 열이 세그먼트를 확정하고,
+      // 콘티의 장면 참조는 그 결과가 같은 장면인지 검증하는 데만 쓴다(오바인딩 방어).
+      if (!cut.a2vSegmentKey && boundKey && cut.a2vSceneRef && !boundKey.startsWith(cut.a2vSceneRef)) {
+        throw new Error(
+          `${cut.id}: A2V 장면 불일치 — 콘티 a2v 장면 참조 ${cut.a2vSceneRef} / 03-assets 바인딩 ${boundKey}`,
+        );
+      }
       cut.a2vSegmentKey = cut.a2vSegmentKey ?? boundKey;
-      if (!cut.a2vSegmentKey) throw new Error(`${cut.id}: A2V 컷이지만 바인딩된 TTS 세그먼트를 찾지 못했습니다`);
+      if (!cut.a2vSegmentKey) {
+        throw new Error(
+          `${cut.id}: A2V 컷이지만 바인딩된 TTS 세그먼트를 찾지 못했습니다 — `
+          + `콘티 a2v="${cut.a2vSceneRef ?? '세그먼트·장면 참조 없음'}" / `
+          + `03-assets §A2V 표 오디오 열="${row.audioFile ?? '미해석'}". `
+          + '§A2V 표에 "채택 클립/파일" 열과 "오디오" 열이 모두 있는지, 오디오 셀에 `N##-##-*.wav`가 있는지 확인하십시오',
+        );
+      }
+      if (!row.file) {
+        throw new Error(
+          `${cut.id}: §A2V 표에서 채택 클립(.mp4)을 해석하지 못했습니다 — "채택 클립/파일" 열 표기를 확인하십시오`,
+        );
+      }
     }
 
     // 매핑 표 교차 검증(콘티 계약 헤딩 — v3 내용). 어긋나면 경고만(에셋 해석은 03-assets가 원천).
@@ -1140,11 +1315,12 @@ function parseScriptDialogues(markdown) {
   for (let i = 1; i < blocks.length; i += 2) {
     const scene = Number(blocks[i]);
     const body = blocks[i + 1];
-    const sectionMatch = body.match(/- \*\*나레이션\/대사\*\*:\n([\s\S]*?)(?=^- \*\*)/m);
+    // `\r?\n` / `(.+?)\s*$` — CRLF 잔여 `\r`에도 무너지지 않는 형태(§0 정규화의 2차 방어).
+    const sectionMatch = body.match(/- \*\*나레이션\/대사\*\*:\r?\n([\s\S]*?)(?=^- \*\*)/m);
     if (!sectionMatch) throw new Error(`01-script.md: scene N${blocks[i]} has no 나레이션/대사 block`);
     const lines = [];
     for (const raw of sectionMatch[1].split('\n')) {
-      const line = raw.match(/^\s+-\s+([^:]+):\s*(.+)$/);
+      const line = raw.match(/^\s+-\s+([^:]+):\s*(.+?)\s*$/);
       if (line) lines.push({ speaker: line[1].trim(), text: line[2].trim() });
     }
     if (lines.length === 0) throw new Error(`01-script.md: scene N${blocks[i]} has no dialogue lines`);
@@ -1298,11 +1474,17 @@ function parseStoryboard(markdown) {
     }
     const bgmCue = field('bgm_cue')?.match(/^(start|change|continue|stop)/)?.[1] ?? 'continue';
 
-    // A2V(립싱크) 컷 — 클립에 보이스가 내장돼 있다. "예 — N04-02(세종) 립싱크" 형식에서
-    // 바인딩된 TTS 세그먼트 키까지 함께 읽어 A1 트랙 이중 배치를 막는다(오디오 단일화 규칙).
+    // A2V(립싱크) 컷 — 클립에 보이스가 내장돼 있다. 바인딩된 TTS 세그먼트 키를 함께 읽어
+    // A1 트랙 이중 배치를 막는다(오디오 단일화 규칙).
+    // 표기는 **프로덕션마다 다르다**:
+    //   ep1 "예 — N04-02(세종) 립싱크"     → 세그먼트 수준(N04-02)까지 명시
+    //   ep2 "예 — N04(선임 생도) 립싱크"    → **장면 수준(N04)만** 명시
+    // 따라서 세그먼트 키는 있을 때만 취하고, 없으면 장면 참조만 보관한다. 실제 바인딩은
+    // 03-assets §A2V 표의 오디오 열이 권위이며(resolveCutAssetsV3), 장면 참조는 그 결과의 교차 검증용이다.
     const a2vRaw = field('a2v') ?? '아니오';
     const isA2V = /^예/.test(a2vRaw);
     const a2vSegmentKey = isA2V ? a2vRaw.match(/N\d{2}-\d{2}/)?.[0] : undefined;
+    const a2vSceneRef = isA2V ? a2vRaw.match(/N\d{2}/)?.[0] : undefined;
 
     if (!Number.isFinite(durationPlan) || !Number.isFinite(scene)) {
       throw new Error(`${id}: duration_seconds/narration_ref parse failure`);
@@ -1314,7 +1496,7 @@ function parseStoryboard(markdown) {
     cuts.push({
       id, no, durationPlan, scene, transition: transitionRaw, chapter, subtitle, isTitleCard, bgmCue,
       isI2V: /^I2V/i.test(motion),
-      isA2V, a2vSegmentKey,
+      isA2V, a2vSegmentKey, a2vSceneRef,
       zoomOut: /(zoom-out|pull-back)/i.test(motion),
     });
   }
@@ -1733,14 +1915,28 @@ function computeTimelineV3(cuts, ttsSegments, warnings, preferStill = false, opt
     }
     const requiredEnd = audioAtFinal + tail;
     if (requiredEnd > at + 0.001) {
-      // 고정 길이(S6 삽입) 컷은 늘리지 않는다 — 늘리면 배속 1.0 계약이 깨진다.
-      // 장면 안에서 늘릴 수 있는 마지막 컷을 늘리고, 그 뒤 컷들은 같은 양만큼 뒤로 민다(갭·중첩 0 유지).
+      // 늘리면 안 되는 컷이 두 종류 있다 — 둘 다 늘리는 순간 배속 1.0 계약이 깨진다:
+      //  ① 고정 길이(S6 삽입) 컷 — fixedDuration
+      //  ② **A2V 앵커 컷(pinned)** — 길이가 클립 유효 길이로 고정돼 있고 클립에 보이스가 내장돼 있다.
+      //     늘리면 buildProject에서 sourceLength < duration이 되어 `atempo`로 **내장 보이스가
+      //     타임스트레치**된다(실측: ep2 CUT-18이 0.299s 늘어나 atempo=0.964 = 발화 3.6% 신장·립싱크 이탈).
+      //     오디오 우선 원칙(03-assets §길이 처리)에 정면으로 어긋나므로 성장 대상에서 제외한다.
+      // 늘릴 수 있는 마지막 컷을 늘리고, 그 뒤 컷들은 같은 양만큼 뒤로 민다(갭·중첩 0 유지).
       const sceneIndices = placedCuts
         .map((cut, index) => (cut.scene === scene ? index : -1))
         .filter((index) => index >= 0);
-      const growIndex = [...sceneIndices].reverse()
-        .find((index) => !Number.isFinite(placedCuts[index].fixedDuration))
-        ?? sceneIndices[sceneIndices.length - 1];
+      const growable = (index) => !Number.isFinite(placedCuts[index].fixedDuration)
+        && !placedCuts[index].pinned;
+      const growIndex = [...sceneIndices].reverse().find(growable)
+        // 장면이 A2V/고정 컷으로만 이뤄진 예외 — 종전처럼 마지막 컷을 늘리되 경고로 남긴다.
+        ?? (() => {
+          const fallback = sceneIndices[sceneIndices.length - 1];
+          warnings.push(
+            `N${String(scene).padStart(2, '0')}: 늘릴 수 있는 자유 컷이 없어 ${placedCuts[fallback].id}를 연장합니다 `
+            + '— A2V/고정 컷이면 배속이 1.0에서 벗어납니다(내장 보이스 타임스트레치 주의)',
+          );
+          return fallback;
+        })();
       const extra = requiredEnd - at;
       const grow = placedCuts[growIndex];
       grow.duration = round(grow.duration + extra);
@@ -2725,9 +2921,10 @@ async function main() {
   const args = parseArgs(process.argv);
   const steps = args.steps.split(',').map((step) => step.trim());
 
-  const storyboardMd = await readFile(args.storyboard, 'utf8');
-  const assetsMd = await readFile(args.assets, 'utf8');
-  const scriptMd = await readFile(args.script, 'utf8'); // 전체 자막 원문(문장 분할 소스)
+  // vault 마크다운은 전부 readMarkdown()을 통해서만 읽는다 — CRLF 정규화 단일 관문(§0).
+  const storyboardMd = await readMarkdown(args.storyboard);
+  const assetsMd = await readMarkdown(args.assets);
+  const scriptMd = await readMarkdown(args.script); // 전체 자막 원문(문장 분할 소스)
 
   const cycle = args.cycle;
   const isV3 = cycle === 'v3';
@@ -2763,6 +2960,21 @@ async function main() {
   // 컷별 보정 표 확정 — production_id 색인(에피소드 간 컷 번호 오적용 방지) + 외부 JSON override
   S6_CUT_ADJUSTMENTS = S6_CUT_ADJUSTMENTS_BY_PRODUCTION[assetsDoc.productionId] ?? {};
   SFX_CUT_ADJUSTMENTS = SFX_CUT_ADJUSTMENTS_BY_PRODUCTION[assetsDoc.productionId] ?? {};
+
+  // BGM 트랙 게인도 프로덕션별 상수다(§BGM 러드니스 정합) — 미등재면 기본값 + 경고.
+  BGM_TRACK_GAIN_DB = BGM_TRACK_GAIN_DB_BY_PRODUCTION[assetsDoc.productionId] ?? BGM_TRACK_GAIN_DB_DEFAULT;
+  if (args['bgm-gain-db'] !== undefined) {
+    const value = Number(args['bgm-gain-db']);
+    if (!Number.isFinite(value)) throw new Error('--bgm-gain-db must be a number');
+    BGM_TRACK_GAIN_DB = value;
+  }
+  if (BGM_TRACK_GAIN_DB_BY_PRODUCTION[assetsDoc.productionId] === undefined && args['bgm-gain-db'] === undefined) {
+    warnings.push(
+      `BGM 트랙 게인: production ${assetsDoc.productionId}의 등재 값이 없어 기본 ${BGM_TRACK_GAIN_DB_DEFAULT}dB를 씁니다 — `
+      + '03-assets §BGM 러드니스 정합의 권고 게인을 상수 표에 등재하거나 --bgm-gain-db로 지정하십시오',
+    );
+  }
+  console.log(`bgm track gain: ${BGM_TRACK_GAIN_DB}dB (production 상수${args['bgm-gain-db'] !== undefined ? ' — --bgm-gain-db override' : ''})`);
   if (args['cut-adjustments']) {
     S6_CUT_ADJUSTMENTS = JSON.parse(await readFile(args['cut-adjustments'], 'utf8'));
     console.log(`cut adjustments: ${args['cut-adjustments']} (${Object.keys(S6_CUT_ADJUSTMENTS).length}컷)`);
