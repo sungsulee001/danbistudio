@@ -436,6 +436,8 @@ export function createClip(clip: Partial<TimelineClip> & Pick<TimelineClip, 'id'
     reversed: clip.reversed ?? false,
     freezeFrameTime: clip.freezeFrameTime,
     volume: clip.volume ?? 1,
+    // 미지정 클립에는 키를 만들지 않는다(기존 클립 형상 불변 — 0dB는 게인 없음과 같다)
+    ...(clip.volumeDb === undefined ? {} : { volumeDb: clip.volumeDb }),
     opacity: clip.opacity ?? 1,
     blendMode: clip.blendMode ?? 'normal',
     muted: clip.muted ?? false,

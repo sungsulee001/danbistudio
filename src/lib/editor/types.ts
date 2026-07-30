@@ -131,6 +131,11 @@ export interface TimelineClip {
   reversed?: boolean;
   freezeFrameTime?: number;
   volume: number;
+  /**
+   * 클립 단위 게인(dB). 선형 `volume`(0~2)로는 표현할 수 없는 넓은 편차를 다룰 때 쓴다
+   * (예: 생성형 SFX의 컷별 정규화 −14.6~+15.4dB). `volume`과 곱해지며, 미지정은 0dB.
+   */
+  volumeDb?: number;
   opacity: number;
   blendMode: 'normal' | 'screen' | 'multiply' | 'overlay' | 'add';
   muted?: boolean;

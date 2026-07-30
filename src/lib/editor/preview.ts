@@ -2,7 +2,7 @@ import type { CaptionSegment, EditorAsset, EditorProject, TimelineClip, Timeline
 import { audioDuckingGainAt, buildAudioDuckingIntervalsForClip, type AudioDuckingContext } from './audio-ducking';
 import { buildStaticAudioEffectGain } from './audio-effect-gain';
 import { audioTransitionGainAt, resolveClipAudioTransition } from './audio-transition';
-import { normalizeTrackPan, trackVolumeDbToGain } from './audio-mixer';
+import { clipVolumeDbToGain, normalizeTrackPan, trackVolumeDbToGain } from './audio-mixer';
 import { buildClipWithAdjustmentEffects } from './adjustment-layer';
 import { getClipMediaSourceTime, getClipSourceTime } from './clip-timing';
 import { resolveClipNumericKeyframeValue } from './keyframe-interpolation';
@@ -242,7 +242,7 @@ function buildPreviewStyle(
     positionY: resolveClipNumericKeyframeValue(clip, 'positionY', clipTime, motion.positionY, { min: -200, max: 200, round: true }),
     scale: resolveClipNumericKeyframeValue(clip, 'scale', clipTime, motion.scale, { min: 0.05, max: 8, round: true }),
     rotation: resolveClipNumericKeyframeValue(clip, 'rotation', clipTime, motion.rotation, { min: -360, max: 360, round: true }),
-    volume: roundTime(clipVolume * effectGain * duckingGain * trackVolumeDbToGain(track.volumeDb) * transitionGain),
+    volume: roundTime(clipVolume * effectGain * clipVolumeDbToGain(clip.volumeDb) * duckingGain * trackVolumeDbToGain(track.volumeDb) * transitionGain),
     pan: normalizeTrackPan(track.pan),
   };
 }

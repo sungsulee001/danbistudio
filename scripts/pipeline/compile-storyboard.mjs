@@ -13,6 +13,20 @@
  *     --storyboard <02-storyboard.md> --assets <03-assets.md> --script <01-script.md> \
  *     [--workdir <dir>] [--api http://localhost:3000] [--steps import,compile,save,preflight]
  *
+ * 러닝타임 레버 (01-script §길이 게이트):
+ *   --scene-pause <s>        장면 간 휴지 (기본 0.3)
+ *   --ending-margin <s>      최종 컷 뒤 여백 (기본 1.0)
+ *   --speaker-turn-gap <s>   장면 내 화자 교대 지점의 숨 (기본 0 = 종전 동작). ep2 권장 0.20
+ *   --target-duration <s>    목표 총 길이. 화자 교대 간격을 이분법으로 자동 해 (대본·TTS·배속 무수정)
+ *   --duration-gate <a-b>    게이트 판정 구간 (기본 480-510)
+ *
+ * 미디어 경로 (사이클 기본값 → 후보 존재 검사 → 인자 override):
+ *   --cuts-dir / --clips-source-dir / --clips-upscaled-dir / --tts-dir / --sfx-dir
+ *   --clips-dir              (구 인자) 업스케일 폴더 override — --clips-upscaled-dir과 동일
+ *
+ * A3 SFX:
+ *   --sfx-duck-db <db>       대사 구간 SFX 덕킹 (음수, 기본 0 = 덕킹 없음). 03-assets 권고 -3~-6
+ *
  * 사이클 모드 (--cycle, 기본 v3):
  *  - v3 (현행, 콘티 v3 59컷 / LTX-2.3): 전 컷이 24fps 실모션 클립. 슬로우 배속·Ken Burns 없음.
  *  - v2 (레거시, 콘티 v2 45컷 / WAN 16fps): 정지 이미지 + I2V 0.5× 슬로우 + Ken Burns.
@@ -31,6 +45,9 @@
  *    (클립 내장 보이스와 이중 재생 방지 — §A2V 오디오 단일화). 자막(captions)은 그대로 유지.
  *  - A2: BGM 구간은 콘티 bgm_cue 시퀀스(start/change=구간 시작, stop=침묵)가 결정 —
  *    k번째 구간 ← k번째 bgm 행(assetId 순). 트랙 volumeDb -14dB.
+ *  - A3: SFX(생성형 효과음)를 컷 1:1로 배치. 03-assets §A3 게인 표의 **컷별 volumeDb**를 그대로 쓴다
+ *    (기준 피크 -18dBFS로 정규화된 값 — 트랙 게인은 0dB). bgm stop 구간(의도된 침묵)에는 배치 금지.
+ *    트랙은 채택 SFX가 있을 때만 방출한다(없는 프로덕션의 프로젝트 형상 불변).
  *  - 전환: §2.1a 사전 → 스키마 타입 매핑(dissolve→crossfade). ai-morph는 이번 사이클
  *    crossfade 폴백(+todo 마커).
  *  - 마커: 챕터 5개 kind:chapter(제목 포함 — 유튜브 챕터 직결) + 검수 포인트 kind:todo.
@@ -55,10 +72,17 @@ const SCHEMA_ENTRY = path.join(REPO_ROOT, 'src', 'electron', 'shared', 'project-
 // main()에서 --scene-pause / --ending-margin 으로 덮어쓸 수 있다(기본값은 종전 동작 보존).
 let SCENE_PAUSE_SECONDS = 0.3;
 let ENDING_MARGIN_SECONDS = 1.0;
+// 화자 교대 간격(초) — 같은 장면 안에서 화자가 바뀌는 지점에 삽입하는 숨. 러닝타임 게이트의 세 번째 레버다.
+// 기본 0 = 종전 동작(간격 없음). --speaker-turn-gap 또는 --target-duration(자동 해)으로 지정한다.
+let SPEAKER_TURN_GAP_SECONDS = 0;
 const ENDING_FADE_SECONDS = 1.0;  // 엔딩 페이드 길이 — 여백을 늘려도 페이드는 1초 고정
 const I2V_SPEED = 0.5;               // [v2 레거시 전용] WAN 16fps 소스 슬로우 (5.06s → 10.12s)
                                      // v3(LTX-2.3 24fps 실모션)에서는 사용하지 않는다 — 배속 1.0 고정.
 const BGM_TRACK_GAIN_DB = -14;       // 나레이션 대비 BGM 게인 (트랙 volumeDb 지원 확인됨)
+// A3 SFX: 절대 레벨은 03-assets §A3 게인 표의 **컷별** volumeDb가 담당하므로 트랙 게인은 0dB이다.
+// (컷별 편차가 30dB에 달해 BGM식 트랙 일괄 게인으로는 표현할 수 없다 — 03-assets §S6 통합 설계)
+const SFX_TRACK_GAIN_DB = 0;
+const SFX_REFERENCE_PEAK_DBFS = -18; // 게인 표의 기준 피크(대사 피크 -4~-11dBFS 아래 7~14dB)
 const PROJECT_FPS_BY_CYCLE = { v2: 30, v3: 24 }; // v3: LTX-2.3 클립이 24fps — 리샘플 없이 정합
 let PROJECT_FPS = PROJECT_FPS_BY_CYCLE.v3;       // main()에서 --cycle에 따라 확정
 const PROJECT_WIDTH = 1920;
@@ -72,18 +96,67 @@ const ROUND = 3;                     // 초 단위 소수 자릿수
 const COMFY_OUTPUT_ROOT = 'E:\\ai_tool\\ComfyUI\\output\\danbi';
 const TTS_OUTPUT_ROOT = 'E:\\ai_tool\\tts_make\\outputs\\danbi';
 
+// 폴더명은 사이클 속성이 아니라 **프로덕션 관례**다(ep1은 콘티 개정 접미 `-v3`, ep2 이후는 평명).
+// 따라서 사이클 기본값 + 후보 목록(존재하는 첫 폴더 채택) + CLI 인자 override 3단으로 해석한다.
+// 하드코딩된 리터럴을 남기지 않기 위해 모든 항목이 인자로 덮어쓸 수 있다.
 const CYCLE_PATHS = {
-  v2: { cuts: 'cuts', clips: 'i2v', clipsUpscaled: null, tts: 'tts-x11', assetSuffix: '-v2' },
+  v2: {
+    cuts: 'cuts', clips: 'i2v', clipsUpscaled: null, tts: 'tts-x11', sfx: null,
+    assetSuffix: '-v2',
+  },
   v3: {
-    cuts: 'cuts-v3',
-    clips: 'clips-v3',
+    cuts: 'cuts',
+    cutsCandidates: ['cuts-v3', 'cuts'],
+    clips: 'clips',
+    clipsCandidates: ['clips-v3', 'clips'],
     // 업스케일 산출 폴더. 03-assets §업스케일 섹션에 매핑 표가 append되면 그 표가 우선하고,
-    // 없으면 `clips-v3-1080p\CUT-NN.mp4` 규칙을 가정한다(--upscaled 사용 시).
-    clipsUpscaled: 'clips-v3-1080p',
-    tts: 'tts-v21',
+    // 없으면 `<clipsUpscaled>\CUT-NN.mp4` 규칙을 가정한다(--upscaled 사용 시).
+    clipsUpscaled: 'clips-1080p',
+    clipsUpscaledCandidates: ['clips-v3-1080p', 'clips-1080p'],
+    tts: 'tts',
+    ttsCandidates: ['tts-v21', 'tts'],
+    // 채택 SFX(A3 트랙 소스). 없는 프로덕션에서는 A3 트랙을 방출하지 않는다.
+    sfx: 'sfx\\adopted',
+    sfxCandidates: ['sfx\\adopted', 'sfx'],
     assetSuffix: '-v3',
   },
 };
+
+// 경로 항목 → CLI 인자명. `--clips-dir`은 구 인자(업스케일 폴더 override)로 계속 받는다.
+const PATH_ARG_BY_KEY = {
+  cuts: 'cuts-dir',
+  clips: 'clips-source-dir',
+  clipsUpscaled: 'clips-upscaled-dir',
+  tts: 'tts-dir',
+  sfx: 'sfx-dir',
+};
+
+// 사이클 기본값 → 후보 존재 검사 → CLI override 순으로 폴더명을 확정한다.
+// 기본값이 실재하지 않고 후보 중 하나가 실재하면 그 후보를 쓰되 로그로 명시한다(암묵 폴백 금지).
+function resolveCyclePaths(cycle, { mediaRoot, ttsProductionRoot, args, log }) {
+  const base = CYCLE_PATHS[cycle];
+  const resolved = { ...base };
+  for (const [key, flag] of Object.entries(PATH_ARG_BY_KEY)) {
+    const legacyOverride = key === 'clipsUpscaled' ? args['clips-dir'] : undefined;
+    const override = args[flag] ?? legacyOverride;
+    if (override) {
+      resolved[key] = override;
+      log.push(`path ${key}: --${args[flag] ? flag : 'clips-dir'} → ${override}`);
+      continue;
+    }
+    if (!base[key]) continue;
+    const root = key === 'tts' ? ttsProductionRoot : mediaRoot;
+    const candidates = base[`${key}Candidates`] ?? [base[key]];
+    const found = candidates.find((dir) => existsSync(path.join(root, dir)));
+    if (found === undefined) {
+      log.push(`path ${key}: 후보 ${candidates.join(' | ')} 모두 실재하지 않음 — 기본값 ${base[key]} 유지(--${flag}로 지정 가능)`);
+      continue;
+    }
+    resolved[key] = found;
+    if (found !== base[key]) log.push(`path ${key}: ${base[key]} 없음 → ${found} 채택(실재 확인)`);
+  }
+  return resolved;
+}
 
 // ---------------------------------------------------------------------------
 // S6 편집 이관 플래그 (03-assets 기록의 선언적 표현)
@@ -95,50 +168,80 @@ const CYCLE_PATHS = {
 //   (인간이 편집기에서 앞뒤 컷 재배분/홀드 처리 — 자동 배속 보정은 하지 않는다: 이중 모션·저더 금지).
 // - crop: mask 이펙트(left/right/top/bottom 비율 0~1) — 렌더러 지원 확인(crop-mask.ts / ffmpeg-renderer).
 // - advisory: 수치 없는 권고 — 경고 로그 + todo 마커만. 자동 적용 없음.
-const S6_CUT_ADJUSTMENTS = {
-  'CUT-04': {
-    advisory: '앞구간 사용 검토 — static 지시 위반 푸시인 + 인물 프레임 진입(3테이크 공통, 재생성 2회 소진)',
-  },
-  'CUT-07': {
-    crop: { bottom: 0.18 },
-    advisory: '앞 2/3 구간 사용 권고(말미 물레 구조 붕괴). 하단 크롭은 얼굴 미노출 원칙상 필수 — 비율은 편집기에서 육안 조정',
-    note: '얼굴 미노출 원칙(콘티 §시각 문법 3) — 소년 얼굴 하단 크롭 필수',
-  },
-  'CUT-11': {
-    trimOut: 12.6,
-    note: 'A2V — 발화 종료 12.6s(리드 패딩 0.30s + 보이스 12.30s) 직후 컷 권장(03-assets §CUT-11 A2V 재생성 r2)',
-  },
-  'CUT-13': {
-    trimOut: 6.4,
-    note: 'A2V 말미 조도 페이드 격리 — 03-assets §A2V "S6 6.4s 이전 컷 필수"(발화 6.06s + 리드 패딩)',
-  },
-  'CUT-16': {
-    advisory: '앞 ~4초(f0~96) 사용 권고 — i3m1 말미 카메라 푸시인 드리프트(3라운드 소진, 클립 내 해소 실패)',
-  },
-  'CUT-28': {
-    advisory: '★whip pan — 블러 구간 내 컷 전환 필수(종착부 현대풍 도로/차선 유사). 전환 지점은 편집기에서 프레임 지정',
-  },
-  'CUT-32': {
-    crop: { bottom: 0.18 },
-    note: '얼굴 미노출 원칙 — 장영실 얼굴(하향 시선) 하단 크롭 필수',
-  },
-  'CUT-35': {
-    crop: { top: 0.10 },
-    note: '관모 상단 프레임아웃 미달 — S6 상단 크롭 이관(03-assets §A2V 비고)',
-  },
-  'CUT-37': {
-    advisory: '좌측 전신주형 기둥·원경 차형 실루엣 — 크롭/리터치 이관(수치 미정)',
-  },
-  'CUT-38': {
-    advisory: '우측 지면 본문 중복 + 글리프 변형 — 좌측 지면 크롭 또는 나노바나나 스틸 대체 검토',
-  },
-  'CUT-48': {
-    advisory: '말미 암전 반복(3테이크 공통) — 앞 2/3 사용 또는 wipe 전 페이드 수용 판단',
-  },
-  'CUT-51': {
-    advisory: '대안 테이크(r1 — 페인터리 최상이나 준정지) 인간 선택 여지',
+// ⚠ 컷 번호는 **프로덕션 고유**다. 에피소드별로 분리하지 않으면 ep1의 CUT-11 트림이 ep2의 CUT-11에
+// 그대로 적용된다(실측 확인된 오적용). 따라서 production_id로 색인하고, 미등재 프로덕션은 빈 표를 쓴다.
+// 외부에서 주려면 --cut-adjustments <json>(같은 형식) — 신규 에피소드는 이 인자를 쓰는 것을 권장한다.
+const S6_CUT_ADJUSTMENTS_BY_PRODUCTION = {
+  '2026-07-13-jangyeongsil-silence': {
+    'CUT-04': {
+      advisory: '앞구간 사용 검토 — static 지시 위반 푸시인 + 인물 프레임 진입(3테이크 공통, 재생성 2회 소진)',
+    },
+    'CUT-07': {
+      crop: { bottom: 0.18 },
+      advisory: '앞 2/3 구간 사용 권고(말미 물레 구조 붕괴). 하단 크롭은 얼굴 미노출 원칙상 필수 — 비율은 편집기에서 육안 조정',
+      note: '얼굴 미노출 원칙(콘티 §시각 문법 3) — 소년 얼굴 하단 크롭 필수',
+    },
+    'CUT-11': {
+      trimOut: 12.6,
+      note: 'A2V — 발화 종료 12.6s(리드 패딩 0.30s + 보이스 12.30s) 직후 컷 권장(03-assets §CUT-11 A2V 재생성 r2)',
+    },
+    'CUT-13': {
+      trimOut: 6.4,
+      note: 'A2V 말미 조도 페이드 격리 — 03-assets §A2V "S6 6.4s 이전 컷 필수"(발화 6.06s + 리드 패딩)',
+    },
+    'CUT-16': {
+      advisory: '앞 ~4초(f0~96) 사용 권고 — i3m1 말미 카메라 푸시인 드리프트(3라운드 소진, 클립 내 해소 실패)',
+    },
+    'CUT-28': {
+      advisory: '★whip pan — 블러 구간 내 컷 전환 필수(종착부 현대풍 도로/차선 유사). 전환 지점은 편집기에서 프레임 지정',
+    },
+    'CUT-32': {
+      crop: { bottom: 0.18 },
+      note: '얼굴 미노출 원칙 — 장영실 얼굴(하향 시선) 하단 크롭 필수',
+    },
+    'CUT-35': {
+      crop: { top: 0.10 },
+      note: '관모 상단 프레임아웃 미달 — S6 상단 크롭 이관(03-assets §A2V 비고)',
+    },
+    'CUT-37': {
+      advisory: '좌측 전신주형 기둥·원경 차형 실루엣 — 크롭/리터치 이관(수치 미정)',
+    },
+    'CUT-38': {
+      advisory: '우측 지면 본문 중복 + 글리프 변형 — 좌측 지면 크롭 또는 나노바나나 스틸 대체 검토',
+    },
+    'CUT-48': {
+      advisory: '말미 암전 반복(3테이크 공통) — 앞 2/3 사용 또는 wipe 전 페이드 수용 판단',
+    },
+    'CUT-51': {
+      advisory: '대안 테이크(r1 — 페인터리 최상이나 준정지) 인간 선택 여지',
+    },
   },
 };
+
+// main()에서 production_id(+--cut-adjustments)로 확정한다. 기본은 빈 표 = 자동 보정 없음.
+let S6_CUT_ADJUSTMENTS = {};
+
+// SFX 컷별 배치 보정 (03-assets §S6 통합 설계 §컷 경계 정렬의 선언적 표현).
+// - onsetSeconds: 파일 내 첫 사건(어택)의 위치. leadSeconds와 합쳐 "사건이 컷 시작보다 먼저 오게" 앞당긴다.
+// - leadSeconds: 사건이 컷 시작보다 앞서야 하는 양. 지정 시 클립 시작 = 컷 시작 − (onset + lead).
+// - gainOffsetDb: 게인 표 값에 더하는 보정(예: 소리가 주인공인 컷 상향 검토분). 기본 0 — 인간 판단 사항은 경고로만 남긴다.
+const SFX_CUT_ADJUSTMENTS_BY_PRODUCTION = {
+  '2026-07-29-jagyeongnu-night': {
+    'CUT-50': {
+      onsetSeconds: 4.94,
+      leadSeconds: 0.30,
+      note: '콘티 §팟캐스트 겸용 2 — "첫 타종음이 화면보다 먼저 온다". r2 타종 온셋 4.94s를 컷 시작 0.30s 앞으로 당긴다',
+    },
+    'CUT-52': {
+      advisory: '콘티 "릴레이는 소리가 주인공" — 기준 -18dBFS보다 +3~4dB 상향 검토(인간 청취 판단, 자동 적용 없음)',
+    },
+    'CUT-53': {
+      advisory: '콘티 "릴레이는 소리가 주인공" — 기준 -18dBFS보다 +3~4dB 상향 검토(인간 청취 판단, 자동 적용 없음)',
+    },
+  },
+};
+
+let SFX_CUT_ADJUSTMENTS = {};
 
 // §2.1a 전환 어휘 → 스키마 TimelineTransition.type 매핑
 const TRANSITION_MAP = {
@@ -177,7 +280,11 @@ const CHAPTER_COLORS = ['#22c55e', '#38bdf8', '#a78bfa', '#f59e0b', '#f43f5e'];
 // 크롭 = mask 이펙트(left/right/top/bottom 비율). src/lib/editor/crop-mask.ts CROP_MASK_EFFECT_LABEL 정합.
 const CROP_EFFECT_LABEL = 'Crop';
 
-const BOOLEAN_FLAGS = new Set(['upscaled', 'kenburns', 'offline', 'no-insert-cuts']);
+const BOOLEAN_FLAGS = new Set([
+  'upscaled', 'kenburns', 'offline', 'no-insert-cuts',
+  // 스테이징 컴파일용(에셋 미생성 단계) — 기본 off. 켜면 반드시 경고로 남는다.
+  'allow-pending-a2v', 'allow-pending-bgm',
+]);
 
 function parseArgs(argv) {
   const args = {
@@ -255,6 +362,7 @@ function parseAssetsDoc(markdown) {
   const imagesById = new Map(); // 채택 이미지: asset_id -> { assetId, cutId, path }
   const tts = [];
   const bgm = [];
+  const sfx = new Map(); // cut_id -> { cutId, assetId, path, duration }
   const i2vById = new Map(); // asset_id -> { assetId, path, duration }
 
   for (const line of markdown.split('\n')) {
@@ -263,7 +371,8 @@ function parseAssetsDoc(markdown) {
     // | asset_id | type | cut_id | path | duration_sec | slot | seed | job | 결과 | 채택 |
     if (cells.length < 11) continue;
     const [, assetId, type, cutId, filePath, durationSec, , , , , adopted] = cells;
-    if (!['image', 'tts', 'bgm', 'i2v'].includes(type)) continue;
+    // 'sfx'를 거르지 않는다 — A3 트랙 소스(03-assets §S6 통합 설계 필요 변경 ①).
+    if (!['image', 'tts', 'bgm', 'i2v', 'sfx'].includes(type)) continue;
 
     if (type === 'image') {
       if (!assetId.startsWith('CUT-') || !adopted.includes('채택')) continue;
@@ -282,6 +391,18 @@ function parseAssetsDoc(markdown) {
       });
     } else if (type === 'bgm') {
       bgm.push({ assetId, path: filePath, duration: Number(durationSec), cutRange: cutId });
+    } else if (type === 'sfx') {
+      const cut = cutId.match(/CUT-\d{2}/)?.[0];
+      if (!cut) throw new Error(`03-assets.md: sfx row ${assetId} has no cut_id`);
+      const gainCell = line.match(/A3 게인\s*([+-−]?[\d.]+)/)?.[1];
+      sfx.set(cut, {
+        cutId: cut,
+        assetId,
+        path: filePath,
+        file: path.basename(filePath),
+        duration: Number(durationSec),
+        gainDb: gainCell === undefined ? 0 : numberCell(gainCell),
+      });
     } else if (type === 'i2v') {
       i2vById.set(assetId, { assetId, path: filePath, duration: Number(durationSec) });
     }
@@ -289,7 +410,7 @@ function parseAssetsDoc(markdown) {
 
   tts.sort((a, b) => (a.scene - b.scene) || (a.order - b.order));
   bgm.sort((a, b) => a.assetId.localeCompare(b.assetId));
-  return { productionId, imagesById, tts, bgm, i2vById };
+  return { productionId, imagesById, tts, bgm, sfx, i2vById };
 }
 
 // ---------------------------------------------------------------------------
@@ -360,18 +481,51 @@ function sectionsBodies(markdown, predicate, { after } = {}) {
   return bodies;
 }
 
-function parseAdoptedCutFileTable(body, extension) {
+/**
+ * 컷별 채택 파일 표 파싱. 파일 열의 **위치는 프로덕션마다 다르다**
+ * (ep1 §채택 54컷: 2열 "채택 파일" / ep2 §채택 12컷: 3열 "채택 클립" — 2열은 입력 이미지).
+ * 따라서 헤더 이름으로 열을 찾고, 헤더 행이 없는 표만 종전처럼 2열로 폴백한다.
+ */
+function parseAdoptedCutFileTable(body, extension, headerPattern) {
   const map = new Map();
   if (!body) return map;
+
+  let fileColumn;
+  let headerSeen = false;
+  if (headerPattern) {
+    for (const line of body.split('\n')) {
+      if (!isTableRow(line)) continue;
+      const cells = cellsOf(line);
+      if (!/^컷/.test(cells[1] ?? '')) continue;
+      headerSeen = true;
+      const found = cells.findIndex((cell, position) => position > 1 && headerPattern.test(cell));
+      if (found > 1) fileColumn = found;
+      break;
+    }
+    // 헤더 행이 있는데 해당 열이 없으면 이 표는 대상이 아니다(무관한 표를 긁지 않는다).
+    if (headerSeen && fileColumn === undefined) return map;
+  }
+
   for (const line of body.split('\n')) {
     if (!isTableRow(line)) continue;
     const cells = cellsOf(line);
     if (!/^CUT-\d{2}$/.test(cells[1] ?? '')) continue;
-    const file = lastMatch(stripStrike(cells[2] ?? ''), CUT_FILE_RE);
+    const file = lastMatch(stripStrike(cells[fileColumn ?? 2] ?? ''), CUT_FILE_RE);
     if (!file || !file.endsWith(extension)) continue;
     map.set(cells[1], { file, row: cells });
   }
   return map;
+}
+
+// §채택 N컷 계열 표를 문서 순서대로 모아 병합한다(뒤 섹션이 앞을 덮는다 — 2차 패스·교정본 반영).
+function parseAdoptedCutFileTables(markdown, extension, headerPattern) {
+  const merged = new Map();
+  for (const body of sectionsBodies(markdown, (heading) => /채택\s*\d+\s*컷/.test(heading))) {
+    for (const [cut, entry] of parseAdoptedCutFileTable(body, extension, headerPattern)) {
+      merged.set(cut, entry);
+    }
+  }
+  return merged;
 }
 
 // 보정/교정/재작업 섹션의 채택 행 → 컷별 파일 교체(문서 순서 last-wins)
@@ -416,9 +570,37 @@ function parseTtsAdoptionOverrides(markdown) {
   return overrides;
 }
 
+// 표 헤더 행에서 열 인덱스를 읽는다 — 열 순서·개수는 프로덕션마다 다르다
+// (ep1: 세그먼트/화자/실측/mean/max/비고, ep2: 세그먼트/화자/음절/실측/mean/max/유사도/전사일치).
+// 위치 하드코딩을 헤더 이름 매칭으로 대체한다.
+function tableColumnIndex(body, patterns) {
+  for (const line of body.split('\n')) {
+    if (!isTableRow(line)) continue;
+    const cells = cellsOf(line);
+    if (!/세그먼트|컷/.test(cells[1] ?? '')) continue;
+    const index = {};
+    for (const [key, pattern] of Object.entries(patterns)) {
+      const found = cells.findIndex((cell, position) => position > 0 && pattern.test(cell));
+      if (found > 0) index[key] = found;
+    }
+    return index;
+  }
+  return {};
+}
+
 function parseTtsSegmentsV3(markdown) {
   const body = sectionBody(markdown, (heading) => /세그먼트 실측표/.test(heading));
   if (!body) throw new Error('03-assets.md: §세그먼트 실측표 section not found (v3 TTS 필요)');
+
+  const column = tableColumnIndex(body, {
+    duration: /실측/,
+    syllables: /음절/,
+    speakerLabel: /화자/,
+    note: /비고/,
+  });
+  if (column.duration === undefined) {
+    throw new Error('03-assets.md §세그먼트 실측표: "실측" 열을 헤더에서 찾지 못했습니다');
+  }
 
   const segments = [];
   for (const line of body.split('\n')) {
@@ -427,16 +609,20 @@ function parseTtsSegmentsV3(markdown) {
     const assetId = cells[1];
     const match = assetId?.match(/^N(\d{2})-(\d{2})-(.+)$/);
     if (!match) continue;
-    const duration = Number(cells[3]);
+    const duration = numberCell(cells[column.duration]);
     if (!Number.isFinite(duration)) throw new Error(`03-assets.md: bad tts duration for ${assetId}`);
+    const syllables = column.syllables === undefined ? undefined : numberCell(cells[column.syllables]);
     // 비고 칸의 "인간 채택 확정 = `X.wav`" 도 오버라이드 원천
-    const inlineAdopted = cells[6]?.match(/채택 확정 = `([^`]+\.wav)`/)?.[1];
+    const noteCell = column.note === undefined ? undefined : cells[column.note];
+    const inlineAdopted = noteCell?.match(/채택 확정 = `([^`]+\.wav)`/)?.[1];
     segments.push({
       assetId,
       segmentKey: `N${match[1]}-${match[2]}`,
       scene: Number(match[1]),
       order: Number(match[2]),
       speaker: match[3],
+      speakerLabel: column.speakerLabel === undefined ? undefined : cells[column.speakerLabel],
+      syllables: Number.isFinite(syllables) ? syllables : undefined,
       file: inlineAdopted ?? `${assetId}.wav`,
       docDuration: duration,
     });
@@ -480,12 +666,92 @@ function parseBgmLedger(markdown) {
   return bgm;
 }
 
+// 문서의 수치 셀 정규화 — 강조 마크업·유니코드 마이너스(U+2212)·기호를 제거하고 숫자로 만든다.
+const numberCell = (cell) => Number(
+  String(cell ?? '')
+    .replace(/\*\*/g, '')
+    .replace(/[−–—]/g, '-')
+    .replace(/[^0-9.+-]/g, '')
+    .trim(),
+);
+
+// 03-assets §채택 N컷 + S6 A3 게인 — SFX 컷 1:1 매핑 + **컷별** 게인(dB).
+// | 컷 | 채택 | 피크 dB | RMS dB | A3 게인 | 근거 |
+// 게인 폭이 -14.6~+15.4dB(30dB)라 트랙 일괄 게인으로는 표현할 수 없다 → 클립별 volumeDb로 방출한다.
+function parseSfxGainTable(markdown) {
+  const rows = new Map();
+  for (const body of sectionsBodies(markdown, (heading) => /A3 게인/.test(heading) && /채택/.test(heading))) {
+    for (const rawLine of body.split('\n')) {
+      if (!isTableRow(rawLine)) continue;
+      const line = stripStrike(rawLine);
+      if (REJECT_MARKERS.test(line)) continue;
+      const cells = cellsOf(line);
+      const cutId = (cells[1] ?? '').match(/CUT-\d{2}/)?.[0];
+      if (!cutId) continue;
+      const take = (cells[2] ?? '').match(/r\d+/)?.[0];
+      const gainDb = numberCell(cells[5]);
+      if (!Number.isFinite(gainDb)) {
+        throw new Error(`03-assets §A3 게인: ${cutId} 게인 값을 읽지 못했습니다 (셀 "${cells[5]}")`);
+      }
+      const peakDb = numberCell(cells[3]);
+      rows.set(cutId, {
+        cutId,
+        take,
+        gainDb,
+        peakDb: Number.isFinite(peakDb) ? peakDb : undefined,
+        file: `${cutId}-sfx.wav`,
+      });
+    }
+  }
+  return rows;
+}
+
+// 레거시 11열 "에셋 레코드" 표의 type=sfx 행(후속 프로덕션이 대장에 직접 등재하는 경로).
+// 게인은 비고 칸의 "A3 게인 <dB>" 표기를 읽는다.
+function parseSfxLedgerRows(markdown) {
+  const rows = new Map();
+  for (const rawLine of markdown.split('\n')) {
+    if (!isTableRow(rawLine)) continue;
+    const cells = cellsOf(stripStrike(rawLine));
+    if (cells.length < 11 || cells[2] !== 'sfx') continue;
+    const cutId = (cells[3] ?? '').match(/CUT-\d{2}/)?.[0];
+    if (!cutId) continue;
+    const gainCell = rawLine.match(/A3 게인\s*([+-−]?[\d.]+)/)?.[1];
+    const gainDb = gainCell === undefined ? 0 : numberCell(gainCell);
+    const duration = numberCell(cells[5]);
+    rows.set(cutId, {
+      cutId,
+      gainDb: Number.isFinite(gainDb) ? gainDb : 0,
+      file: path.basename(cells[4] ?? `${cutId}-sfx.wav`),
+      docDuration: Number.isFinite(duration) ? duration : undefined,
+      fromLedger: true,
+    });
+  }
+  return rows;
+}
+
+// 채택 SFX 해석: §A3 게인 표가 권위, 없으면 레거시 대장 type=sfx 행.
+function parseSfxAssets(markdown, { mediaRoot, paths }) {
+  if (!paths.sfx) return new Map();
+  const table = parseSfxGainTable(markdown);
+  const rows = table.size > 0 ? table : parseSfxLedgerRows(markdown);
+  const sfx = new Map();
+  for (const [cutId, row] of rows) {
+    sfx.set(cutId, {
+      ...row,
+      assetId: `${cutId}-sfx`,
+      path: path.resolve(mediaRoot, paths.sfx, row.file),
+    });
+  }
+  return sfx;
+}
+
 // 업스케일 산출 매핑: 03-assets §업스케일 섹션(다른 에이전트 append 예정)의 표가 있으면 그것이 권위,
 // 없으면 `clips-v3-1080p\CUT-NN.mp4` 규칙을 가정한다(가정임을 로그로 명시).
 function parseUpscaleMap(markdown) {
   const body = sectionBody(markdown, (heading) => /업스케일/.test(heading) && !/체인/.test(heading));
   if (!body) return null;
-  const map = parseAdoptedCutFileTable(body, '.mp4');
+  const map = parseAdoptedCutFileTable(body, '.mp4', /채택|클립|파일|1080p/);
   return map.size > 0 ? new Map([...map].map(([cut, entry]) => [cut, entry.file])) : null;
 }
 
@@ -555,7 +821,7 @@ async function applyS6InsertCuts(cuts, assetsDoc, inserts, args, warnings) {
   if (inserts.length === 0) return [];
   const applied = [];
   const useUpscaled = Boolean(args.upscaled);
-  const upscaledDir = args['clips-dir'] ?? assetsDoc.paths.clipsUpscaled;
+  const upscaledDir = assetsDoc.paths.clipsUpscaled;   // 인자 override는 resolveCyclePaths가 이미 반영
   const clipDir = useUpscaled ? upscaledDir : assetsDoc.paths.clips;
 
   for (const insert of inserts) {
@@ -566,7 +832,7 @@ async function applyS6InsertCuts(cuts, assetsDoc, inserts, args, warnings) {
     const anchor = cuts.find((cut) => cut.id === insert.afterCut);
     if (!anchor) throw new Error(`${insert.id}: 삽입 기준 컷 ${insert.afterCut}이 콘티에 없습니다`);
 
-    const clipPath = path.join(assetsDoc.mediaRoot, clipDir, insert.clipFile);
+    const clipPath = path.resolve(assetsDoc.mediaRoot, clipDir, insert.clipFile);
     if (!existsSync(clipPath)) throw new Error(`${insert.id}: 클립 파일 없음 — ${clipPath}`);
     const probed = await probeDuration(clipPath);
     const duration = round(probed ?? insert.docDuration);
@@ -578,7 +844,7 @@ async function applyS6InsertCuts(cuts, assetsDoc, inserts, args, warnings) {
       assetId: `${insert.id}${assetsDoc.paths.assetSuffix}`,
       cutId: insert.id,
       file: insert.imageFile,
-      path: path.join(assetsDoc.mediaRoot, assetsDoc.paths.cuts, insert.imageFile),
+      path: path.resolve(assetsDoc.mediaRoot, assetsDoc.paths.cuts, insert.imageFile),
     });
     assetsDoc.clips.set(insert.id, {
       assetId: insert.mediaKey, cutId: insert.id, file: insert.clipFile, kind: 'i2v',
@@ -608,22 +874,18 @@ async function applyS6InsertCuts(cuts, assetsDoc, inserts, args, warnings) {
   return applied;
 }
 
-function parseAssetsDocV3(markdown, { cycle }) {
+function parseAssetsDocV3(markdown, { cycle, args = {}, pathLog = [] }) {
   const productionId = markdown.match(/^production_id:\s*(\S+)/m)?.[1];
   if (!productionId) throw new Error('03-assets.md: production_id not found');
 
-  const paths = CYCLE_PATHS[cycle];
   const mediaRoot = path.join(COMFY_OUTPUT_ROOT, productionId);
-  const ttsRoot = path.join(TTS_OUTPUT_ROOT, productionId, paths.tts);
+  const ttsProductionRoot = path.join(TTS_OUTPUT_ROOT, productionId);
+  const paths = resolveCyclePaths(cycle, { mediaRoot, ttsProductionRoot, args, log: pathLog });
+  const ttsRoot = path.resolve(ttsProductionRoot, paths.tts);
 
-  const imageTable = parseAdoptedCutFileTable(
-    sectionBody(markdown, (heading) => /채택 \d+컷 \(Z-Image/.test(heading)),
-    '.png',
-  );
-  const clipTable = parseAdoptedCutFileTable(
-    sectionBody(markdown, (heading) => /채택 \d+컷 \(I2V/.test(heading)),
-    '.mp4',
-  );
+  // 컷 정지 이미지·I2V 클립은 §채택 N컷 계열 표 전체에서 해석한다(1차·2차 패스 병합, 뒤가 우선).
+  const imageTable = parseAdoptedCutFileTables(markdown, '.png', /채택\s*(파일|이미지)/);
+  const clipTable = parseAdoptedCutFileTables(markdown, '.mp4', /채택\s*(클립|파일|영상)/);
   const a2vTable = parseA2vTable(markdown);
   const imageOverrides = parseCutFileOverrides(markdown, '.png');
   const clipOverrides = parseCutFileOverrides(markdown, '.mp4');
@@ -637,7 +899,7 @@ function parseAssetsDocV3(markdown, { cycle }) {
     images.get(cut).file = file;
   }
   for (const image of images.values()) {
-    image.path = path.join(mediaRoot, paths.cuts, image.file);
+    image.path = path.resolve(mediaRoot, paths.cuts, image.file);
   }
 
   const clips = new Map();
@@ -653,7 +915,7 @@ function parseAssetsDocV3(markdown, { cycle }) {
     clips.get(cut).file = file;
   }
   for (const clip of clips.values()) {
-    clip.path = path.join(mediaRoot, paths.clips, clip.file);
+    clip.path = path.resolve(mediaRoot, paths.clips, clip.file);
   }
 
   const tts = parseTtsSegmentsV3(markdown).map((segment) => ({
@@ -666,8 +928,9 @@ function parseAssetsDocV3(markdown, { cycle }) {
 
   const bgm = parseBgmLedger(markdown);
   const upscaleMap = parseUpscaleMap(markdown);
+  const sfx = parseSfxAssets(markdown, { mediaRoot, paths });
 
-  return { productionId, mediaRoot, ttsRoot, paths, images, clips, tts, bgm, a2vTable, upscaleMap };
+  return { productionId, mediaRoot, ttsRoot, paths, images, clips, tts, bgm, sfx, a2vTable, upscaleMap };
 }
 
 // v2 콘티의 "## v1→v2 재사용 매핑 표" 파싱 — 컷별 이미지/i2v 에셋 해석의 권위 원천.
@@ -727,7 +990,7 @@ const MIN_FIT_SPEED = 0.85;        // 소스가 컷보다 짧을 때 허용하�
 async function resolveCutAssetsV3(cuts, assetsDoc, args, sourceMap, warnings) {
   const paths = assetsDoc.paths;
   const useUpscaled = Boolean(args.upscaled);
-  const upscaledDir = args['clips-dir'] ?? paths.clipsUpscaled;
+  const upscaledDir = paths.clipsUpscaled;             // 인자 override는 resolveCyclePaths가 이미 반영
 
   if (useUpscaled && !assetsDoc.upscaleMap) {
     warnings.push(
@@ -746,18 +1009,32 @@ async function resolveCutAssetsV3(cuts, assetsDoc, args, sourceMap, warnings) {
       if (useUpscaled) {
         const mapped = assetsDoc.upscaleMap?.get(cut.id) ?? `${cut.id}.mp4`;
         clip.originalPath = clip.path;
-        clip.path = path.join(assetsDoc.mediaRoot, upscaledDir, mapped);
+        clip.path = path.resolve(assetsDoc.mediaRoot, upscaledDir, mapped);
         clip.file = mapped;
       }
       cut.clipAsset = clip;
     }
 
-    // A2V 자동 판별 교차 검증: 콘티 a2v 필드 ↔ 03-assets §A2V 5컷 표
+    // A2V 자동 판별 교차 검증: 콘티 a2v 필드 ↔ 03-assets §A2V 표
     const inA2vTable = assetsDoc.a2vTable.has(cut.id);
     if (cut.isA2V !== inA2vTable) {
-      throw new Error(
-        `${cut.id}: A2V 판별 불일치 — 콘티 a2v=${cut.isA2V ? '예' : '아니오'} / 03-assets §A2V 표 ${inA2vTable ? '존재' : '없음'}`,
-      );
+      // --allow-pending-a2v: A2V 클립이 아직 생성되지 않은 단계(Phase D 미완)에서 스테이징 컴파일용.
+      // 해당 컷은 이번 컴파일에서 A2V가 아닌 것으로 다루고(TTS 세그먼트는 A1에 그대로 배치),
+      // 클립이 생성되면 플래그 없이 재컴파일해 이중화 규칙을 복원한다.
+      if (cut.isA2V && !inA2vTable && args['allow-pending-a2v']) {
+        warnings.push(
+          `${cut.id}: 콘티 a2v=예이지만 03-assets §A2V 표에 채택 클립이 없습니다(Phase D 미완) — `
+          + '--allow-pending-a2v로 이번 컴파일에서만 I2V/정지 컷으로 다루고 해당 TTS 세그먼트를 A1에 배치합니다',
+        );
+        cut.isA2V = false;
+        cut.a2vPending = true;
+        cut.a2vSegmentKey = undefined;
+      } else {
+        throw new Error(
+          `${cut.id}: A2V 판별 불일치 — 콘티 a2v=${cut.isA2V ? '예' : '아니오'} / 03-assets §A2V 표 ${inA2vTable ? '존재' : '없음'}`
+          + `${cut.isA2V ? ' (Phase D 미완이면 --allow-pending-a2v)' : ''}`,
+        );
+      }
     }
     if (cut.isA2V) {
       const row = assetsDoc.a2vTable.get(cut.id);
@@ -807,6 +1084,43 @@ async function resolveCutAssetsV3(cuts, assetsDoc, args, sourceMap, warnings) {
   }
 }
 
+// 채택 SFX 해석: 컷 1:1 매핑 검증 + 파일 실측(문서 표가 아니라 파일이 원천).
+// 콘티에 없는 컷을 가리키는 행은 배치하지 않고 경고로 남긴다(대장 오타·컷 번호 변경 방어).
+async function resolveSfxAssets(cuts, assetsDoc, warnings) {
+  const sfxMap = assetsDoc.sfx ?? new Map();
+  if (sfxMap.size === 0) return [];
+  const cutById = new Map(cuts.map((cut) => [cut.id, cut]));
+  const missing = [];
+  const resolved = [];
+
+  for (const [cutId, entry] of sfxMap) {
+    if (!cutById.has(cutId)) {
+      warnings.push(`SFX ${cutId}: 콘티에 없는 컷입니다 — A3 배치를 건너뜁니다(${entry.file})`);
+      continue;
+    }
+    if (!existsSync(entry.path)) {
+      missing.push(`${cutId} sfx: ${entry.path}`);
+      continue;
+    }
+    const measured = await probeDuration(entry.path);
+    if (measured === undefined) {
+      warnings.push(`SFX ${cutId}: ffprobe 실패 — 문서 길이(${entry.docDuration ?? '미기재'})로 폴백합니다`);
+    } else if (entry.docDuration !== undefined && Math.abs(measured - entry.docDuration) > 0.05) {
+      warnings.push(`SFX ${cutId}: 대장 ${entry.docDuration}s ≠ 파일 실측 ${round(measured)}s — 파일 실측을 채택`);
+    }
+    entry.duration = measured !== undefined ? round(measured) : entry.docDuration;
+    if (!Number.isFinite(entry.duration)) {
+      throw new Error(`SFX ${cutId}: 길이를 확정하지 못했습니다 (${entry.path})`);
+    }
+    resolved.push(entry);
+  }
+
+  if (missing.length > 0) {
+    throw new Error(`채택 SFX 파일 누락 ${missing.length}건:\n  - ${missing.join('\n  - ')}`);
+  }
+  return resolved;
+}
+
 // 컷별 유효 소스 길이 = min(클립 실측, S6 trimOut).
 // 주의: ffmpeg 렌더러는 clip.sourceIn을 영상 트림에 반영하지 않는다(항상 소스 0부터 trim).
 //       따라서 "앞부분만 사용" 계열 보정은 duration 단축으로만 표현 가능하다.
@@ -837,6 +1151,91 @@ function parseScriptDialogues(markdown) {
     dialogues.set(scene, lines);
   }
   return dialogues;
+}
+
+// 한글 음절 수 — 03-assets §세그먼트 실측표의 "음절" 열과 같은 셈법(한글 음절 글자만 센다).
+const countSyllables = (text) => (String(text).match(/[가-힣]/g) ?? []).length;
+
+/**
+ * 대본 대사 라인 ↔ TTS 세그먼트 정렬.
+ *
+ * TTS 세그먼트는 "장면 내 화자 교대 단위"다 — 연속된 동일 화자 대사는 1세그로 병합된다
+ * (03-assets §세그먼트 분해 규약). 단 인용 낭독부는 동일 화자라도 분리된다.
+ * 따라서 대본 라인 수와 세그먼트 수가 1:1이 아닐 수 있고, 자막을 세그먼트에 붙이려면
+ * 대본 라인을 세그먼트 단위로 묶어야 한다. 우선순위:
+ *   ① 라인 수 == 세그먼트 수  → 1:1 (ep1 경로 — 종전 동작 그대로)
+ *   ② 표에 음절 열이 있으면   → 음절 수로 그리디 묶음(문서 수치가 정렬의 원천)
+ *   ③ 그 외                   → 연속 동일 화자 병합
+ * 어느 경로로도 수가 맞지 않으면 예외 — 자막이 어긋난 채로 진행하지 않는다.
+ */
+function alignScriptDialoguesToSegments(scriptDialogues, ttsSegments, warnings = []) {
+  const aligned = new Map();
+  const scenes = [...new Set(ttsSegments.map((seg) => seg.scene))].sort((a, b) => a - b);
+
+  for (const scene of scenes) {
+    const segs = ttsSegments.filter((seg) => seg.scene === scene);
+    const lines = scriptDialogues.get(scene);
+    if (!lines) throw new Error(`01-script.md: scene N${String(scene).padStart(2, '0')} 대사 블록이 없습니다`);
+
+    if (lines.length === segs.length) {
+      aligned.set(scene, lines);
+      continue;
+    }
+
+    const hasSyllables = segs.every((seg) => Number.isFinite(seg.syllables));
+    let groups;
+    if (hasSyllables) {
+      groups = [];
+      let cursor = 0;
+      segs.forEach((seg, index) => {
+        const isLast = index === segs.length - 1;
+        const group = [];
+        let count = 0;
+        while (cursor < lines.length && (isLast || count < seg.syllables)) {
+          group.push(lines[cursor]);
+          count += countSyllables(lines[cursor].text);
+          cursor += 1;
+        }
+        if (!isLast && count !== seg.syllables) {
+          warnings.push(
+            `${seg.assetId}: 대본 음절 합 ${count} ≠ 표 음절 ${seg.syllables} — 자막 묶음 경계를 확인하세요`,
+          );
+        }
+        groups.push(group);
+      });
+      if (cursor !== lines.length) {
+        throw new Error(
+          `N${String(scene).padStart(2, '0')}: 음절 기준 정렬 실패 — 대본 ${lines.length}행 중 ${cursor}행만 소비`,
+        );
+      }
+    } else {
+      groups = [];
+      for (const line of lines) {
+        const previous = groups[groups.length - 1];
+        if (previous && previous[0].speaker === line.speaker) previous.push(line);
+        else groups.push([line]);
+      }
+    }
+
+    if (groups.length !== segs.length) {
+      throw new Error(
+        `N${String(scene).padStart(2, '0')}: 대본 ${lines.length}행 → ${groups.length}묶음 ≠ TTS 세그먼트 ${segs.length}개`,
+      );
+    }
+    // 화자 교차 검증(표의 한글 화자 라벨 ↔ 대본 화자) — 어긋나면 경고만(정렬은 음절/병합이 원천)
+    segs.forEach((seg, index) => {
+      const label = seg.speakerLabel ?? '';
+      const scriptSpeaker = groups[index][0].speaker;
+      if (label && !label.includes(scriptSpeaker) && !scriptSpeaker.includes(label.replace(/\(.*\)/, '').trim())) {
+        warnings.push(`${seg.assetId}: 표 화자 "${label}" ↔ 대본 화자 "${scriptSpeaker}" 불일치 — 정렬 확인 요망`);
+      }
+    });
+    aligned.set(scene, groups.map((group) => ({
+      speaker: group[0].speaker,
+      text: group.map((line) => line.text).join(' '),
+    })));
+  }
+  return aligned;
 }
 
 // 문장 단위 분할 → 줄바꿈(줄당 ~30자) → 최대 2줄 캡션 단위로 묶기
@@ -934,7 +1333,7 @@ const MIME_BY_EXT = {
   '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm',
 };
 
-async function importMedia(apiBase, cuts, assetsDoc, mappingPath, { cycle = 'v2', preferStill = false, embeddedSegmentKeys = new Set() } = {}) {
+async function importMedia(apiBase, cuts, assetsDoc, mappingPath, { cycle = 'v2', preferStill = false, embeddedSegmentKeys = new Set(), sfxAssets = [] } = {}) {
   const mapping = existsSync(mappingPath)
     ? JSON.parse(await readFile(mappingPath, 'utf8'))
     : {};
@@ -962,6 +1361,8 @@ async function importMedia(apiBase, cuts, assetsDoc, mappingPath, { cycle = 'v2'
     addJob(seg.mappingKey ?? seg.assetId, seg.path, 'tts');
   }
   for (const track of assetsDoc.bgm) addJob(track.assetId, track.path, 'bgm');
+  // A3 SFX — 채택 컷만(콘티에 없는 컷/미배치 컷은 resolveSfxAssets가 이미 걸러낸다)
+  for (const entry of sfxAssets) addJob(entry.assetId, entry.path, `sfx ${entry.cutId}`);
 
   // Next.js request.formData()는 대용량 본문 파싱에 실패(관측: ≥14MB → "Failed to parse
   // body as FormData."). 대용량은 서버가 하는 일과 동일하게 imports 디렉터리로 복사한 뒤
@@ -1019,7 +1420,7 @@ async function importMedia(apiBase, cuts, assetsDoc, mappingPath, { cycle = 'v2'
 
 // 오프라인 반입(--offline): API 서버 없이 로컬 절대 경로를 그대로 renderPath로 사용한다.
 // 드라이런 컴파일·경로 스위치 검증용 — 렌더러는 renderPath를 직접 읽으므로 렌더도 가능하다.
-async function importMediaOffline(cuts, assetsDoc, mappingPath, { cycle, preferStill, embeddedSegmentKeys }) {
+async function importMediaOffline(cuts, assetsDoc, mappingPath, { cycle, preferStill, embeddedSegmentKeys, sfxAssets = [] }) {
   const mapping = existsSync(mappingPath) ? JSON.parse(await readFile(mappingPath, 'utf8')) : {};
   const jobs = [];
   const seen = new Set();
@@ -1043,6 +1444,7 @@ async function importMediaOffline(cuts, assetsDoc, mappingPath, { cycle, preferS
     addJob(seg.mappingKey ?? seg.assetId, seg.path);
   }
   for (const track of assetsDoc.bgm) addJob(track.assetId, track.path);
+  for (const entry of sfxAssets) addJob(entry.assetId, entry.path);
 
   for (const job of jobs) {
     if (!existsSync(job.path)) throw new Error(`media file missing: ${job.path} (${job.key})`);
@@ -1196,10 +1598,33 @@ function computeTimeline(cuts, ttsSegments) {
 //  3) 잔여가 부족하면 장면 스팬을 연장(그만큼 전체 길이 증가) — 계획이 아니라 실측이 이긴다
 const cutUsesClip = (cut, preferStill) => !preferStill && Boolean(cut.clipAsset);
 
-function computeTimelineV3(cuts, ttsSegments, warnings, preferStill = false) {
-  const sceneAudio = new Map();
+// 화자 교대 간격: 같은 장면 안에서 앞 세그먼트와 화자가 다른 세그먼트 **앞**에 삽입하는 숨(초).
+// 장면 경계는 이미 SCENE_PAUSE_SECONDS가 담당하므로 장면 내 교대만 센다.
+// 이 간격이 러닝타임 게이트(01-script §길이 게이트)의 조정 레버다 — 대본·TTS·배속을 건드리지 않는다.
+function computeSpeakerTurnGaps(ttsSegments, gapSeconds) {
+  const gaps = new Map();
+  let previous;
+  let turns = 0;
   for (const seg of ttsSegments) {
-    sceneAudio.set(seg.scene, (sceneAudio.get(seg.scene) ?? 0) + seg.duration);
+    const isTurn = Boolean(previous) && previous.scene === seg.scene && previous.speaker !== seg.speaker;
+    if (isTurn) turns += 1;
+    gaps.set(seg.segmentKey, isTurn ? gapSeconds : 0);
+    previous = seg;
+  }
+  return { gaps, turns, total: round(turns * gapSeconds) };
+}
+
+
+function computeTimelineV3(cuts, ttsSegments, warnings, preferStill = false, options = {}) {
+  const speakerTurnGap = options.speakerTurnGap ?? SPEAKER_TURN_GAP_SECONDS;
+  const turnGaps = computeSpeakerTurnGaps(ttsSegments, speakerTurnGap);
+  // 장면 오디오 몫 = 세그먼트 실측 합 + 장면 내 화자 교대 간격 합
+  const sceneAudio = new Map();
+  const sceneSpeech = new Map();
+  for (const seg of ttsSegments) {
+    const gap = turnGaps.gaps.get(seg.segmentKey) ?? 0;
+    sceneAudio.set(seg.scene, (sceneAudio.get(seg.scene) ?? 0) + gap + seg.duration);
+    sceneSpeech.set(seg.scene, (sceneSpeech.get(seg.scene) ?? 0) + seg.duration);
   }
   const scenes = [...sceneAudio.keys()].sort((a, b) => a - b);
   const lastScene = scenes[scenes.length - 1];
@@ -1222,6 +1647,7 @@ function computeTimelineV3(cuts, ttsSegments, warnings, preferStill = false) {
     const provisionalSegStart = new Map();
     let audioAt = sceneAt;
     for (const seg of sceneSegs) {
+      audioAt += turnGaps.gaps.get(seg.segmentKey) ?? 0;
       provisionalSegStart.set(seg.segmentKey, audioAt);
       audioAt += seg.duration;
     }
@@ -1300,6 +1726,7 @@ function computeTimelineV3(cuts, ttsSegments, warnings, preferStill = false) {
     );
     let audioAtFinal = sceneAt;
     for (const seg of sceneSegs) {
+      audioAtFinal += turnGaps.gaps.get(seg.segmentKey) ?? 0;
       const anchoredStart = anchorStartById.get(seg.segmentKey);
       if (anchoredStart !== undefined) audioAtFinal = Math.max(audioAtFinal, anchoredStart + A2V_LEAD_PAD_SECONDS);
       audioAtFinal += seg.duration;
@@ -1352,6 +1779,7 @@ function computeTimelineV3(cuts, ttsSegments, warnings, preferStill = false) {
   for (const scene of scenes) {
     let at = sceneStart.get(scene);
     for (const seg of ttsSegments.filter((item) => item.scene === scene)) {
+      at += turnGaps.gaps.get(seg.segmentKey) ?? 0;
       const a2vCut = cutBySegmentKey.get(seg.segmentKey);
       if (a2vCut) {
         const anchored = a2vCut.start + A2V_LEAD_PAD_SECONDS;
@@ -1370,12 +1798,16 @@ function computeTimelineV3(cuts, ttsSegments, warnings, preferStill = false) {
     }
   }
 
-  return { placedCuts, placedTts, sceneStart, sceneSpan, sceneAudio, totalDuration, scenes };
+  return {
+    placedCuts, placedTts, sceneStart, sceneSpan, sceneAudio, sceneSpeech, totalDuration, scenes,
+    speakerTurnGap, speakerTurns: turnGaps.turns, speakerTurnTotal: turnGaps.total,
+  };
 }
 
 function buildProject({
   productionId, projectName, cuts, timeline, assetsDoc, mapping, scriptDialogues,
-  cycle = 'v2', warnings = [], preferStill = false, kenBurns = cycle === 'v2',
+  cycle = 'v2', warnings = [], preferStill = false, kenBurns = cycle === 'v2', sfxDuckDb = 0,
+  allowPendingBgm = false,
 }) {
   const { placedCuts, placedTts, totalDuration } = timeline;
   const nowIso = new Date().toISOString();
@@ -1437,6 +1869,11 @@ function buildProject({
     pushMediaAsset(seg.mappingKey ?? seg.assetId, 'audio', seg.assetId, seg.duration);
   }
   for (const track of assetsDoc.bgm) pushMediaAsset(track.assetId, 'audio', track.assetId, track.duration);
+  // A3 SFX 소스 — 채택 컷 1:1(콘티에 없는 컷/파일 누락은 resolveSfxAssets가 이미 처리)
+  for (const sfx of (assetsDoc.sfx ?? new Map()).values()) {
+    if (!Number.isFinite(sfx.duration)) continue;
+    pushMediaAsset(sfx.assetId, 'audio', `${sfx.cutId} SFX`, sfx.duration, { sfxCutId: sfx.cutId });
+  }
 
   // ---- V1 메인 트랙 -------------------------------------------------------
   const v1Clips = [];
@@ -1716,6 +2153,9 @@ function buildProject({
       start: seg.start,
       duration: round(seg.duration),
       color: '#a3e635',
+      // 덕킹을 켤 때만 태그를 붙인다 — 렌더러 isDuckingSourceClip이 나레이션을 덕킹 소스로 인식하는 조건
+      // (오디오 에셋은 태그가 없으면 소스로 잡히지 않는다). 태그는 automation 규칙과 무관('comfyui'만 매칭).
+      automationTags: sfxDuckDb < 0 ? ['voice'] : [],
     }));
   const embeddedSegments = placedTts.filter((seg) => seg.embeddedInClip);
   if (embeddedSegments.length > 0) {
@@ -1747,7 +2187,20 @@ function buildProject({
     segments[segments.length - 1].end = totalDuration;
   }
   if (segments.length !== assetsDoc.bgm.length) {
-    throw new Error(`bgm cue segments (${segments.length}) != bgm tracks (${assetsDoc.bgm.length})`);
+    // BGM 미생성 단계(대장 행 0건)에서는 A2를 비운 채 스테이징 컴파일을 허용한다.
+    // 부분 생성(행이 있는데 구간 수와 다름)은 계약 위반이므로 그대로 차단한다.
+    if (assetsDoc.bgm.length === 0 && allowPendingBgm) {
+      warnings.push(
+        `BGM 대장 행이 0건입니다 — A2 트랙을 비운 채로 컴파일했습니다(bgm_cue 구간 ${segments.length}개 대기). `
+        + 'BGM 생성 후 플래그 없이 재컴파일 필요',
+      );
+      decisions.push(`A2 BGM: 미생성(구간 ${segments.length}개 대기) — 클립 0개`);
+    } else {
+      throw new Error(
+        `bgm cue segments (${segments.length}) != bgm tracks (${assetsDoc.bgm.length})`
+        + `${assetsDoc.bgm.length === 0 ? ' — BGM 미생성 단계면 --allow-pending-bgm' : ''}`,
+      );
+    }
   }
   const a2Clips = [];
   const BGM_MIN_REPEAT_TAIL = 4;   // 이보다 짧은 자투리는 반복하지 않는다(짧은 조각 재진입 = 부자연)
@@ -1802,6 +2255,135 @@ function buildProject({
   });
   decisions.push(`A2 BGM 트랙 게인 ${BGM_TRACK_GAIN_DB}dB(track.volumeDb — 스키마 지원 확인), stop 컷 구간 BGM 공백 유지`);
 
+  // ---- A3 SFX — 컷 1:1 배치 + 클립별 volumeDb ------------------------------
+  // 게인은 03-assets §A3 게인 표(기준 피크 -18dBFS로 정규화한 컷별 값)를 그대로 쓴다.
+  // 편차가 -14.6~+15.4dB(30dB)라 트랙 일괄 게인으로는 표현 불가 — 클립 단위 게인이 유일한 표현이다.
+  // 의도된 침묵(bgm stop 구간)에는 배치하지 않는다(03-assets §S6 통합 설계 규약).
+  const a3Clips = [];
+  const sfxLedger = assetsDoc.sfx ?? new Map();
+  if (sfxLedger.size > 0) {
+    // bgm stop 구간 = stop 컷 시작 ~ 다음 start/change 컷 시작(없으면 타임라인 끝)
+    const silenceSpans = [];
+    for (const cut of placedCuts) {
+      if (cut.bgmCue === 'stop') {
+        silenceSpans.push({ start: cut.start, end: totalDuration, fromCutId: cut.id, toCutId: undefined });
+      } else if ((cut.bgmCue === 'start' || cut.bgmCue === 'change') && silenceSpans.length > 0) {
+        const open = silenceSpans[silenceSpans.length - 1];
+        if (open.toCutId === undefined) {
+          open.end = cut.start;
+          open.toCutId = cut.id;
+        }
+      }
+    }
+
+    const placedSfx = [];
+    const skippedSfx = [];
+    for (const cut of placedCuts) {
+      const sfx = sfxLedger.get(cut.id);
+      if (!sfx) continue;
+      if (!Number.isFinite(sfx.duration)) throw new Error(`SFX ${cut.id}: 길이 미확정 — resolveSfxAssets 선행 필요`);
+
+      const adjustment = SFX_CUT_ADJUSTMENTS[cut.id] ?? {};
+      const lead = Number.isFinite(adjustment.leadSeconds)
+        ? (adjustment.onsetSeconds ?? 0) + adjustment.leadSeconds
+        : 0;
+      const start = round(Math.max(0, cut.start - lead));
+      const end = round(Math.min(start + sfx.duration, cut.end));
+      const duration = round(end - start);
+
+      const silence = silenceSpans.find((span) => start < span.end - 0.001 && end > span.start + 0.001);
+      if (silence) {
+        skippedSfx.push(`${cut.id}(bgm stop ${silence.fromCutId}~${silence.toCutId ?? '끝'})`);
+        warnings.push(
+          `SFX ${cut.id}: 의도된 침묵 구간(bgm stop ${silence.fromCutId}~${silence.toCutId ?? '타임라인 끝'})과 겹쳐 `
+          + 'A3 배치를 금지했습니다 — 03-assets §S6 통합 설계 규약',
+        );
+        continue;
+      }
+      if (duration < 0.05) {
+        warnings.push(`SFX ${cut.id}: 컷 슬롯이 ${duration}s로 너무 짧아 배치하지 않았습니다`);
+        continue;
+      }
+
+      const gainDb = round((sfx.gainDb ?? 0) + (adjustment.gainOffsetDb ?? 0));
+      const clip = makeClip({
+        id: `clip-${cut.id.toLowerCase()}-sfx`,
+        assetId: assetIdOf.get(sfx.assetId),
+        trackId: 'track-a3',
+        name: `${cut.id} SFX${sfx.take ? ` ${sfx.take}` : ''} (${gainDb >= 0 ? '+' : ''}${gainDb}dB)`,
+        kind: 'audio',
+        start,
+        duration,
+        volumeDb: gainDb,           // ★ 클립 단위 게인 — 렌더러 오디오 그래프에 그대로 전달된다
+        color: '#fb923c',
+        automationTags: ['sfx'],
+        effects: sfxDuckDb < 0
+          ? [{
+            id: `effect-${cut.id.toLowerCase()}-sfx-duck`,
+            type: 'audio',
+            label: 'SFX ducking (dialogue)',
+            enabled: true,
+            parameters: { reductionDb: sfxDuckDb, attackMs: 80, releaseMs: 250 },
+          }]
+          : [],
+      });
+      a3Clips.push(clip);
+      placedSfx.push(`${cut.id}${sfx.take ? `/${sfx.take}` : ''} ${gainDb >= 0 ? '+' : ''}${gainDb}dB`);
+
+      if (lead > 0) {
+        decisions.push(
+          `${cut.id}: SFX를 컷 시작보다 ${round(lead)}s 선행 배치(온셋 ${adjustment.onsetSeconds}s + 선행 ${adjustment.leadSeconds}s) — ${adjustment.note}`,
+        );
+        warnings.push(`SFX ${cut.id}: 선행 배치로 직전 컷 구간(${start}s~${cut.start}s)에 소리가 걸칩니다 — 편집기에서 육안·청취 확인 요망`);
+        todoMarkers.push({ time: start, label: `${cut.id} SFX 선행 배치`, note: adjustment.note });
+      }
+      if (adjustment.advisory) {
+        warnings.push(`SFX ${cut.id}: [레벨 판단 이관] ${adjustment.advisory}`);
+        todoMarkers.push({ time: start, label: `${cut.id} SFX 레벨 판단`, note: adjustment.advisory });
+      }
+    }
+
+    decisions.push(
+      `A3 SFX ${a3Clips.length}클립 배치(트랙 게인 ${SFX_TRACK_GAIN_DB}dB — 절대 레벨은 클립별 volumeDb, `
+      + `기준 피크 ${SFX_REFERENCE_PEAK_DBFS}dBFS): ${placedSfx.join(' · ')}`,
+    );
+
+    // 레벨 관계 점검: 대사(A1 나레이션 + A2V 내장 보이스)와 동시 발음되는 SFX를 명시한다.
+    // 게인 표가 이미 기준 피크를 대사 아래로 잡았지만, 겹치는 구간은 인간이 청취로 확인해야 한다.
+    const speechSpans = [
+      ...a1Clips.map((clip) => ({ id: clip.name, start: clip.start, end: clip.start + clip.duration })),
+      ...placedCuts
+        .filter((cut) => cut.isA2V && cut.pinned)
+        .map((cut) => ({ id: `${cut.id}(A2V 내장)`, start: cut.start, end: cut.end })),
+    ];
+    const overlapping = a3Clips
+      .map((clip) => {
+        const end = clip.start + clip.duration;
+        const hits = speechSpans.filter((span) => span.start < end - 0.001 && span.end > clip.start + 0.001);
+        return hits.length > 0 ? `${clip.name} ↔ ${hits.length}세그(${hits.map((hit) => hit.id).join(',')})` : undefined;
+      })
+      .filter(Boolean);
+    if (overlapping.length > 0) {
+      decisions.push(
+        `A3 SFX 대사 동시 발음 ${overlapping.length}건 — 기준 피크 ${SFX_REFERENCE_PEAK_DBFS}dBFS로 대사 아래 배치됨`
+        + `${sfxDuckDb < 0 ? `, 추가 덕킹 ${sfxDuckDb}dB 적용` : ', 추가 덕킹 없음(--sfx-duck-db로 -3~-6dB 권고)'}: `
+        + overlapping.join(' / '),
+      );
+      if (sfxDuckDb === 0) {
+        warnings.push(
+          `A3 SFX ${overlapping.length}건이 대사와 동시 발음됩니다 — 03-assets §S6 통합 설계는 추가 -3~-6dB 덕킹을 권고합니다`
+          + '(--sfx-duck-db -3). 현재는 게인 표 값만 적용했습니다 — 인간 청취 판단',
+        );
+      }
+    }
+    if (skippedSfx.length > 0) {
+      decisions.push(`A3 SFX ${skippedSfx.length}건 배치 금지(의도된 침묵 구간): ${skippedSfx.join(' · ')}`);
+    }
+    if (sfxDuckDb < 0) {
+      decisions.push(`A3 SFX 덕킹 ${sfxDuckDb}dB — 대사/내장 보이스 구간에서 자동 감쇠(렌더러 ducking 이펙트)`);
+    }
+  }
+
   // ---- 마커 ---------------------------------------------------------------
   const markers = [];
   let chapterIndex = 0;
@@ -1835,6 +2417,10 @@ function buildProject({
         makeTrack('track-t1', 'V2 자막·타이틀', 'text', textClips),
         makeTrack('track-a1', 'A1 나레이션', 'audio', a1Clips),
         { ...makeTrack('track-a2', 'A2 BGM', 'audio', a2Clips), volumeDb: BGM_TRACK_GAIN_DB },
+        // A3는 채택 SFX가 있을 때만 방출한다(없는 프로덕션의 프로젝트 형상 불변)
+        ...(a3Clips.length > 0
+          ? [{ ...makeTrack('track-a3', 'A3 SFX', 'audio', a3Clips), volumeDb: SFX_TRACK_GAIN_DB }]
+          : []),
       ],
       markers,
       captions,
@@ -2023,6 +2609,8 @@ function makeClip(clip) {
     color: clip.color,
     speed: clip.speed ?? 1,
     volume: clip.volume ?? 1,
+    // 클립 단위 게인(dB) — 지정한 클립에만 필드를 만든다(미지정 클립의 JSON 형상 불변)
+    ...(clip.volumeDb === undefined ? {} : { volumeDb: clip.volumeDb }),
     opacity: 1,
     blendMode: 'normal',
     muted: clip.muted ?? false,
@@ -2147,15 +2735,52 @@ async function main() {
   const warnings = [];
 
   // 러닝타임 게이트 레버 (01-script §길이 게이트 480~510초) — 미지정 시 종전 기본값
-  for (const [flag, name] of [['scene-pause', 'SCENE_PAUSE'], ['ending-margin', 'ENDING_MARGIN']]) {
+  for (const [flag, name] of [
+    ['scene-pause', 'SCENE_PAUSE'],
+    ['ending-margin', 'ENDING_MARGIN'],
+    ['speaker-turn-gap', 'SPEAKER_TURN_GAP'],
+  ]) {
     if (args[flag] === undefined) continue;
     const value = Number(args[flag]);
     if (!Number.isFinite(value) || value < 0) throw new Error(`--${flag} must be a non-negative number`);
     if (name === 'SCENE_PAUSE') SCENE_PAUSE_SECONDS = value;
-    else ENDING_MARGIN_SECONDS = value;
+    else if (name === 'ENDING_MARGIN') ENDING_MARGIN_SECONDS = value;
+    else SPEAKER_TURN_GAP_SECONDS = value;
   }
 
-  const assetsDoc = isV3 ? parseAssetsDocV3(assetsMd, { cycle }) : parseAssetsDoc(assetsMd);
+  // A3 SFX 덕킹(대사 구간 감쇠) — 03-assets §S6 통합 설계 권고 -3~-6dB. 기본 0 = 덕킹 없음.
+  const sfxDuckDb = args['sfx-duck-db'] === undefined ? 0 : Number(args['sfx-duck-db']);
+  if (!Number.isFinite(sfxDuckDb) || sfxDuckDb > 0) {
+    throw new Error('--sfx-duck-db must be a non-positive number (예: -3)');
+  }
+
+  const pathLog = [];
+  const assetsDoc = isV3
+    ? parseAssetsDocV3(assetsMd, { cycle, args, pathLog })
+    : parseAssetsDoc(assetsMd);
+  for (const line of pathLog) console.log(`  ${line}`);
+
+  // 컷별 보정 표 확정 — production_id 색인(에피소드 간 컷 번호 오적용 방지) + 외부 JSON override
+  S6_CUT_ADJUSTMENTS = S6_CUT_ADJUSTMENTS_BY_PRODUCTION[assetsDoc.productionId] ?? {};
+  SFX_CUT_ADJUSTMENTS = SFX_CUT_ADJUSTMENTS_BY_PRODUCTION[assetsDoc.productionId] ?? {};
+  if (args['cut-adjustments']) {
+    S6_CUT_ADJUSTMENTS = JSON.parse(await readFile(args['cut-adjustments'], 'utf8'));
+    console.log(`cut adjustments: ${args['cut-adjustments']} (${Object.keys(S6_CUT_ADJUSTMENTS).length}컷)`);
+  }
+  if (args['sfx-adjustments']) {
+    SFX_CUT_ADJUSTMENTS = JSON.parse(await readFile(args['sfx-adjustments'], 'utf8'));
+    console.log(`sfx adjustments: ${args['sfx-adjustments']} (${Object.keys(SFX_CUT_ADJUSTMENTS).length}컷)`);
+  }
+  console.log(
+    `cut adjustments: ${Object.keys(S6_CUT_ADJUSTMENTS).length}컷 / sfx adjustments: ${Object.keys(SFX_CUT_ADJUSTMENTS).length}컷`
+    + ` (production ${assetsDoc.productionId})`,
+  );
+  if (Object.keys(S6_CUT_ADJUSTMENTS).length === 0 && /S6 이관 플래그/.test(assetsMd)) {
+    warnings.push(
+      '03-assets에 §S6 이관 플래그 절이 있으나 이 프로덕션의 컷 보정 표가 등재되지 않았습니다 — '
+      + '크롭·트림은 자동 적용되지 않습니다(선언 표 등재 또는 --cut-adjustments <json> 필요)',
+    );
+  }
   const cuts = parseStoryboard(storyboardMd);
   const sourceMap = parseCutSourceMap(storyboardMd);
   const scriptDialogues = parseScriptDialogues(scriptMd);
@@ -2169,7 +2794,11 @@ async function main() {
     }
   }
 
-  console.log(`cycle: ${cycle} (project fps ${PROJECT_FPS}, prefer ${args.prefer}${args.upscaled ? ', upscaled clips' : ''}, scene-pause ${SCENE_PAUSE_SECONDS}s, ending-margin ${ENDING_MARGIN_SECONDS}s)`);
+  console.log(`cycle: ${cycle} (project fps ${PROJECT_FPS}, prefer ${args.prefer}${args.upscaled ? ', upscaled clips' : ''}, scene-pause ${SCENE_PAUSE_SECONDS}s, ending-margin ${ENDING_MARGIN_SECONDS}s, speaker-turn-gap ${SPEAKER_TURN_GAP_SECONDS}s)`);
+  if (isV3) {
+    const p = assetsDoc.paths;
+    console.log(`media dirs: cuts=${p.cuts} / clips=${p.clips} / clips-upscaled=${p.clipsUpscaled ?? '—'} / tts=${p.tts} / sfx=${p.sfx ?? '—'} (root ${assetsDoc.mediaRoot})`);
+  }
 
   // TTS 후처리본 오버라이드 (예: atempo 1.1x — 경로·실측 duration 교체, 반입 키 분리)
   if (args['tts-override']) {
@@ -2184,11 +2813,17 @@ async function main() {
     console.log(`tts override applied: ${args['tts-override']}`);
   }
 
-  // 세그먼트 ↔ 대본 대사 라인 1:1 검증
-  for (const [scene, lines] of scriptDialogues) {
+  // 세그먼트 ↔ 대본 대사 정렬 (연속 동일 화자 병합 규약 반영 — §세그먼트 분해 규약)
+  const alignedDialogues = alignScriptDialoguesToSegments(scriptDialogues, assetsDoc.tts, warnings);
+  for (const scene of alignedDialogues.keys()) {
     const segs = assetsDoc.tts.filter((seg) => seg.scene === scene);
-    if (segs.length !== lines.length) {
-      throw new Error(`scene N${scene}: tts segments ${segs.length} != script dialogue lines ${lines.length}`);
+    const units = alignedDialogues.get(scene);
+    if (segs.length !== units.length) {
+      throw new Error(`scene N${scene}: tts segments ${segs.length} != aligned dialogue units ${units.length}`);
+    }
+    const rawLines = scriptDialogues.get(scene).length;
+    if (rawLines !== units.length) {
+      console.log(`  N${String(scene).padStart(2, '0')}: 대본 ${rawLines}행 → 세그먼트 ${units.length}개로 묶음(화자 교대 단위)`);
     }
   }
   const workdir = args.workdir ?? path.join(SCRIPT_DIR, 'out', assetsDoc.productionId);
@@ -2219,13 +2854,24 @@ async function main() {
     resolveCutAssets(cuts, sourceMap, assetsDoc);
   }
 
+  // 채택 SFX 해석(v3) — 컷 1:1 + 파일 실측. 없는 프로덕션에서는 빈 배열.
+  const sfxAssets = isV3 ? await resolveSfxAssets(cuts, assetsDoc, warnings) : [];
+  if (assetsDoc.sfx) {
+    for (const cutId of [...assetsDoc.sfx.keys()]) {
+      if (!sfxAssets.some((entry) => entry.cutId === cutId)) assetsDoc.sfx.delete(cutId);
+    }
+  }
+
   const uniqueImages = new Set(cuts.map((cut) => cut.imageAsset.assetId));
   const uniqueClips = isV3
     ? new Set(cuts.filter((cut) => cut.clipAsset).map((cut) => cut.clipAsset.assetId))
     : new Set(cuts.filter((cut) => cut.i2vAsset).map((cut) => cut.i2vAsset.assetId));
   const a2vCuts = cuts.filter((cut) => cut.isA2V);
   console.log(`production: ${assetsDoc.productionId}`);
-  console.log(`cuts: ${cuts.length} / images: ${uniqueImages.size} / tts: ${assetsDoc.tts.length} / bgm: ${assetsDoc.bgm.length} / clips: ${uniqueClips.size} (A2V ${a2vCuts.length})`);
+  console.log(`cuts: ${cuts.length} / images: ${uniqueImages.size} / tts: ${assetsDoc.tts.length} / bgm: ${assetsDoc.bgm.length} / sfx: ${sfxAssets.length} / clips: ${uniqueClips.size} (A2V ${a2vCuts.length})`);
+  if (sfxAssets.length > 0) {
+    console.log(`sfx gains: ${sfxAssets.map((entry) => `${entry.cutId}${entry.take ? `/${entry.take}` : ''} ${entry.gainDb >= 0 ? '+' : ''}${entry.gainDb}dB`).join(' · ')}`);
+  }
 
   const embeddedSegmentKeys = new Set(
     isV3
@@ -2239,11 +2885,35 @@ async function main() {
   let mapping = existsSync(mappingPath) ? JSON.parse(await readFile(mappingPath, 'utf8')) : {};
   if (steps.includes('import')) {
     mapping = args.offline
-      ? await importMediaOffline(cuts, assetsDoc, mappingPath, { cycle, preferStill, embeddedSegmentKeys })
-      : await importMedia(args.api, cuts, assetsDoc, mappingPath, { cycle, preferStill, embeddedSegmentKeys });
+      ? await importMediaOffline(cuts, assetsDoc, mappingPath, { cycle, preferStill, embeddedSegmentKeys, sfxAssets })
+      : await importMedia(args.api, cuts, assetsDoc, mappingPath, { cycle, preferStill, embeddedSegmentKeys, sfxAssets });
   }
 
   if (!steps.includes('compile')) return;
+
+  // --target-duration: 화자 교대 간격을 설계 변수로 삼아 목표 러닝타임에 착지시킨다.
+  //   총 길이는 간격에 대해 단조증가이므로 이분법으로 해를 구한다.
+  //   대본·TTS 재생성·배속은 건드리지 않는다 — 조정 레버는 간격뿐이다.
+  if (isV3 && args['target-duration'] !== undefined) {
+    const target = Number(args['target-duration']);
+    if (!Number.isFinite(target) || target <= 0) throw new Error('--target-duration must be a positive number');
+    const probe = (gap) => computeTimelineV3(cuts, assetsDoc.tts, [], preferStill, { speakerTurnGap: gap }).totalDuration;
+    let low = 0;
+    let high = 1.0;
+    if (probe(low) > target) {
+      console.log(`\n--target-duration ${target}s: 간격 0에서도 ${probe(low)}s — 간격으로는 줄일 수 없습니다(간격 0 적용)`);
+      SPEAKER_TURN_GAP_SECONDS = 0;
+    } else {
+      while (probe(high) < target && high < 8) high *= 2;
+      for (let i = 0; i < 40; i += 1) {
+        const mid = (low + high) / 2;
+        if (probe(mid) < target) low = mid;
+        else high = mid;
+      }
+      SPEAKER_TURN_GAP_SECONDS = Math.round(((low + high) / 2) * 1000) / 1000;
+      console.log(`\n--target-duration ${target}s → 화자 교대 간격 해 ${SPEAKER_TURN_GAP_SECONDS}s (총 ${probe(SPEAKER_TURN_GAP_SECONDS)}s)`);
+    }
+  }
 
   const timeline = isV3
     ? computeTimelineV3(cuts, assetsDoc.tts, warnings, preferStill)
@@ -2256,19 +2926,25 @@ async function main() {
     timeline,
     assetsDoc,
     mapping,
-    scriptDialogues,
+    scriptDialogues: alignedDialogues,
     cycle,
     warnings,
     preferStill,
     kenBurns: isV3 ? Boolean(args.kenburns) : true,
+    sfxDuckDb,
+    allowPendingBgm: Boolean(args['allow-pending-bgm']),
   });
 
   // 자체 검증 출력: 총 길이 정합
   const ttsTotal = round(assetsDoc.tts.reduce((sum, seg) => sum + seg.duration, 0));
-  const expected = round(ttsTotal + (timeline.scenes.length - 1) * SCENE_PAUSE_SECONDS + ENDING_MARGIN_SECONDS);
+  const turnTotal = timeline.speakerTurnTotal ?? 0;
+  const expected = round(ttsTotal + turnTotal + (timeline.scenes.length - 1) * SCENE_PAUSE_SECONDS + ENDING_MARGIN_SECONDS);
   console.log('\n--- duration self-check ---');
   console.log(`TTS 실측 합계: ${ttsTotal}s`);
-  console.log(`기대 총 길이 = 실측 + 장면 휴지 ${(timeline.scenes.length - 1)}×${SCENE_PAUSE_SECONDS}s + 엔딩 마진 ${ENDING_MARGIN_SECONDS}s = ${expected}s`);
+  if (timeline.speakerTurns !== undefined) {
+    console.log(`화자 교대 간격: ${timeline.speakerTurns}회 × ${timeline.speakerTurnGap}s = ${turnTotal}s (장면 내 교대만)`);
+  }
+  console.log(`기대 총 길이 = 실측 + 교대 간격 ${turnTotal}s + 장면 휴지 ${(timeline.scenes.length - 1)}×${SCENE_PAUSE_SECONDS}s + 엔딩 마진 ${ENDING_MARGIN_SECONDS}s = ${expected}s`);
   console.log(`타임라인 총 길이: ${project.duration}s → ${Math.abs(project.duration - expected) < 0.01 ? 'OK' : `+${round(project.duration - expected)}s (A2V 고정 길이 흡수분)`}`);
   for (const scene of timeline.scenes) {
     console.log(`  N${String(scene).padStart(2, '0')}: start ${timeline.sceneStart.get(scene)}s / span ${round(timeline.sceneSpan.get(scene))}s (audio ${round(timeline.sceneAudio.get(scene))}s)`);
@@ -2276,6 +2952,20 @@ async function main() {
   // v3는 A2V 고정 길이 때문에 장면 스팬이 연장될 수 있다 — 초과분만 허용, 미달은 결함.
   if (project.duration + 0.01 < expected || (!isV3 && Math.abs(project.duration - expected) >= 0.01)) {
     throw new Error('duration self-check failed');
+  }
+
+  // 러닝타임 게이트 판정 (01-script §길이 게이트) — 기본 480~510초, --duration-gate로 변경
+  const gateRaw = args['duration-gate'] ?? '480-510';
+  const [gateMin, gateMax] = String(gateRaw).split('-').map(Number);
+  if (Number.isFinite(gateMin) && Number.isFinite(gateMax)) {
+    const inGate = project.duration >= gateMin && project.duration <= gateMax;
+    console.log(`러닝타임 게이트 ${gateMin}~${gateMax}s: ${project.duration}s → ${inGate ? 'PASS' : 'OUT OF GATE'}`);
+    if (!inGate) {
+      warnings.push(
+        `러닝타임 ${project.duration}s가 게이트 ${gateMin}~${gateMax}s 밖입니다 — `
+        + '--speaker-turn-gap / --scene-pause / --ending-margin 조정(또는 --target-duration으로 자동 해) 필요',
+      );
+    }
   }
 
   // 스키마 검증 (수용 테스트 게이트)

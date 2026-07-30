@@ -5,7 +5,7 @@ import { buildClipWithAdjustmentEffects, isAdjustmentLayerClip, resolveAdjustmen
 import { buildAudioDuckingIntervalsForClip, resolveAudioDuckingSettings, type AudioDuckingInterval } from './audio-ducking';
 import { buildStaticAudioEffectGain, hasSupportedAudioEffect } from './audio-effect-gain';
 import { resolveClipAudioTransition, type ResolvedAudioTransition } from './audio-transition';
-import { normalizeTrackPan, trackVolumeDbToGain } from './audio-mixer';
+import { clipVolumeDbToGain, normalizeTrackPan, trackVolumeDbToGain } from './audio-mixer';
 import { captionColorToFfmpeg, normalizeCaptionRenderStyle } from './caption-style';
 import { buildFfmpegChapterMetadata } from './chapter-metadata';
 import { hasSupportedColorLutEffect, isColorLutEffect } from './color-lut';
@@ -1027,6 +1027,8 @@ function buildRenderedAudioVolumeExpression(
 ): string {
   const multipliers = [
     formatExpressionNumber(buildStaticAudioEffectGain(clip)),
+    // 클립 단위 게인(dB) — 선형 volume(0~2)이 담지 못하는 넓은 편차를 그래프에 반영한다.
+    formatExpressionNumber(clipVolumeDbToGain(clip.volumeDb)),
     buildDuckingVolumeExpression(clip, duckingIntervals),
     buildAudioTransitionMultiplierExpression(transition),
   ].filter((expression): expression is string => Boolean(expression) && expression !== '1');

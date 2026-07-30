@@ -372,6 +372,8 @@ function validateTrackClips(
     validateNonNegativeNumber(clip.sourceIn, `${path}.sourceIn`, issues, { optional: true });
     validatePositiveNumber(clip.speed, `${path}.speed`, issues, { optional: true });
     validateNumberInRange(clip.volume, `${path}.volume`, issues, 0, 4, { optional: true });
+    // 클립 단위 게인(dB) — 트랙 게인과 동일한 도메인. 선형 volume이 담지 못하는 편차 전용.
+    validateNumberInRange(clip.volumeDb, `${path}.volumeDb`, issues, -96, 24, { optional: true });
     validateNumberInRange(clip.opacity, `${path}.opacity`, issues, 0, 1, { optional: true });
     validateOptionalString(clip.color, `${path}.color`, issues);
     validateOptionalBoolean(clip.reversed, `${path}.reversed`, issues);

@@ -6,6 +6,10 @@ export const CLIP_VOLUME_MIN = 0;
 export const CLIP_VOLUME_MAX = 2;
 export const CLIP_GAIN_MIN_DB = -60;
 export const CLIP_GAIN_MAX_DB = 6.02;
+// 클립 단위 게인(clip.volumeDb) — 선형 volume(0~2)이 담지 못하는 넓은 편차 전용.
+// 생성형 SFX의 컷별 정규화가 +15dB대까지 필요해 상한을 트랙 게인(+12dB)보다 높게 잡는다.
+export const CLIP_VOLUME_MIN_DB = -60;
+export const CLIP_VOLUME_MAX_DB = 24;
 
 export function normalizeTrackVolumeDb(value: unknown): number {
   return roundTo(clampFiniteNumber(value, 0, TRACK_VOLUME_MIN_DB, TRACK_VOLUME_MAX_DB), 10);
@@ -37,6 +41,29 @@ export function formatTrackPan(value: unknown): string {
   }
 
   return `${Math.round(Math.abs(pan) * 100)}% ${pan < 0 ? 'L' : 'R'}`;
+}
+
+export function normalizeClipVolumeDb(value: unknown): number {
+  return roundTo(clampFiniteNumber(value, 0, CLIP_VOLUME_MIN_DB, CLIP_VOLUME_MAX_DB), 10);
+}
+
+export function clipVolumeDbToGain(value: unknown): number {
+  if (value === undefined || value === null) {
+    return 1;
+  }
+
+  const volumeDb = normalizeClipVolumeDb(value);
+  if (volumeDb <= CLIP_VOLUME_MIN_DB) {
+    return 0;
+  }
+
+  return roundTo(Math.pow(10, volumeDb / 20), 1000);
+}
+
+export function formatClipVolumeDb(value: unknown): string {
+  const volumeDb = normalizeClipVolumeDb(value);
+  const formatted = Number.isInteger(volumeDb) ? volumeDb.toFixed(0) : volumeDb.toFixed(1);
+  return `${volumeDb > 0 ? '+' : ''}${formatted} dB`;
 }
 
 export function normalizeClipVolume(value: unknown): number {

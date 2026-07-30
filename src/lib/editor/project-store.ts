@@ -1,5 +1,5 @@
 import { createDefaultEditorProject } from './project';
-import { normalizeTrackPan, normalizeTrackVolumeDb } from './audio-mixer';
+import { normalizeClipVolumeDb, normalizeTrackPan, normalizeTrackVolumeDb } from './audio-mixer';
 import { DEFAULT_MASTER_TRUE_PEAK_DB } from './master-audio';
 import { buildProjectPackageMediaManifest, buildProjectPackageMediaWarnings, isVolatilePackageMediaPath, rewriteProjectMediaPathsForPackageImport, validateProjectPackageMediaEntry, type ProjectPackageMediaEntry, type ProjectPackageMediaManifest, type ProjectPackageMediaStatus } from './project-media-package';
 import { resolvePreviewSourcePath } from './preview-source';
@@ -232,6 +232,8 @@ function normalizeTracks(value: unknown): EditorProject['tracks'] {
           ? Math.max(0, clip.freezeFrameTime)
           : undefined,
         speedRamp: normalizeSpeedRampPoints(clip.speedRamp, clip.duration),
+        // 미지정 클립에는 필드를 만들지 않는다(기존 프로젝트 직렬화 결과 불변).
+        ...(clip.volumeDb === undefined ? {} : { volumeDb: normalizeClipVolumeDb(clip.volumeDb) }),
       }))
       : [],
   }));
