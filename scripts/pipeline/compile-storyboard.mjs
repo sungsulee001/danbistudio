@@ -332,9 +332,8 @@ const S6_CUT_ADJUSTMENTS_BY_PRODUCTION = {
     'CUT-41': {
       advisory: '★whip pan — 블러 구간에 스케치/낙서 아티팩트. 블러 구간 내 컷 전환 필수(ep1 CUT-28 동일 처리). 전환 프레임은 편집기에서 지정',
     },
-    'CUT-51': {
-      advisory: '말미 심도 뒤 인물 정면화 — 장영실 얼굴 미노출 계약 위험. 말미 트림 또는 인간 확인 필요(트림 지점 미정). 전경 흑색 봉(가마채 오독) 하단 크롭도 S4 승계 이관',
-    },
+    // CUT-51: v1 advisory(심도 뒤 장영실 정면화·가마채 크롭)는 콘티 v1.1 개정 신판(옆모습 투샷,
+    // 장영실 미등장)으로 클립이 교체되어 소멸 — 구 클립 한정 이슈였다(03-assets §v1.1 개정 컷).
     'CUT-58': {
       advisory: '손 침입 3/3 · 먹 획 글자형(no-text 경미 위반, S4 승계) — 상단 크롭 이관. 비율 미정',
     },
@@ -363,9 +362,15 @@ let S6_CUT_ADJUSTMENTS = {};
 const SFX_CUT_ADJUSTMENTS_BY_PRODUCTION = {
   '2026-07-29-jagyeongnu-night': {
     'CUT-50': {
+      // v1.1 개정(콘티 §CUT-50·§CUT-50A sound_timing + 인간 정정 2026-07-30 "잔향은 편집에서 페이드로"):
+      // 타종을 컷 말미 0.5s 전에 동기(다음 소리 = CUT-50A 김빈 대사가 타종 0.5s 뒤) —
+      // 잔향(소스 꼬리 4.11s, 실측: 감쇠 없는 지속 링)이 CUT-50A 아래로 이어지도록 컷 경계 너머로
+      // 연장 배치하고, 말미 페이드로 자연 감쇠를 만든다(급락 금지 — 소스가 파일 끝까지 −0.1dB 평탄).
       onsetSeconds: 4.94,
-      leadSeconds: 0.30,
-      note: '콘티 §팟캐스트 겸용 2 — "첫 타종음이 화면보다 먼저 온다". r2 타종 온셋 4.94s를 컷 시작 0.30s 앞으로 당긴다',
+      strikeBeforeCutEndSeconds: 0.5,
+      sustainIntoCutId: 'CUT-50A',
+      fadeOutSeconds: 2.8,
+      note: 'v1.1 잔향=증거 계약 — 타종은 컷 말미 0.5s 전, 잔향은 CUT-50A로 연장 + 말미 2.8s 페이드(인간 정정: 생성 대신 편집 페이드)',
     },
     'CUT-52': {
       advisory: '콘티 "릴레이는 소리가 주인공" — 기준 -18dBFS보다 +3~4dB 상향 검토(인간 청취 판단, 자동 적용 없음)',
@@ -2689,11 +2694,31 @@ function buildProject({
       if (!Number.isFinite(sfx.duration)) throw new Error(`SFX ${cut.id}: 길이 미확정 — resolveSfxAssets 선행 필요`);
 
       const adjustment = SFX_CUT_ADJUSTMENTS[cut.id] ?? {};
-      const lead = Number.isFinite(adjustment.leadSeconds)
-        ? (adjustment.onsetSeconds ?? 0) + adjustment.leadSeconds
-        : 0;
-      const start = round(Math.max(0, cut.start - lead));
-      const end = round(Math.min(start + sfx.duration, cut.end));
+      // 배치 기준 2형: ①leadSeconds — 온셋을 컷 시작 lead초 앞에 ②strikeBeforeCutEndSeconds —
+      // 온셋(타격)을 컷 끝 N초 앞에 동기(v1.1 CUT-50 — 타종 직후 다음 컷에서 대사가 잔향 위에 얹힌다).
+      let lead = 0;
+      let start;
+      if (Number.isFinite(adjustment.strikeBeforeCutEndSeconds)) {
+        start = round(Math.max(0, cut.end - adjustment.strikeBeforeCutEndSeconds - (adjustment.onsetSeconds ?? 0)));
+        lead = round(Math.max(0, cut.start - start));
+      } else {
+        lead = Number.isFinite(adjustment.leadSeconds)
+          ? (adjustment.onsetSeconds ?? 0) + adjustment.leadSeconds
+          : 0;
+        start = round(Math.max(0, cut.start - lead));
+      }
+      // 잔향 연장: sustainIntoCutId가 지정되면 그 컷의 끝까지 클립이 컷 경계를 넘을 수 있다
+      // (인간 정정 2026-07-30 — 잔향은 생성이 아니라 편집 연장+페이드로).
+      let endCap = cut.end;
+      if (adjustment.sustainIntoCutId) {
+        const sustainCut = placedCuts.find((item) => item.id === adjustment.sustainIntoCutId);
+        if (!sustainCut) {
+          warnings.push(`SFX ${cut.id}: sustainIntoCutId ${adjustment.sustainIntoCutId}가 콘티에 없습니다 — 컷 끝에서 자릅니다`);
+        } else {
+          endCap = sustainCut.end;
+        }
+      }
+      const end = round(Math.min(start + sfx.duration, endCap));
       const duration = round(end - start);
 
       const silence = silenceSpans.find((span) => start < span.end - 0.001 && end > span.start + 0.001);
@@ -2732,12 +2757,28 @@ function buildProject({
           }]
           : [],
       });
+      // 말미 페이드(잔향 자연 감쇠 — BGM과 동일한 volume 키프레임 메커니즘, 렌더러 신기능 없음)
+      if (Number.isFinite(adjustment.fadeOutSeconds) && adjustment.fadeOutSeconds > 0.05) {
+        const fade = round(Math.min(adjustment.fadeOutSeconds, duration / 2));
+        clip.keyframes = [
+          { id: `kf-${clip.id}-fade-a`, property: 'volume', time: round(Math.max(0, duration - fade)), value: 1, easing: 'linear' },
+          { id: `kf-${clip.id}-fade-b`, property: 'volume', time: duration, value: 0, easing: 'linear' },
+        ];
+        decisions.push(`${cut.id}: SFX 말미 ${fade}s 페이드아웃(잔향 자연 감쇠 — 급락 금지)`);
+      }
+      if (adjustment.sustainIntoCutId && end > cut.end + 0.001) {
+        decisions.push(
+          `${cut.id}: SFX 잔향을 ${adjustment.sustainIntoCutId} 구간으로 연장 배치(${round(end - cut.end)}s — 컷 끝 ${cut.end}s → 클립 끝 ${end}s). ${adjustment.note ?? ''}`,
+        );
+      }
       a3Clips.push(clip);
       placedSfx.push(`${cut.id}${sfx.take ? `/${sfx.take}` : ''} ${gainDb >= 0 ? '+' : ''}${gainDb}dB`);
 
       if (lead > 0) {
         decisions.push(
-          `${cut.id}: SFX를 컷 시작보다 ${round(lead)}s 선행 배치(온셋 ${adjustment.onsetSeconds}s + 선행 ${adjustment.leadSeconds}s) — ${adjustment.note}`,
+          Number.isFinite(adjustment.strikeBeforeCutEndSeconds)
+            ? `${cut.id}: SFX 온셋(타격)을 컷 끝 ${adjustment.strikeBeforeCutEndSeconds}s 앞에 동기(클립 시작 ${start}s, 컷 시작보다 ${round(lead)}s 선행) — ${adjustment.note}`
+            : `${cut.id}: SFX를 컷 시작보다 ${round(lead)}s 선행 배치(온셋 ${adjustment.onsetSeconds}s + 선행 ${adjustment.leadSeconds}s) — ${adjustment.note}`,
         );
         warnings.push(`SFX ${cut.id}: 선행 배치로 직전 컷 구간(${start}s~${cut.start}s)에 소리가 걸칩니다 — 편집기에서 육안·청취 확인 요망`);
         todoMarkers.push({ time: start, label: `${cut.id} SFX 선행 배치`, note: adjustment.note });
