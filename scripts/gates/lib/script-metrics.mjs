@@ -7,15 +7,103 @@
 
 import { countSyllables } from './script-md-parser.mjs';
 
-/** 장면 길이(초) = 음절 ÷ sps + 장면 휴지. 대본 계약식 그대로. */
+/** 장면 발화 길이(초) = 음절 ÷ sps + 장면 휴지. 대본 계약식 그대로(무수정). */
 export function sceneDuration(syllables, sps, pause) {
   return syllables / sps + pause;
 }
 
-/** 전체 길이(초) = Σ 장면 길이 + 엔딩 마진. */
+/** 전체 발화 길이(초) = Σ 장면 길이 + 엔딩 마진. 화면 러닝타임의 발화 항. */
 export function totalDuration(scenes, sps, pause, margin) {
   const sum = scenes.reduce((a, s) => a + sceneDuration(s.syllables, sps, pause), 0);
   return sum + margin;
+}
+
+// ───────────────────────────────────────── 소리 타이밍(명시 침묵) 계량
+
+/**
+ * 장면 `소리 타이밍` 필드에서 초 단위 침묵 표기를 뽑는다.
+ *
+ * 판독 대상은 대본 규약(규칙 29·37)이 고정한 어휘 3종뿐이다 —
+ *   `묵음 N.N`   줄 사이의 의도된 쉼
+ *   `무발화 N.N` 대사·나레이션 없이 화면만 가는 구간
+ *   `SFX 후 N.N` 효과음 발생 시점 기준 지연(그 지연 동안 발화가 없다)
+ *
+ * 결정론 규율: 표기 1건 = 1회로만 센다. 산문 수식어("세 줄 사이 각각", "앞과 뒤 모두")의
+ * 배수 해석은 자연어 추론이므로 하지 않는다 — 게이트 산출은 대본 §검증의 손 집계보다
+ * 항상 같거나 작은 보수적 하한이 된다.
+ *
+ * @param {string} raw          장면 soundTimingRaw(들여쓴 하위 줄이 공백으로 이어붙은 원문)
+ * @param {object} markerSource {explicit_silence, non_speech, sfx_lead} 정규식 소스
+ */
+export function parseSoundTiming(raw, markerSource) {
+  const text = String(raw || '');
+  const pick = (src) => {
+    const out = [];
+    if (!src) return out;
+    const re = new RegExp(src, 'g');
+    for (const m of text.matchAll(re)) {
+      const v = Number(m[1]);
+      if (Number.isFinite(v) && v >= 0) out.push(v);
+    }
+    return out;
+  };
+  const explicitSilence = pick(markerSource.explicit_silence);
+  const nonSpeech = pick(markerSource.non_speech);
+  const sfxLead = pick(markerSource.sfx_lead);
+  const sum = (a) => a.reduce((x, y) => x + y, 0);
+  const explicitSilenceSec = sum(explicitSilence);
+  const nonSpeechSec = sum(nonSpeech);
+  const sfxLeadSec = sum(sfxLead);
+  return {
+    declared: text.trim().length > 0,
+    explicitSilence,
+    nonSpeech,
+    sfxLead,
+    explicitSilenceSec,
+    nonSpeechSec,
+    sfxLeadSec,
+    totalSec: explicitSilenceSec + nonSpeechSec + sfxLeadSec,
+  };
+}
+
+/** 문서 전체 침묵 합산. scene.sound(parseSoundTiming 결과)를 전제한다. */
+export function silenceTotals(scenes) {
+  const acc = {
+    explicitSilenceSec: 0,
+    nonSpeechSec: 0,
+    sfxLeadSec: 0,
+    totalSec: 0,
+    explicitSilenceCount: 0,
+    nonSpeechCount: 0,
+    sfxLeadCount: 0,
+    annotatedScenes: 0,
+  };
+  for (const s of scenes) {
+    const t = s.sound;
+    if (!t) continue;
+    acc.explicitSilenceSec += t.explicitSilenceSec;
+    acc.nonSpeechSec += t.nonSpeechSec;
+    acc.sfxLeadSec += t.sfxLeadSec;
+    acc.totalSec += t.totalSec;
+    acc.explicitSilenceCount += t.explicitSilence.length;
+    acc.nonSpeechCount += t.nonSpeech.length;
+    acc.sfxLeadCount += t.sfxLead.length;
+    if (t.declared) acc.annotatedScenes += 1;
+  }
+  return acc;
+}
+
+/**
+ * 화면 러닝타임(초) = 발화 시간(음절÷sps + 장면 휴지 + 엔딩 마진) + 명시 침묵 합.
+ * 판정 기준의 정의식. 장면 휴지·엔딩 마진은 **표기 없는 전환 여백의 상수**로 유지하고,
+ * 대본이 명시한 묵음·무발화·SFX 지연은 그 위에 가산한다(중복 상계 없음 — 규칙 데이터 `why` 참조).
+ */
+export function sceneScreenDuration(scene, sps, pause) {
+  return sceneDuration(scene.syllables, sps, pause) + (scene.sound ? scene.sound.totalSec : 0);
+}
+
+export function totalScreenDuration(scenes, sps, pause, margin) {
+  return totalDuration(scenes, sps, pause, margin) + silenceTotals(scenes).totalSec;
 }
 
 const PARTICLES = [

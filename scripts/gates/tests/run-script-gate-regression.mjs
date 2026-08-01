@@ -5,6 +5,7 @@
  * ① 현행 승인본(ep1 대본 v2.1 · ep2 대본 v1.0)이 통과하는가
  * ② 의도적으로 위반을 주입한 픽스처가 규칙별로 걸리는가
  * ③ 제외 규약(실록 인용 낭독부·[사실] 대사)이 실제로 동작하는가 — 네거티브 검증
+ * ④ 화면 러닝타임 계산 경로(2026-08-01 신설) — 묵음 표기 있음/없음/혼합
  *
  * 픽스처는 승인본 원문을 메모리에서 변형해 임시 파일로만 쓴다.
  * **대본 원문은 절대 수정하지 않는다.**
@@ -507,6 +508,194 @@ const INJECTIONS = [
   },
 ];
 
+// ─────────────────────── [3] 화면 러닝타임 계산 경로(2026-08-01 신설)
+
+const EP3 = path.join(VAULT, '20-productions/2026-08-01-anyeo-reconstruction/01-script.md');
+
+function gateOnFile(file, opts = {}) {
+  return runGate(file, opts);
+}
+
+/** 장면의 `화면 지시` 필드 앞에 `소리 타이밍` 필드를 끼워 넣는다. */
+function withSoundTiming(src, sceneHeadingFragment, lines, header = '- **소리 타이밍**:') {
+  const start = src.indexOf(sceneHeadingFragment);
+  if (start < 0) throw new Error(`장면 헤딩을 찾을 수 없다: ${sceneHeadingFragment}`);
+  const at = src.indexOf('- **화면 지시**:', start);
+  if (at < 0) throw new Error('화면 지시 필드를 찾을 수 없다');
+  const block = `${header}\n${lines.map((l) => `  - ${l}`).join('\n')}\n`;
+  return src.slice(0, at) + block + src.slice(at);
+}
+
+const near = (a, b, eps = 0.05) => Math.abs(a - b) <= eps;
+
+const SCREEN_DURATION = [
+  {
+    name: '픽스처(표기 없음) — ep1은 소리 타이밍 0장면, 침묵 0초 · 화면 러닝타임 = 발화 시간',
+    fn: () => {
+      const { report } = gateOn('ep1', null, {});
+      const s = report.stats.silence;
+      if (s.totalSec !== 0 || s.annotatedScenes !== 0) return `침묵 ${s.totalSec}초 / 기재 ${s.annotatedScenes}장면 (기대 0/0)`;
+      for (const k of Object.keys(report.stats.durations)) {
+        if (report.stats.screenDurations[k] !== report.stats.durations[k]) {
+          return `${k}: 화면 ${report.stats.screenDurations[k]} ≠ 발화 ${report.stats.durations[k]}`;
+        }
+      }
+      return null;
+    },
+  },
+  {
+    name: '픽스처(표기 있음) — 묵음·무발화·SFX 후를 각각 초 단위로 합산한다',
+    fn: () => {
+      const { report } = gateOn(
+        'ep1',
+        (s) =>
+          withSoundTiming(s, '## 장면 05 (N05)', [
+            '`SFX: lib/종이-넘김-단장` — 첫 프레임.',
+            '`SFX 후 0.8` `VO` 내레이터 첫 줄.',
+            '`묵음 1.5` — 둘째 줄 앞.',
+            '`무발화 2.5` — 장면 끝.',
+          ]),
+        {},
+      );
+      const s = report.stats.silence;
+      if (s.explicitSilenceCount !== 1 || !near(s.explicitSilenceSec, 1.5)) return `묵음 ${s.explicitSilenceCount}건 ${s.explicitSilenceSec}초 (기대 1건 1.5초)`;
+      if (s.nonSpeechCount !== 1 || !near(s.nonSpeechSec, 2.5)) return `무발화 ${s.nonSpeechCount}건 ${s.nonSpeechSec}초 (기대 1건 2.5초)`;
+      if (s.sfxLeadCount !== 1 || !near(s.sfxLeadSec, 0.8)) return `SFX 선행 ${s.sfxLeadCount}건 ${s.sfxLeadSec}초 (기대 1건 0.8초)`;
+      if (!near(s.totalSec, 4.8)) return `합계 ${s.totalSec}초 (기대 4.8초) — \`SFX: lib/<id>\`는 길이 항이 아니다`;
+      return null;
+    },
+  },
+  {
+    name: '픽스처(표기 있음) — 발화 시간 계산은 불변, 침묵만 가산된다',
+    fn: () => {
+      const base = gateOn('ep1', null, {}).report.stats;
+      const withS = gateOn(
+        'ep1',
+        (s) => withSoundTiming(s, '## 장면 05 (N05)', ['`묵음 1.5` — 둘째 줄 앞.', '`무발화 2.5` — 장면 끝.']),
+        {},
+      ).report.stats;
+      for (const k of Object.keys(base.durations)) {
+        if (base.durations[k] !== withS.durations[k]) return `발화 시간이 바뀌었다 ${k}: ${base.durations[k]} → ${withS.durations[k]}`;
+        if (!near(withS.screenDurations[k], base.durations[k] + 4.0)) {
+          return `${k}: 화면 ${withS.screenDurations[k]} ≠ 발화 ${base.durations[k]} + 4.0`;
+        }
+      }
+      return null;
+    },
+  },
+  {
+    name: '픽스처(혼합) — ep2 승인본 2/15 장면 기재: 묵음 0.5 + 무발화 6.0 + SFX 후 0.5 = 7.0초',
+    fn: () => {
+      const { report } = gateOn('ep2', null, {});
+      const s = report.stats.silence;
+      if (s.annotatedScenes !== 2) return `소리 타이밍 기재 ${s.annotatedScenes}장면 (기대 2)`;
+      if (!near(s.explicitSilenceSec, 0.5) || !near(s.nonSpeechSec, 6.0) || !near(s.sfxLeadSec, 0.5)) {
+        return `묵음 ${s.explicitSilenceSec} / 무발화 ${s.nonSpeechSec} / SFX 후 ${s.sfxLeadSec}`;
+      }
+      if (!near(s.totalSec, 7.0)) return `합계 ${s.totalSec}초 (기대 7.0초)`;
+      if (!near(report.stats.screenDurations.sohee_min, report.stats.durations.sohee_min + 7.0)) {
+        return `화면 ${report.stats.screenDurations.sohee_min} ≠ 발화 ${report.stats.durations.sohee_min} + 7.0`;
+      }
+      return null;
+    },
+  },
+  {
+    name: '필드 헤더 — 괄호 부기 표기(`- **소리 타이밍**(규칙 37 …):`)도 파싱된다',
+    fn: () => {
+      const { report } = gateOn(
+        'ep1',
+        (s) =>
+          withSoundTiming(s, '## 장면 05 (N05)', ['`묵음 1.0` — 둘째 줄 앞.'], '- **소리 타이밍**(규칙 37 — 표기 규약은 머리 메모):'),
+        {},
+      );
+      const s = report.stats.silence;
+      return s.annotatedScenes === 1 && near(s.totalSec, 1.0) ? null : `기재 ${s.annotatedScenes}장면 / ${s.totalSec}초`;
+    },
+  },
+  {
+    name: '결정론 — 산문 배수 수식어(「각각」·「앞뒤 모두」)는 추론하지 않는다(표기 1건 = 1회)',
+    fn: () => {
+      const { report } = gateOn(
+        'ep1',
+        (s) =>
+          withSoundTiming(s, '## 장면 05 (N05)', [
+            '`묵음 0.5` 계문 세 줄 사이 각각. 세 줄이 한 호흡으로 붙지 않게 끊는다.',
+            '`묵음 1.2` — 마지막 줄 앞과 뒤 모두.',
+          ]),
+        {},
+      );
+      const s = report.stats.silence;
+      return s.explicitSilenceCount === 2 && near(s.explicitSilenceSec, 1.7)
+        ? null
+        : `묵음 ${s.explicitSilenceCount}건 ${s.explicitSilenceSec}초 (기대 2건 1.7초 — 배수 미적용)`;
+    },
+  },
+  {
+    name: 'ep3(소리 타이밍 16/16) — 화면 러닝타임 기준 판정 PASS',
+    fn: () => {
+      const { report } = gateOnFile(EP3, { requireThroughLine: true, strictDialogue: true });
+      const s = report.stats.silence;
+      if (!near(s.totalSec, 87.4)) return `침묵 합계 ${s.totalSec}초 (기대 87.4초)`;
+      if (s.annotatedScenes !== 16) return `기재 ${s.annotatedScenes}/16장면`;
+      if (!near(report.stats.screenDurations.sohee_min, 594.1, 0.15)) return `sohee_min 화면 ${report.stats.screenDurations.sohee_min}초 (기대 594.1초)`;
+      if (!near(report.stats.screenDurations.sohee_max, 590.4, 0.15)) return `sohee_max 화면 ${report.stats.screenDurations.sohee_max}초 (기대 590.4초)`;
+      const errs = report.findings.filter((f) => f.severity === 'ERROR');
+      return errs.length === 0 ? null : `ERROR ${errs.length}건: ${[...new Set(errs.map((f) => f.ruleId))].join(', ')}`;
+    },
+  },
+  {
+    name: '규칙 37 정합 — 하한 미달 대본에 설계된 무발화를 배치하면 대역 안으로 들어온다',
+    fn: () => {
+      const before = gateOn('ep1', null, {}).report.findings.filter((f) => f.ruleId === 'LEN-DURATION-BAND' && f.severity === 'ERROR');
+      if (before.length === 0) return 'ep1이 개정 전부터 하한을 통과한다 — 픽스처 전제 붕괴';
+      const after = gateOn(
+        'ep1',
+        (s) => withSoundTiming(s, '## 장면 05 (N05)', ['`무발화 6.0` — 장면 끝, 화면만 간다.']),
+        {},
+      ).report.findings.filter((f) => f.ruleId === 'LEN-DURATION-BAND' && f.severity === 'ERROR');
+      return after.length === 0 ? null : `무발화 6.0초 배치 후에도 ERROR ${after.length}건`;
+    },
+  },
+  {
+    name: '상한 — 침묵 과다는 LEN-DURATION-BAND 상한 ERROR로 걸린다(무한 신장 차단)',
+    fn: () => {
+      const { report } = gateOn(
+        'ep2',
+        (s) => withSoundTiming(s, '## 장면 05 (N05)', ['`무발화 200.0` — 과다 주입.']),
+        {},
+      );
+      const hits = report.findings.filter((f) => f.ruleId === 'LEN-DURATION-BAND' && f.severity === 'ERROR');
+      if (hits.length === 0) return '상한 이탈 미검출';
+      return /이탈/.test(hits[0].message) ? null : `메시지 이상: ${hits[0].message}`;
+    },
+  },
+  {
+    name: '발화 0줄 장면 — `무발화 N.N` 미표기는 LEN-SILENT-SCENE-UNMARKED WARN(길이 추정 금지)',
+    fn: () => {
+      const bare = gateOn('ep1', (s) => replaceSpeechBlock(s, '## 장면 05 (N05)', []), {});
+      const warn = bare.report.findings.filter((f) => f.ruleId === 'LEN-SILENT-SCENE-UNMARKED');
+      if (warn.length === 0) return '발화 0줄 장면 미검출';
+      const marked = gateOn(
+        'ep1',
+        (s) => withSoundTiming(replaceSpeechBlock(s, '## 장면 05 (N05)', []), '## 장면 05 (N05)', ['`무발화 8.0` — 화면만 가는 장면.']),
+        {},
+      );
+      const still = marked.report.findings.filter((f) => f.ruleId === 'LEN-SILENT-SCENE-UNMARKED');
+      return still.length === 0 ? null : `무발화 표기 후에도 WARN ${still.length}건`;
+    },
+  },
+  {
+    name: '선언 필드 기준 불변 — 장면 `예상 길이`는 종전대로 발화 시간과 대조한다',
+    fn: () => {
+      const { report } = gateOnFile(EP3, {});
+      const hits = report.findings.filter((f) => f.ruleId === 'LEN-SCENE-DECL');
+      return hits.length === 0
+        ? null
+        : `ep3 장면 예상 길이(발화 기준)가 ${hits.length}건 어긋난다 — 선언 필드 기준이 화면으로 밀린 것`;
+    },
+  },
+];
+
 // ─────────────────────────────────────────── 실행
 
 let pass = 0;
@@ -577,6 +766,17 @@ for (const c of INJECTIONS) {
       if (hit) problems.push(`주입 문구가 ${hit.ruleId} 근거에 등장 — 제외 규약 미작동`);
     }
     record(c.name, problems.length === 0, problems.join(' / '));
+  } catch (e) {
+    record(c.name, false, `예외: ${e.message}`);
+  }
+}
+
+process.stdout.write('\n[3] 화면 러닝타임 계산 경로(2026-08-01 신설)\n');
+
+for (const c of SCREEN_DURATION) {
+  try {
+    const detail = c.fn();
+    record(c.name, !detail, detail || '');
   } catch (e) {
     record(c.name, false, `예외: ${e.message}`);
   }

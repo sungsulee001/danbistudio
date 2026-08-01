@@ -63,6 +63,8 @@ import {
   titleKeywordStems,
   commaCount,
   stdev,
+  parseSoundTiming,
+  silenceTotals,
 } from './lib/script-metrics.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -237,11 +239,23 @@ function computeTiming(doc, rules, spsOption) {
   const profiles = d.sps_profiles;
   const declaredTotal = Number(doc.frontmatter.estimated_duration);
 
+  // 장면별 소리 타이밍(명시 침묵) 판독 — 화면 러닝타임의 가산 항.
+  const markers = (d.silence && d.silence.markers) || {};
+  for (const scene of doc.scenes) {
+    scene.sound = parseSoundTiming(scene.soundTimingRaw, markers);
+  }
+  const silence = silenceTotals(doc.scenes);
+
+  // 발화 시간(음절 기준) — 계약식 무수정.
   const totals = {};
+  const screenTotals = {};
   for (const [name, sps] of Object.entries(profiles)) {
     totals[name] = totalDuration(doc.scenes, sps, d.scene_pause_sec, d.ending_margin_sec);
+    screenTotals[name] = totals[name] + silence.totalSec;
   }
 
+  // 프로파일 자동 선택은 종전대로 **발화 시간**과 frontmatter 선언값을 대조한다
+  // (선언 필드의 기준이 발화 시간이기 때문 — rules.duration.declared_fields_basis).
   let chosen = spsOption;
   if (!chosen || chosen === 'auto') {
     if (Number.isFinite(declaredTotal)) {
@@ -256,6 +270,8 @@ function computeTiming(doc, rules, spsOption) {
   return {
     profiles,
     totals,
+    screenTotals,
+    silence,
     chosen,
     sps,
     declaredTotal,
@@ -273,6 +289,20 @@ function checkLength(doc, rules, report, timing) {
   report.stats.durations = Object.fromEntries(
     Object.entries(timing.totals).map(([k, v]) => [k, round(v)]),
   );
+  report.stats.screenDurations = Object.fromEntries(
+    Object.entries(timing.screenTotals).map(([k, v]) => [k, round(v)]),
+  );
+  report.stats.silence = {
+    explicitSilenceSec: round(timing.silence.explicitSilenceSec),
+    explicitSilenceCount: timing.silence.explicitSilenceCount,
+    nonSpeechSec: round(timing.silence.nonSpeechSec),
+    nonSpeechCount: timing.silence.nonSpeechCount,
+    sfxLeadSec: round(timing.silence.sfxLeadSec),
+    sfxLeadCount: timing.silence.sfxLeadCount,
+    totalSec: round(timing.silence.totalSec),
+    annotatedScenes: timing.silence.annotatedScenes,
+  };
+  report.stats.durationBasis = d.basis || 'screen_runtime';
   report.stats.spsProfileUsed = timing.chosen;
 
   // 프론트매터 음절 수 대조
@@ -287,22 +317,58 @@ function checkLength(doc, rules, report, timing) {
     );
   }
 
-  // 길이 게이트 — 실측 보정 대역 전체가 게이트 안에 들어와야 한다
+  // 길이 게이트 — **화면 러닝타임** 기준. 실측 보정 대역 전체가 게이트 안에 들어와야 한다.
+  //   화면 러닝타임 = 발화 시간(음절÷sps + 장면 휴지 + 엔딩 마진) + 명시 묵음 + 무발화 + SFX 선행 지연
+  const sil = timing.silence;
+  const breakdown =
+    `발화 ${round(timing.totals[d.gate_profiles[0]])}초(총 ${totalSyl}음절 / ${doc.scenes.length}장면 / 휴지 ${d.scene_pause_sec}초 · 마진 ${d.ending_margin_sec}초)` +
+    ` + 묵음 ${sil.explicitSilenceCount}건 ${round(sil.explicitSilenceSec)}초` +
+    ` + 무발화 ${sil.nonSpeechCount}건 ${round(sil.nonSpeechSec)}초` +
+    ` + SFX 선행 ${sil.sfxLeadCount}건 ${round(sil.sfxLeadSec)}초`;
+
   for (const name of d.gate_profiles) {
-    const sec = timing.totals[name];
+    const sec = timing.screenTotals[name];
     if (sec < d.gate_min_sec || sec > d.gate_max_sec) {
       report.error(
         'LEN-DURATION-BAND',
         null,
-        `실측 보정(${name}=${timing.profiles[name]}음절/초) 길이 ${round(sec)}초 — 게이트 ${d.gate_min_sec}~${d.gate_max_sec}초 이탈`,
-        `총 ${totalSyl}음절 / ${doc.scenes.length}장면 / 휴지 ${d.scene_pause_sec}초 · 마진 ${d.ending_margin_sec}초`,
+        `화면 러닝타임(${name}=${timing.profiles[name]}음절/초) ${round(sec)}초 — 게이트 ${d.gate_min_sec}~${d.gate_max_sec}초 이탈`,
+        breakdown,
         sec < d.gate_min_sec
-          ? `음절을 ${Math.ceil((d.gate_min_sec - sec) * timing.profiles[name])}음절 이상 증량하라(설계식 3.8 기준이 아니라 실측 보정 기준으로 재설계)`
-          : `음절을 ${Math.ceil((sec - d.gate_max_sec) * timing.profiles[name])}음절 이상 트림하라`,
+          ? `${round(d.gate_min_sec - sec)}초를 채워라 — 음절 증량(${Math.ceil((d.gate_min_sec - sec) * timing.profiles[name])}음절 이상) 또는 설계된 묵음·무발화 배치(규칙 29·37)`
+          : `${round(sec - d.gate_max_sec)}초를 덜어내라 — 음절 트림(${Math.ceil((sec - d.gate_max_sec) * timing.profiles[name])}음절 이상) 또는 묵음·무발화 축소`,
       );
     } else {
-      report.info('LEN-DURATION-BAND', null, `${name} 길이 ${round(sec)}초 — 통과`, '', '');
+      report.info(
+        'LEN-DURATION-BAND',
+        null,
+        `${name} 화면 러닝타임 ${round(sec)}초 — 통과 (발화 ${round(timing.totals[name])} + 침묵 ${round(sil.totalSec)})`,
+        breakdown,
+        '',
+      );
     }
+  }
+
+  // 침묵 비중은 별도 규칙을 두지 않는다 — 대역(하한 480 · 상한 620)이 이미
+  // 침묵 비중을 (620−480)/620 = 22.6% 이하로 묶는다([[뿌리깊은나무-연출-분석]] 참조값 25% 미만).
+  // 보고용 지표로만 산출한다. 근거는 rules.duration.band_rationale.
+  {
+    const ref = timing.screenTotals[d.gate_profiles[0]];
+    report.stats.silenceShare = ref > 0 ? round((sil.totalSec / ref) * 100, 1) : 0;
+  }
+
+  // 발화 0줄 장면 — 길이를 상수로 추정하지 않는다. `무발화 N.N` 표기를 요구한다.
+  for (const scene of doc.scenes) {
+    if (scene.syllables > 0) continue;
+    if (scene.sound && scene.sound.nonSpeech.length > 0) continue;
+    report.warn(
+      'LEN-SILENT-SCENE-UNMARKED',
+      scene.id,
+      '발화 라인이 없는 장면인데 `무발화 N.N` 표기가 없다 — 화면 러닝타임을 산출할 수 없다',
+      `화면 지시 ${scene.visual ? '있음' : '없음'} / 발화 0줄`,
+      '- **소리 타이밍**: 필드에 `무발화 N.N`으로 이 구간의 길이를 명시하라(규칙 37). 게이트는 길이를 추정하지 않는다',
+      scene.lineNo,
+    );
   }
 
   // 선언 총길이 대조
@@ -1295,7 +1361,12 @@ function formatText(result, quiet) {
   out.push(`대상      : ${report.stats.file}`);
   out.push(`production: ${report.stats.productionId || '-'} / v${report.stats.scriptVersion || '-'} / status=${report.stats.status || '-'}`);
   out.push(`형식      : ${report.stats.format || '미상'} · 장면 ${report.stats.sceneCount} · ${report.stats.syllables}음절`);
-  out.push(`길이      : ${Object.entries(report.stats.durations).map(([k, v]) => `${k}=${v}초`).join(' · ')}  (장면 대조 프로파일: ${report.stats.spsProfileUsed})`);
+  out.push(`발화 길이  : ${Object.entries(report.stats.durations).map(([k, v]) => `${k}=${v}초`).join(' · ')}  (장면 대조 프로파일: ${report.stats.spsProfileUsed})`);
+  {
+    const s = report.stats.silence || {};
+    out.push(`화면 러닝  : ${Object.entries(report.stats.screenDurations || {}).map(([k, v]) => `${k}=${v}초`).join(' · ')}  ← 판정 기준`);
+    out.push(`침묵      : 묵음 ${s.explicitSilenceCount ?? 0}건 ${s.explicitSilenceSec ?? 0}초 · 무발화 ${s.nonSpeechCount ?? 0}건 ${s.nonSpeechSec ?? 0}초 · SFX 선행 ${s.sfxLeadCount ?? 0}건 ${s.sfxLeadSec ?? 0}초 = ${s.totalSec ?? 0}초 (${report.stats.silenceShare ?? 0}% · 소리 타이밍 기재 ${s.annotatedScenes ?? 0}/${report.stats.sceneCount}장면)`);
+  }
   out.push(`나레이터  : ${report.stats.narratorShare}% · 2인칭 ${report.stats.secondPerson}회 · 복선 ${report.stats.foreshadowCount ?? '-'}건`);
   out.push(`항목 C 대상: 내레이션 ${report.stats.styleSentences}문장 / ${report.stats.styleSyllables}음절 (실록 인용 낭독부·[사실] 대사 제외)`);
   out.push(`항목 D 대상: 대사 ${report.stats.dialogueLines}줄 / ${report.stats.dialogueSentences}문장 / ${report.stats.dialogueSyllables}음절 (내레이터·[사실] 인용 대사 ${report.stats.dialogueExcludedLines}줄 제외)`);

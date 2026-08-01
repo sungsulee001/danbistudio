@@ -14,6 +14,8 @@
  *     - 화자: 발화문.
  *   - **화면 지시**: ...
  *   - **예상 길이**: 16.5초
+ *   - **소리 타이밍**: (또는 `- **소리 타이밍**(규칙 37 — …):` — 괄호 부기 허용)
+ *     - `묵음 0.5` … / `무발화 2.0` … / `SFX 후 0.8` …
  *   - **대사 태그**: ...
  *   - **메모**: ...
  *   ## 검증 ...              (검사 대상 아님)
@@ -105,9 +107,17 @@ const FIELD_ALIASES = {
   '화면 지시': 'visual',
   '예상 길이': 'declaredDurationRaw',
   '발음 주의': 'pronunciation',
+  '소리 타이밍': 'soundTimingRaw',
   '대사 태그': 'tagBlock',
   '메모': 'memo',
 };
+
+/**
+ * 장면 필드 헤더. `- **키**:` 가 기본형이고, `- **키**(부기):` 처럼 괄호 부기가 붙는 표기를
+ * ep2 대본이 쓰고 있어(`- **소리 타이밍**(규칙 37 — …):`) 괄호 부기를 선택적으로 허용한다.
+ * 괄호 안이 키의 일부인 표기(`- **어체 확인(규칙 40)**:`)는 종전대로 `**` 안쪽이 키다.
+ */
+const FIELD_HEAD_RE = /^-\s+\*\*(.+?)\*\*\s*(?:[（(][^)）]*[)）])?\s*[:：]\s*(.*)$/;
 
 /**
  * 대본 md 전체를 구조화한다.
@@ -204,6 +214,7 @@ export function parseScript(source) {
         declaredDurationRaw: '',
         declaredDuration: null,
         pronunciation: '',
+        soundTimingRaw: '',
         tagBlock: '',
         memo: '',
       };
@@ -216,7 +227,7 @@ export function parseScript(source) {
     }
     if (!current) continue;
 
-    const field = line.match(/^-\s+\*\*(.+?)\*\*\s*[:：]\s*(.*)$/);
+    const field = line.match(FIELD_HEAD_RE);
     if (field) {
       const key = FIELD_ALIASES[field[1].trim()];
       inSpeech = false;
