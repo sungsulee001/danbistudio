@@ -195,8 +195,6 @@ function buildSummary(cuts, frontmatter) {
   const cap = cuts.filter((c) => c.hasCap).length;
   const motion = cuts.filter((c) => c.isMotion).length;
   const reuse = cuts.filter((c) => c.isReuse).length;
-  const boards = cuts.filter((c) => c.boardSrc).length;
-  const previews = cuts.filter((c) => c.previewSrc).length;
   const transitions = {};
   for (const cut of cuts) {
     const key = (cut.transition ?? '—').split(/[\s—]/)[0];
@@ -205,7 +203,7 @@ function buildSummary(cuts, frontmatter) {
   const changesPerMinute = runtime > 0 ? ((total + motion) / runtime) * 60 : 0;
 
   return {
-    total, runtime, scenes: scenes.size, chapters, a2v, noFigure, cap, motion, reuse, boards, previews,
+    total, runtime, scenes: scenes.size, chapters, a2v, noFigure, cap, motion, reuse,
     transitions, changesPerMinute,
     min: durations.length ? Math.min(...durations) : 0,
     max: durations.length ? Math.max(...durations) : 0,
@@ -216,7 +214,14 @@ function buildSummary(cuts, frontmatter) {
 }
 
 // ---------------------------------------------------------------------------
-// 3. 이미지 슬롯 해석 — board 필드 → 실제 파일 → 출력 HTML 기준 상대 경로
+// 3. 이미지 슬롯 — **존재 여부를 굽지 않는다**
+// ---------------------------------------------------------------------------
+// ⚠ 설계 원칙(2026-08-02 인간 지적 반영): 시트는 생성 시점의 파일 목록을 HTML에 굽지 않는다.
+//    구우면 ①그 뒤 생성된 프리뷰가 시트를 다시 뽑아야 보이고 ②아직 없는 파일이 에러로 뜬다.
+//    대신 컷마다 **후보 URL 목록**(상대 경로)만 방출하고, 브라우저가 `onerror` 체인으로
+//    로드 시점에 해결한다 — **파일이 생기면 새로고침만으로 그림이 붙는다.**
+//    `index.json`은 실제 파일과 어긋날 수 있으므로(생성 에이전트가 동시 기록) 슬롯 판정에
+//    **절대 쓰지 않고** seed 표시 용도로만 런타임 fetch 한다. 디스크의 파일 존재가 유일한 진실이다.
 // ---------------------------------------------------------------------------
 
 const IMAGE_EXT_RE = /\.(png|jpe?g|webp|gif|avif)$/i;
@@ -224,77 +229,66 @@ const IMAGE_EXT_RE = /\.(png|jpe?g|webp|gif|avif)$/i;
 /**
  * 저해상도 프리뷰 계약(별도 프리뷰 생성 에이전트 소관 — 이 스크립트는 **표시만** 한다):
  *   <에피소드 트리>\09-boards\previews\CUT-NN.png   (접미 컷은 CUT-07A.png)
- *   <에피소드 트리>\09-boards\previews\index.json   [{cut_id, file, seed, w, h, prompt_hash}]
- * index.json이 없어도 파일명 규약(CUT-NN.png)만으로 동작한다 — seed만 표시되지 않는다.
+ *   <에피소드 트리>\09-boards\previews\index.json   [{cut_id, file, seed, ...}] — seed 표시 전용
  */
 const PREVIEW_DIR_NAME = 'previews';
-const PREVIEW_EXTS = ['.png', '.jpg', '.jpeg', '.webp'];
+const PREVIEW_EXTS = ['.png', '.jpg', '.webp'];
 
-function loadPreviewIndex(previewsDir) {
-  const byCut = new Map();
-  if (!previewsDir || !existsSync(previewsDir)) return byCut;
-  const indexPath = path.join(previewsDir, 'index.json');
-  if (existsSync(indexPath)) {
-    try {
-      const parsed = JSON.parse(readFileSync(indexPath, 'utf8'));
-      const rows = Array.isArray(parsed) ? parsed : (parsed.previews ?? parsed.items ?? []);
-      for (const row of rows) {
-        const id = row?.cut_id ?? row?.cutId ?? row?.id;
-        if (id) byCut.set(String(id), row);
-      }
-    } catch {
-      // 파손된 index.json은 무시하고 파일명 규약으로 폴백한다 — 시트 생성은 절대 실패시키지 않는다.
-    }
-  }
-  return byCut;
+/** 경로를 출력 HTML 기준 상대 URL로. (존재 확인 없음 — 후보일 뿐이다) */
+function toRelativeUrl(outDir, absolute) {
+  return encodeURI(path.relative(outDir, absolute).split(path.sep).join('/'));
 }
 
-function resolvePreviewImage(cut, previewsDir, previewIndex) {
-  if (!previewsDir || !existsSync(previewsDir)) return undefined;
-  const entry = previewIndex.get(cut.id);
-  const named = entry?.file ? [entry.file] : [];
-  for (const candidate of [...named, ...PREVIEW_EXTS.map((ext) => `${cut.id}${ext}`)]) {
-    const file = path.isAbsolute(candidate) ? candidate : path.join(previewsDir, candidate);
-    if (existsSync(file) && IMAGE_EXT_RE.test(file)) return { file, entry };
-  }
-  return undefined;
+/** `output_path` 필드에서 스틸(.png) 절대 경로를 뽑는다. */
+function stillPathFromOutputField(cut) {
+  const raw = cut.outputPath ?? '';
+  return raw.match(/`([^`]*\.(?:png|jpe?g|webp))`/)?.[1]
+    ?? raw.match(/([A-Za-z]:\\[^\s`·]+\.(?:png|jpe?g|webp))/)?.[1];
 }
 
-/** 컷별 이미지 후보 폴더(우선순위 순). output_path의 02-cuts가 가장 권위 있다. */
-function candidateDirs(cut, { boardsDirArg, mediaRoot, storyboardDir, outDir }) {
-  const dirs = [];
-  if (boardsDirArg) dirs.push(boardsDirArg);
-  const fromOutput = (cut.outputPath ?? '').match(/`([^`]*\.(?:png|jpe?g|webp))`/)?.[1]
-    ?? (cut.outputPath ?? '').match(/([A-Za-z]:\\[^\s`·]+\.(?:png|jpe?g|webp))/)?.[1];
-  if (fromOutput) dirs.push(path.dirname(fromOutput));
-  if (mediaRoot) {
-    dirs.push(path.join(mediaRoot, EPISODE_SUBDIRS.cuts));
-    dirs.push(path.join(mediaRoot, EPISODE_SUBDIRS.boards));
-  }
-  // 구 배치(ep1·ep2 — `ComfyUI\output\danbi\<id>\cuts`)는 media_root도 output_path도 없다.
-  // 이 경우 출력 HTML을 그 폴더에 두는 것이 관례이므로 출력 폴더와 그 형제 `cuts`를 후보에 넣는다.
-  if (outDir) {
-    dirs.push(outDir);
-    dirs.push(path.join(outDir, 'cuts'));
-    dirs.push(path.join(path.dirname(outDir), 'cuts'));
-  }
-  dirs.push(storyboardDir);
-  return dirs.filter(Boolean);
-}
+/**
+ * 컷별 이미지 후보 URL 목록(우선순위 순) — **최종 컷 이미지 → 프리뷰**.
+ * 존재 확인을 하지 않으므로 S4가 아직 안 돌았어도 최종 경로가 후보에 들어간다.
+ * 그래서 S4가 `02-cuts`에 파일을 떨어뜨리면 `board` 필드 기입을 기다리지 않고 바로 붙는다.
+ */
+function buildImageCandidates(cut, { outDir, boardsDirArg, mediaRoot, storyboardDir, previewsDir }) {
+  const urls = [];
+  const push = (absolute) => {
+    if (!absolute) return;
+    const url = toRelativeUrl(outDir, absolute);
+    if (url && !urls.includes(url)) urls.push(url);
+  };
 
-function resolveBoardImage(cut, context) {
-  const raw = cut.board;
-  if (isEmptyValue(raw)) return undefined;
-  // 백틱·굵게 표기를 벗기고 첫 이미지 파일 토큰만 취한다.
-  const cleaned = raw.replace(/[`*]/g, ' ').trim();
-  const token = cleaned.match(/[^\s|·]+\.(?:png|jpe?g|webp|gif|avif)/i)?.[0];
-  if (!token) return undefined;
-  if (path.isAbsolute(token)) return existsSync(token) ? token : { missing: token };
-  for (const dir of candidateDirs(cut, context)) {
-    const candidate = path.join(dir, token);
-    if (existsSync(candidate)) return candidate;
+  // ① 최종 컷 이미지 — board 필드의 파일명이 있으면 그것, 없으면 CUT-NN.png 규약.
+  const boardToken = isEmptyValue(cut.board)
+    ? undefined
+    : cut.board.replace(/[`*]/g, ' ').match(/[^\s|·]+\.(?:png|jpe?g|webp|gif|avif)/i)?.[0];
+  const stillPath = stillPathFromOutputField(cut);
+  const finalDirs = [
+    boardsDirArg,
+    stillPath ? path.dirname(stillPath) : undefined,
+    mediaRoot ? path.join(mediaRoot, EPISODE_SUBDIRS.cuts) : undefined,
+    outDir,
+    path.join(path.dirname(outDir), 'cuts'),
+    storyboardDir,
+  ].filter(Boolean);
+
+  if (boardToken && path.isAbsolute(boardToken)) push(boardToken);
+  for (const dir of finalDirs) {
+    if (boardToken) push(path.join(dir, boardToken));
   }
-  return { missing: token };
+  // board가 비어 있어도(=S4 이전) 규약 파일명을 후보로 둔다 — 생기는 즉시 잡힌다.
+  if (!boardToken) {
+    if (stillPath) push(stillPath);
+    else for (const dir of finalDirs.slice(0, 3)) push(path.join(dir, `${cut.id}.png`));
+  }
+
+  const finalCount = urls.length;
+
+  // ② 저해상도 프리뷰 — 파일명 규약만 쓴다(index.json 비의존).
+  for (const ext of PREVIEW_EXTS) push(path.join(previewsDir, `${cut.id}${ext}`));
+
+  return { urls, finalCount };
 }
 
 // ---------------------------------------------------------------------------
@@ -367,7 +361,7 @@ function renderSummaryTable(summary, frontmatter, meta) {
     ['분당 시각 변화', `${summary.changesPerMinute.toFixed(2)}회/분`],
     ['컷 길이', `최단 ${summary.min.toFixed(1)} / 평균 ${summary.avg.toFixed(2)} / 최장 ${summary.max.toFixed(1)}초`],
     ['전환', Object.entries(summary.transitions).map(([k, v]) => `${escapeHtml(k)} ${v}`).join(' · ')],
-    ['이미지 슬롯', `최종 ${summary.boards} · 프리뷰 ${summary.previews} · 빈 프레임 ${summary.total - summary.boards - summary.previews} / ${summary.total}컷`],
+    ['이미지 슬롯', `<span id="slot-stat">확인 중…</span>`],
     ['status', `${escapeHtml(frontmatter.status ?? '—')} · v${escapeHtml(frontmatter.storyboard_version ?? '—')}`],
   ];
   return `<table class="summary"><tbody>${
@@ -383,30 +377,27 @@ function chunk(list, size) {
   return out;
 }
 
-function emptyFrame(cut) {
-  return `<div class="frame ${cut.boardMissing ? 'missing' : ''}">
-      <span class="frame-label">${cut.boardMissing ? '보드 파일 없음' : '생성 전'}</span>
-      <span class="frame-comp">${escapeHtml(compositionSummary(cut))}</span>
-      ${cut.boardMissing ? `<span class="frame-file">${escapeHtml(cut.boardMissing)}</span>` : ''}
-    </div>`;
-}
-
 /**
- * 이미지 슬롯 3단 우선순위:
- *   ① 최종 컷 이미지(board 필드 — S4 이후) ② 저해상도 프리뷰 ③ 빈 프레임 + 구도 요약
- * 프리뷰는 **최종본이 아님**을 PREVIEW 배지 + 흐린 테두리로 명시한다.
+ * 이미지 슬롯. **어떤 컷이든 항상 같은 마크업**을 방출한다 — 후보 URL 목록 + 대기 프레임.
+ * 어느 것이 실제로 뜨는지는 브라우저가 로드 시점에 정한다(굽지 않는다).
+ * 후보를 다 실패하면 **에러가 아니라 「생성 대기」**로 보인다 — 아직 안 만들어진 것이지 실패가 아니다.
  */
 function renderScreenCell(cut) {
   const badgeRoute = cut.renderRoute ? `<div class="micro">${inline(clip(cut.renderRoute, 46))}</div>` : '';
-  const src = cut.boardSrc ?? cut.previewSrc;
-  const isPreview = !cut.boardSrc && Boolean(cut.previewSrc);
-  const frame = src
-    ? `<div class="slot ${isPreview ? 'is-preview' : ''}" data-cut="${escapeHtml(cut.id)}">
-         <img class="board" src="${escapeHtml(src)}" alt="${escapeHtml(cut.id)} ${isPreview ? '프리뷰' : '컷 이미지'}" loading="lazy" data-cut="${escapeHtml(cut.id)}">
-         ${isPreview ? '<span class="pv-badge">PREVIEW</span>' : ''}
-         <span class="zoom-hint">클릭 확대</span>
-       </div>`
-    : emptyFrame(cut);
+  const { urls, finalCount } = cut.imageCandidates;
+  const frame = `<div class="slot pending" data-cut="${escapeHtml(cut.id)}"
+       data-srcs="${escapeHtml(JSON.stringify(urls))}" data-final="${finalCount}"
+       data-comp="${escapeHtml(compositionSummary(cut))}">
+       <!-- loading="lazy" 금지: 화면 밖 이미지는 로드 시도 자체가 지연돼 onerror 폴백 체인이
+            영영 돌지 않는다(= 진척 카운터가 화면에 보이는 만큼만 세어진다). 실측으로 확인. -->
+       <img class="board" alt="${escapeHtml(cut.id)} 컷 이미지" decoding="async" data-cut="${escapeHtml(cut.id)}" hidden>
+       <span class="pv-badge" hidden>PREVIEW</span>
+       <span class="zoom-hint" hidden>클릭 확대</span>
+       <div class="frame waiting">
+         <span class="frame-label">생성 대기</span>
+         <span class="frame-comp">${escapeHtml(compositionSummary(cut))}</span>
+       </div>
+     </div>`;
   return `${frame}
     <div class="shot">${escapeHtml(shotLabel(cut))}</div>
     ${cut.styleVariant ? `<div class="micro">${inline(clip(cut.styleVariant, 40))}</div>` : ''}
@@ -426,7 +417,6 @@ function renderContentCell(cut) {
       ${cut.motionPrompt ? `<div class="fullblk"><b>motion_prompt</b><p class="mono">${inline(cut.motionPrompt)}</p></div>` : ''}
       ${cut.lineMap ? `<div class="fullblk"><b>line_map</b><p>${inline(cut.lineMap)}</p></div>` : ''}
       ${cut.reuse ? `<div class="fullblk"><b>reuse</b><p>${inline(cut.reuse)}</p></div>` : ''}
-      ${cut.previewMeta ? `<div class="fullblk"><b>프리뷰 메타</b><p class="mono">seed <b class="seed">${escapeHtml(String(cut.previewMeta.seed ?? '—'))}</b>${cut.previewMeta.w ? ` · ${escapeHtml(String(cut.previewMeta.w))}×${escapeHtml(String(cut.previewMeta.h ?? '?'))}` : ''}${cut.previewMeta.prompt_hash ? ` · hash ${escapeHtml(String(cut.previewMeta.prompt_hash))}` : ''}</p></div>` : ''}
       ${cut.outputPath ? `<div class="fullblk"><b>output_path</b><p class="mono">${inline(cut.outputPath)}</p></div>` : ''}
     </details>` : ''}`;
 }
@@ -522,6 +512,9 @@ const CSS = `
 :root{--ink:#161513;--sub:#6b6560;--line:#c9c2b8;--line2:#e6e0d6;--bg:#faf8f4;--panel:#fff;--accent:#a03225;--a2v:#1d5c8a;--ok:#2f6b3a;
   --v-ok:#2f7d3f;--v-fix:#d2721c;--v-hold:#8a857d;}
 *{box-sizing:border-box}
+/* [hidden]은 UA 기본 규칙이라 display:flex 같은 저자 선언에 진다 —
+   슬롯의 대기 프레임이 이미지 아래 그대로 남는 실측 버그가 있었다. 명시적으로 눌러 둔다. */
+[hidden]{display:none!important}
 body{margin:0;padding:18px 16px 40px;background:var(--bg);color:var(--ink);
   font-family:"Malgun Gothic","맑은 고딕","Noto Sans KR",system-ui,sans-serif;font-size:12px;line-height:1.45}
 h1{font-size:19px;margin:0 0 2px}
@@ -552,12 +545,11 @@ tr.chapter-row td{background:#2c2a27;color:#f4efe6;font-size:13px;font-weight:70
 .badge.reuse{background:#e9f2e6;border-color:#a9c6a2;color:var(--ok)}
 .badge.nofig{background:#f2eee6}
 .badge.cap{background:#efeaf5;border-color:#c0b3d4;color:#5b4a7a}
+/* 대기 프레임 — **에러 표현 금지**(붉은 테두리·"실패" 문구 없음). 아직 안 만들어진 것이지 실패가 아니다. */
 .frame{height:96px;border:1.5px dashed #b3aa9d;background:repeating-linear-gradient(45deg,#f7f4ee,#f7f4ee 6px,#f2eee6 6px,#f2eee6 12px);
   display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:5px;gap:3px;border-radius:2px}
-.frame.missing{border-color:#c98c80;background:#fbf1ef}
 .frame-label{font-size:9px;color:#8d857a;letter-spacing:.08em}
 .frame-comp{font-size:10px;color:#4a4640;line-height:1.3}
-.frame-file{font-size:8.5px;color:#a5493a;font-family:Consolas,monospace}
 img.board{width:100%;height:96px;object-fit:cover;border:1px solid var(--line);border-radius:2px;background:#000;display:block}
 .shot{margin-top:4px;font-weight:600;font-size:11px}
 .micro{font-size:9.5px;color:var(--sub);line-height:1.35;margin-top:2px;word-break:break-word}
@@ -594,6 +586,12 @@ code.lib{background:#e4eef6;color:#1d5c8a}
 footer{margin-top:14px;color:var(--sub);font-size:10px}
 
 /* --- 인간 검수 코멘트 층 (localStorage · 프로덕션 id 스코프) --- */
+.banner{margin:0 0 10px;padding:6px 10px;border-radius:4px;font-size:11px;line-height:1.55;
+  background:#fdf6e3;border:1px solid #ddd0a8;color:#5c4a1e}
+.banner.info{background:#eef4f9;border-color:#b6ccdd;color:#1d4a6b}
+.banner b{font-weight:700}
+.saved.disk{color:var(--v-ok);font-weight:700}
+.saved.dirty{color:var(--v-fix);font-weight:700}
 .counter{font-size:11px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .counter b{font-weight:700}
 .cnt-ok{color:var(--v-ok)}.cnt-fix{color:var(--v-fix)}.cnt-hold{color:#6b6560}.cnt-none{color:#9a938a}
@@ -622,6 +620,7 @@ textarea.note.filled{background:#fffdf5;border-color:#c9b98f}
 
 /* --- 이미지 슬롯 · 프리뷰 배지 · 라이트박스 --- */
 .slot{position:relative;cursor:zoom-in;line-height:0}
+.slot.pending{cursor:default}
 .slot.is-preview img.board{border:1.5px dashed #b58b52;filter:saturate(.9)}
 .pv-badge{position:absolute;top:3px;right:3px;background:rgba(181,139,82,.94);color:#fff;font-size:8px;
   letter-spacing:.09em;font-weight:700;padding:1px 4px;border-radius:2px;line-height:1.5}
@@ -656,7 +655,7 @@ textarea.note.filled{background:#fffdf5;border-color:#c9b98f}
 @media print{
   @page{size:A4 landscape;margin:7mm 6mm 8mm}
   body{background:#fff;padding:0;font-size:6.4pt;line-height:1.26}
-  .toolbar,.chapnav,footer .noprint{display:none!important}
+  .toolbar,.chapnav,footer .noprint,.banner{display:none!important}
   h1{font-size:11pt;margin-bottom:1mm}
   .subtitle,.meta{font-size:5.8pt}
   table.summary{font-size:5.8pt;margin-bottom:3mm;break-inside:avoid}
@@ -708,29 +707,115 @@ textarea.note.filled{background:#fffdf5;border-color:#c9b98f}
  * localStorage 키 = `danbi-conti::<production_id>::<CUT-ID>` — **프로덕션 id 스코프**라
  * ep2/ep3 시트를 같은 브라우저에서 같이 열어도 서로의 코멘트를 덮지 않는다.
  */
-function buildJs(productionId) {
+function buildJs(productionId, previewsUrl) {
   const prod = JSON.stringify(String(productionId || 'unknown'));
+  const previews = JSON.stringify(previewsUrl);
   return `
 (function(){
   var PROD=${prod};
+  var PREVIEWS_URL=${previews};
+  var FEEDBACK_FILE='conti-feedback-'+PROD+'.json';
   var PREFIX='danbi-conti::'+PROD+'::';
   var LABEL={ok:'OK',fix:'수정',hold:'보류'};
   var store={};
+  var dirty=false;          // 디스크에 반영되지 않은 변경이 있는가
+  var fileHandle=null;      // File System Access API 핸들(있으면 디스크 자동 저장)
+  var LB=window.__CONTI_CUTS__||[];   // 라이트박스용 컷 메타(이미지 src는 로드 시점에 채워진다)
+
+  function banner(html,kind){
+    var el=document.getElementById('banner');
+    el.className='banner'+(kind?' '+kind:'');
+    el.innerHTML=html;el.hidden=false;
+  }
   function keyOf(cut){return PREFIX+cut;}
   function load(cut){
     try{var raw=localStorage.getItem(keyOf(cut));return raw?JSON.parse(raw):null;}catch(e){return null;}
   }
-  function save(cut,entry){
+  // localStorage는 **미러**다 — 디스크 저장의 대체가 아니라 이중화.
+  function mirror(cut,entry){
     try{
-      if(!entry||(!entry.verdict&&!(entry.comment||'').trim())){localStorage.removeItem(keyOf(cut));}
-      else{localStorage.setItem(keyOf(cut),JSON.stringify(entry));}
-      stamp();
-    }catch(e){ /* 사생활 모드·용량 초과 — 화면 상태는 유지한다 */ }
+      if(!entry||(!entry.verdict&&!(entry.comment||'').trim()))localStorage.removeItem(keyOf(cut));
+      else localStorage.setItem(keyOf(cut),JSON.stringify(entry));
+    }catch(e){}
   }
+  function save(cut,entry){ mirror(cut,entry); dirty=true; scheduleDiskWrite(); stamp(); }
+
+  // ---- 디스크 영속(File System Access API) ----
+  function idb(){
+    return new Promise(function(res,rej){
+      var r=indexedDB.open('danbi-conti',1);
+      r.onupgradeneeded=function(){r.result.createObjectStore('handles');};
+      r.onsuccess=function(){res(r.result);};r.onerror=function(){rej(r.error);};
+    });
+  }
+  function idbGet(k){return idb().then(function(db){return new Promise(function(res){
+    var t=db.transaction('handles','readonly').objectStore('handles').get(k);
+    t.onsuccess=function(){res(t.result||null);};t.onerror=function(){res(null);};});}).catch(function(){return null;});}
+  function idbPut(k,v){return idb().then(function(db){return new Promise(function(res){
+    var t=db.transaction('handles','readwrite').objectStore('handles').put(v,k);
+    t.onsuccess=function(){res(true);};t.onerror=function(){res(false);};});}).catch(function(){return false;});}
+
+  function payload(){
+    return cutIds.map(function(cut){var e=store[cut]||{};
+      return {cut_id:cut,verdict:e.verdict||'',comment:(e.comment||'').trim(),ts:e.ts||''};
+    }).filter(function(e){return e.verdict||e.comment;});
+  }
+  // 디스크 쓰기 경로는 3단이다:
+  //   ① File System Access 핸들(사용자가 위치 지정) ② 정적 서버(serve-boards.mjs)로 HTTP PUT
+  //   ③ 둘 다 안 되면 localStorage 미러 + 「저장(JSON)」 수동 내려받기 + beforeunload 경고
+  var putSupported=null;    // null=미확인 / true / false
+  var writeTimer=null;
+  function scheduleDiskWrite(){
+    clearTimeout(writeTimer);
+    writeTimer=setTimeout(writeDisk,300);
+  }
+  function serialized(){return JSON.stringify(payload(),null,2)+'\\n';}
+  function writeDisk(){
+    if(fileHandle){
+      return fileHandle.createWritable().then(function(w){
+        return w.write(serialized()).then(function(){return w.close();});
+      }).then(function(){dirty=false;diskMode='handle';stamp();return true;})
+      .catch(function(err){
+        banner('⚠ 디스크 저장 실패 — <b>저장(JSON)</b> 버튼으로 수동 저장하세요. ('+((err&&err.name)||err)+')');
+        return false;
+      });
+    }
+    if(putSupported===false||!window.fetch||location.protocol==='file:')return Promise.resolve(false);
+    var body=serialized();
+    return fetch(FEEDBACK_FILE,{method:'PUT',headers:{'content-type':'application/json'},body:body})
+      .then(function(r){
+        if(!r.ok)throw new Error('HTTP '+r.status);
+        // ⚠ 첫 PUT은 **읽어서 확인**한다 — PUT을 무시하고 200만 돌려주는 정적 서버가 있어
+        //   응답 코드만 믿으면 "디스크 저장됨"이 거짓말이 된다(실측으로 확인한 오탐).
+        if(putSupported!==null)return true;
+        return fetch(FEEDBACK_FILE,{cache:'no-store'}).then(function(g){
+          if(!g.ok)throw new Error('read-back HTTP '+g.status);
+          return g.text();
+        }).then(function(t){
+          if(t.replace(/\\s/g,'')!==body.replace(/\\s/g,''))throw new Error('read-back mismatch');
+          banner('코멘트가 <b>디스크 파일 '+FEEDBACK_FILE+'</b>에 자동 저장됩니다 (정적 서버 경로).','info');
+          return true;
+        });
+      }).then(function(){
+        putSupported=true;diskMode='put';dirty=false;stamp();return true;
+      }).catch(function(){
+        if(putSupported===null){
+          putSupported=false;
+          banner('디스크 자동 저장을 쓸 수 없습니다 — <b>저장 위치 지정</b>을 누르거나, '+
+            '<code>npm run conti:serve -- &lt;09-boards 경로&gt;</code>로 띄운 http 주소로 여세요. '+
+            '그 전까지는 브라우저 저장 + <b>저장(JSON)</b> 수동 내려받기로 보존하세요.');
+        }
+        stamp();return false;
+      });
+  }
+  var diskMode='';          // '' | 'handle' | 'put'
   function stamp(){
-    var d=new Date();
-    document.getElementById('saved-at').textContent='마지막 저장: '+
-      String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+    var d=new Date(),el=document.getElementById('saved-at');
+    var t=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')+':'+String(d.getSeconds()).padStart(2,'0');
+    if(diskMode&&!dirty){el.className='saved disk';el.textContent='디스크 저장됨 '+t;}
+    else if(diskMode){el.className='saved';el.textContent='저장 중… '+t;}
+    else if(dirty){el.className='saved dirty';el.textContent='미저장 변경 있음 · '+t;}
+    else{el.className='saved';el.textContent='마지막 저장: '+t;}
   }
   function rowOf(cut){return document.querySelector('tr.cut[data-cut="'+cut+'"]');}
   function paint(cut){
@@ -756,11 +841,7 @@ function buildJs(productionId) {
     document.getElementById('cnt-hold').textContent=c.hold;
     document.getElementById('cnt-none').textContent=c.none;
   }
-  function entries(){
-    return cutIds.map(function(cut){var e=store[cut]||{};
-      return {cut_id:cut,verdict:e.verdict||'',comment:(e.comment||'').trim(),ts:e.ts||''};
-    }).filter(function(e){return e.verdict||e.comment;});
-  }
+  function entries(){return payload();}
   function markdown(){
     var list=entries();
     var head='## 콘티 피드백 — '+PROD+' (총 '+cutIds.length+'컷 중 '+list.length+'컷 코멘트)';
@@ -788,9 +869,89 @@ function buildJs(productionId) {
     el.textContent=msg;setTimeout(function(){el.textContent=prev;},2200);
   }
   var cutIds=[].slice.call(document.querySelectorAll('tr.cut')).map(function(r){return r.getAttribute('data-cut');});
-  cutIds.forEach(function(cut){var e=load(cut);if(e)store[cut]=e;paint(cut);});
+
+  // ---- 로드: localStorage(미러) → 디스크(권위) 순으로 읽고 **타임스탬프 최신 쪽**을 쓴다 ----
+  cutIds.forEach(function(cut){var e=load(cut);if(e)store[cut]=e;});
+
+  function normalize(rows){
+    var m={};
+    (rows||[]).forEach(function(r){
+      var id=r&&(r.cut_id||r.cutId||r.id);
+      if(!id)return;
+      m[id]={verdict:r.verdict||'',comment:r.comment||'',ts:r.ts||''};
+    });
+    return m;
+  }
+  /** 디스크 쪽을 병합. 컷별로 ts가 최신인 쪽이 이긴다. 실제로 갈린 컷 수를 돌려준다. */
+  function merge(diskMap,sourceLabel){
+    var conflicts=0,restored=0;
+    Object.keys(diskMap).forEach(function(cut){
+      if(cutIds.indexOf(cut)===-1)return;
+      var d=diskMap[cut],l=store[cut];
+      var same=l&&l.verdict===d.verdict&&(l.comment||'')===(d.comment||'');
+      if(!l){store[cut]=d;restored++;return;}
+      if(same)return;
+      conflicts++;
+      if((d.ts||'')>=(l.ts||'')){store[cut]=d;}      // 최신이 이긴다. 조용히 덮지 않고 아래에서 알린다.
+    });
+    // 디스크에 없는데 로컬에만 있는 항목은 그대로 둔다(유실 방지).
+    cutIds.forEach(function(cut){paint(cut);mirror(cut,store[cut]);});   // localStorage는 항상 미러로 유지
+    counts();
+    if(restored||conflicts){
+      banner('<b>'+sourceLabel+'</b>에서 피드백을 불러왔습니다 — 복원 '+restored+'컷'+
+        (conflicts?(' · <b>브라우저 저장분과 달라 타임스탬프가 최신인 쪽을 채택한 컷 '+conflicts+'개</b>'):'')+'.','info');
+    }
+    return {restored:restored,conflicts:conflicts};
+  }
+
+  function initDisk(){
+    if(location.protocol==='file:'){
+      banner('<code>file://</code>로 열려 있어 <b>디스크 저장·자동 복원이 꺼져 있습니다.</b> '+
+             '<code>npm run conti:serve -- &lt;09-boards 경로&gt;</code>로 띄운 http 주소로 여는 것이 권장 경로입니다. '+
+             '지금은 브라우저 저장 + <b>저장(JSON)</b> 수동 내려받기로 보존하세요.');
+      return;
+    }
+    // ① File System Access 핸들이 이미 있으면 그것이 권위(읽기·쓰기 모두 가능).
+    if(window.showSaveFilePicker&&window.indexedDB){
+      idbGet(PROD).then(function(h){
+        if(!h)return fetchDisk();
+        return h.queryPermission({mode:'readwrite'}).then(function(p){
+          if(p!=='granted'){
+            banner('디스크 저장 파일이 연결돼 있지만 권한 재확인이 필요합니다 — <b>저장 위치 지정</b>을 한 번 누르면 이어서 자동 저장됩니다.');
+            return fetchDisk();
+          }
+          fileHandle=h;diskMode='handle';
+          return h.getFile().then(function(f){return f.text();}).then(function(t){
+            merge(normalize(JSON.parse(t)),'디스크 파일 '+(h.name||FEEDBACK_FILE));
+          }).catch(function(){}).then(function(){stamp();});
+        });
+      }).catch(fetchDisk);
+    } else {
+      // File System Access가 없어도 정적 서버(PUT) 경로가 남아 있다 — 첫 저장 때 판정한다.
+      fetchDisk();
+    }
+  }
+  // ② 같은 폴더의 conti-feedback JSON을 읽어 복원(http로 열었을 때 동작. file://은 조용히 실패).
+  function fetchDisk(){
+    if(!window.fetch)return;
+    return fetch(FEEDBACK_FILE,{cache:'no-store'}).then(function(r){
+      if(!r.ok)throw new Error('no file');
+      return r.json();
+    }).then(function(rows){
+      merge(normalize(rows),FEEDBACK_FILE);
+    }).catch(function(){ /* 없으면 조용히 localStorage 폴백 */ });
+  }
+
+  cutIds.forEach(paint);
   counts();
   if(entries().length)stamp();
+  initDisk();
+
+  window.addEventListener('beforeunload',function(ev){
+    if(!dirty||diskMode)return;            // 디스크 자동 저장이 켜져 있으면 경고하지 않는다
+    ev.preventDefault();ev.returnValue='';
+    return '';
+  });
 
   document.querySelectorAll('.verdicts button').forEach(function(btn){
     btn.addEventListener('click',function(){
@@ -816,22 +977,125 @@ function buildJs(productionId) {
   });
 
   document.getElementById('btn-copy').onclick=function(){copyText(markdown());};
+
+  // 디스크 저장 위치 지정 — 최초 1회. 이후 입력마다 자동 저장된다.
+  document.getElementById('btn-pick').onclick=function(){
+    if(!window.showSaveFilePicker){
+      banner('이 환경에서는 저장 위치를 지정할 수 없습니다(<code>file://</code>이거나 비-Chromium). '+
+             '<b>09-boards를 정적 서버로 띄워 http로 열면</b> 디스크 자동 저장이 켜집니다 — '+
+             '<code>npm run conti:serve -- &lt;09-boards 경로&gt;</code>');
+      return;
+    }
+    window.showSaveFilePicker({suggestedName:FEEDBACK_FILE,
+      types:[{description:'콘티 피드백 JSON',accept:{'application/json':['.json']}}]})
+      .then(function(h){
+        fileHandle=h;diskMode='handle';
+        idbPut(PROD,h);
+        dirty=true;
+        return writeDisk();
+      }).then(function(ok){
+        if(ok)banner('디스크 자동 저장이 켜졌습니다 — 이제 입력할 때마다 <b>'+(fileHandle.name||FEEDBACK_FILE)+'</b>에 바로 기록됩니다.','info');
+      }).catch(function(){ /* 사용자가 취소 */ });
+  };
+
   document.getElementById('btn-json').onclick=function(){
-    var payload=JSON.stringify(entries(),null,2);
-    var blob=new Blob([payload],{type:'application/json'});
+    if(diskMode){dirty=true;writeDisk().then(function(ok){if(ok)flash('디스크에 저장했습니다');});return;}
+    var text=serialized();
+    var blob=new Blob([text],{type:'application/json'});
     var a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);a.download='conti-feedback-'+PROD+'.json';
+    a.href=URL.createObjectURL(blob);a.download=FEEDBACK_FILE;
     document.body.appendChild(a);a.click();document.body.removeChild(a);
     setTimeout(function(){URL.revokeObjectURL(a.href);},1000);
+    dirty=false;stamp();
+    banner('내려받은 <code>'+FEEDBACK_FILE+'</code>을 이 HTML과 <b>같은 폴더</b>에 두면 다음에 열 때 자동 복원됩니다.','info');
   };
+
+  // 수동 불러오기 — 어떤 환경에서도 복구 가능한 마지막 경로.
+  var fileInput=document.getElementById('file-load');
+  document.getElementById('btn-load').onclick=function(){fileInput.value='';fileInput.click();};
+  fileInput.addEventListener('change',function(){
+    var f=fileInput.files&&fileInput.files[0];if(!f)return;
+    f.text().then(function(t){
+      var res=merge(normalize(JSON.parse(t)),f.name);
+      cutIds.forEach(function(cut){mirror(cut,store[cut]);});
+      if(!res.restored&&!res.conflicts)banner('불러온 파일에 새로 복원할 항목이 없었습니다 ('+f.name+').','info');
+      dirty=true;scheduleDiskWrite();stamp();
+    }).catch(function(){banner('⚠ JSON을 읽지 못했습니다 — 파일 형식을 확인하세요.');});
+  });
+
   document.getElementById('btn-clear').onclick=function(){
     if(!window.confirm(PROD+' 시트의 코멘트·판정을 전부 지웁니다. 되돌릴 수 없습니다. 계속할까요?'))return;
     cutIds.forEach(function(cut){try{localStorage.removeItem(keyOf(cut));}catch(e){}delete store[cut];paint(cut);});
-    counts();document.getElementById('saved-at').textContent='저장 없음';
+    counts();dirty=true;
+    if(diskMode)writeDisk();else document.getElementById('saved-at').textContent='저장 없음';
   };
 
+  // ---- 이미지 슬롯: 로드 시점 해결(후보 URL 체인) ----
+  // 굽지 않는다 → 파일이 나중에 생겨도 **새로고침만으로** 붙는다.
+  var slotState={};
+  function slotStat(){
+    var fin=0,pv=0,wait=0;
+    cutIds.forEach(function(cut){
+      var s=slotState[cut];
+      if(s==='final')fin++;else if(s==='preview')pv++;else wait++;
+    });
+    var el=document.getElementById('slot-stat');
+    if(el){
+      el.innerHTML='최종 <b>'+fin+'</b> · 프리뷰 <b>'+pv+'/'+cutIds.length+'</b> · 생성 대기 '+wait+
+        (wait>0?' <span class="pre-s4">— 새로고침하면 더 채워집니다</span>':'');
+    }
+    var lb=LB;
+    for(var i=0;i<lb.length;i++){var st=slotState[lb[i].id];lb[i].kind=st||'none';}
+  }
+  function resolveSlot(slot){
+    var cut=slot.getAttribute('data-cut');
+    var srcs=[];try{srcs=JSON.parse(slot.getAttribute('data-srcs')||'[]');}catch(e){}
+    var finalCount=Number(slot.getAttribute('data-final')||0);
+    var img=slot.querySelector('img.board');
+    var i=0;
+    function give(){
+      slotState[cut]='none';
+      for(var k=0;k<LB.length;k++)if(LB[k].id===cut){LB[k].src='';LB[k].kind='none';}
+      slotStat();
+    }
+    function tryNext(){
+      if(i>=srcs.length){give();return;}
+      var url=srcs[i];i+=1;
+      img.onerror=tryNext;
+      img.onload=function(){
+        img.onerror=null;
+        var kind=(i-1)<finalCount?'final':'preview';
+        slotState[cut]=kind;
+        slot.classList.remove('pending');
+        slot.classList.toggle('is-preview',kind==='preview');
+        slot.querySelector('.pv-badge').hidden=(kind!=='preview');
+        slot.querySelector('.zoom-hint').hidden=false;
+        slot.querySelector('.frame').hidden=true;
+        img.hidden=false;
+        for(var k=0;k<LB.length;k++)if(LB[k].id===cut){LB[k].src=url;LB[k].kind=kind;}
+        slotStat();
+      };
+      img.src=url;
+    }
+    tryNext();
+  }
+  document.querySelectorAll('.slot').forEach(resolveSlot);
+  slotStat();
+
+  // index.json은 **seed 표시 전용**. 실제 파일 존재 판정에는 절대 쓰지 않는다.
+  if(window.fetch&&PREVIEWS_URL){
+    fetch(PREVIEWS_URL+'/index.json',{cache:'no-store'}).then(function(r){
+      if(!r.ok)throw new Error('none');return r.json();
+    }).then(function(rows){
+      var list=Array.isArray(rows)?rows:(rows.previews||rows.items||[]);
+      list.forEach(function(r){
+        var id=r&&(r.cut_id||r.cutId||r.id);if(!id)return;
+        for(var k=0;k<LB.length;k++)if(LB[k].id===id)LB[k].seed=r.seed||'';
+      });
+    }).catch(function(){});
+  }
+
   // ---- 라이트박스: 썸네일 원본 확대 + 확대 화면에서 바로 코멘트 ----
-  var LB=window.__CONTI_CUTS__||[];
   var lbIndex=-1;
   var box=document.getElementById('lightbox');
   var lbImg=document.getElementById('lb-img');
@@ -849,37 +1113,28 @@ function buildJs(productionId) {
     document.getElementById('lb-title').textContent=c.id+' · '+(c.scene||'')+' · '+c.tc;
     document.getElementById('lb-shot').textContent=c.shot||'';
     var kind=document.getElementById('lb-kind');
-    kind.textContent=c.kind==='final'?'최종 컷 이미지':(c.kind==='preview'?'저해상도 프리뷰 — 최종본 아님':'이미지 없음');
+    kind.textContent=c.kind==='final'?'최종 컷 이미지':(c.kind==='preview'?'저해상도 프리뷰 — 최종본 아님':'생성 대기');
     kind.className='lb-kind'+(c.kind==='preview'?' preview':'');
     document.getElementById('lb-info').innerHTML=
       '카메라 <b>'+(c.camera||'—')+'</b><br>길이 <b>'+(c.dur||'—')+'</b>'+(c.seed?'<br>seed <b>'+c.seed+'</b>':'')+
       (c.src?'<br>파일 <b>'+c.src.split('/').pop()+'</b>':'');
     document.getElementById('lb-pos').textContent=(i+1)+' / '+LB.length;
     if(c.src){lbImg.hidden=false;lbEmpty.hidden=true;lbImg.src=c.src;}
-    else{lbImg.hidden=true;lbImg.removeAttribute('src');lbEmpty.hidden=false;lbEmpty.textContent='이미지 없음 — '+(c.comp||c.shot||c.id);}
+    else{lbImg.hidden=true;lbImg.removeAttribute('src');lbEmpty.hidden=false;lbEmpty.textContent='생성 대기 — '+(c.comp||c.shot||c.id);}
     lbNote.value=(store[c.id]||{}).comment||'';
     lbPaintVerdict();
     box.classList.add('on');box.setAttribute('aria-hidden','false');
   }
   function lbClose(){box.classList.remove('on');box.setAttribute('aria-hidden','true');lbIndex=-1;}
-  lbImg.addEventListener('error',function(){ // 깨진 아이콘 대신 빈 프레임 폴백
+  lbImg.addEventListener('error',function(){ // 깨진 아이콘 대신 대기 프레임 폴백
     var c=LB[lbIndex]||{};lbImg.hidden=true;lbEmpty.hidden=false;
-    lbEmpty.textContent='이미지 로드 실패 — '+(c.src||'')+'\\n'+(c.comp||'');
+    lbEmpty.textContent='생성 대기 — '+(c.comp||c.shot||'');
   });
   document.querySelectorAll('.slot').forEach(function(slot){
     slot.addEventListener('click',function(){
+      if(slot.classList.contains('pending'))return;   // 생성 대기 컷은 확대할 것이 없다
       var cut=slot.getAttribute('data-cut');
       for(var i=0;i<LB.length;i++){if(LB[i].id===cut){lbOpen(i);return;}}
-    });
-  });
-  // 썸네일 로드 실패 → 빈 프레임으로 교체(깨진 아이콘 금지)
-  document.querySelectorAll('img.board').forEach(function(img){
-    img.addEventListener('error',function(){
-      var slot=img.closest('.slot');if(!slot)return;
-      var cut=slot.getAttribute('data-cut');var c=null;
-      for(var i=0;i<LB.length;i++){if(LB[i].id===cut){c=LB[i];break;}}
-      slot.outerHTML='<div class="frame missing"><span class="frame-label">이미지 로드 실패</span>'+
-        '<span class="frame-comp">'+((c&&c.comp)||cut)+'</span></div>';
     });
   });
   document.getElementById('lb-close').onclick=lbClose;
@@ -933,7 +1188,9 @@ function renderHtml({ cuts, summary, frontmatter, meta }) {
 <body>
 <div class="toolbar">
   <button id="btn-copy" class="primary" type="button" title="코멘트·판정이 있는 컷만 마크다운으로 복사 → 채팅에 붙여넣기">복사</button>
-  <button id="btn-json" type="button">JSON 내려받기</button>
+  <button id="btn-pick" type="button" title="conti-feedback JSON을 디스크에 두고 입력마다 자동 저장">저장 위치 지정</button>
+  <button id="btn-json" type="button" title="현재 피드백을 JSON 파일로 내려받기">저장(JSON)</button>
+  <button id="btn-load" type="button" title="conti-feedback JSON 파일을 골라 복원">JSON 불러오기</button>
   <button id="btn-clear" class="danger" type="button">전체 지우기</button>
   <span class="sep"></span>
   <span class="counter">
@@ -949,7 +1206,9 @@ function renderHtml({ cuts, summary, frontmatter, meta }) {
   <button id="btn-print" type="button">인쇄(훑기용)</button>
   <button id="btn-print-full" type="button">인쇄(전문 포함)</button>
   <span class="hint">A4 가로 · 페이지당 6~8컷 · 코멘트 열은 인쇄 시 빈 칸(손글씨용)</span>
+  <input id="file-load" type="file" accept="application/json,.json" hidden>
 </div>
+<div id="banner" class="banner" hidden></div>
 <h1>콘티 시트 — ${escapeHtml(meta.title)}</h1>
 <p class="subtitle">${escapeHtml(frontmatter.production_id ?? '')} · ${escapeHtml(meta.sourceLabel)} · 생성 ${escapeHtml(meta.generatedAt)}</p>
 <p class="meta">원문 <code>${escapeHtml(meta.sourcePath)}</code>${frontmatter.media_root ? ` · 미디어 루트 <code>${escapeHtml(frontmatter.media_root)}</code>` : ''}${frontmatter.script ? ` · 대본 ${inline(frontmatter.script)}` : ''}${frontmatter.style_guide ? ` · 그림체 ${inline(frontmatter.style_guide)}` : ''}
@@ -994,7 +1253,7 @@ ${renderRows(cuts)}
   </div>
 </div>
 <script>window.__CONTI_CUTS__=${JSON.stringify(meta.lightboxCuts)};</script>
-<script>${buildJs(meta.productionId)}</script>
+<script>${buildJs(meta.productionId, meta.previewsUrl)}</script>
 </body>
 </html>
 `;
@@ -1075,31 +1334,14 @@ function main(argv) {
     storyboardDir: path.dirname(storyboardPath),
     outDir,
   };
+  // 프리뷰 폴더는 **존재 여부와 무관하게** 경로만 정한다 — 나중에 생겨도 새로고침으로 잡힌다.
   const previewsDir = args['previews-dir']
     ? path.resolve(args['previews-dir'])
-    : [
-      path.join(outDir, PREVIEW_DIR_NAME),
-      context.mediaRoot ? path.join(context.mediaRoot, EPISODE_SUBDIRS.boards, PREVIEW_DIR_NAME) : null,
-    ].filter(Boolean).find((dir) => existsSync(dir));
-  const previewIndex = loadPreviewIndex(previewsDir);
-
-  const toRelative = (absolute) => encodeURI(path.relative(outDir, absolute).split(path.sep).join('/'));
+    : path.join(outDir, PREVIEW_DIR_NAME);
+  context.previewsDir = previewsDir;
 
   for (const cut of cuts) {
-    const resolved = resolveBoardImage(cut, context);
-    if (typeof resolved === 'string') {
-      cut.boardSrc = toRelative(resolved);
-      cut.boardAbs = resolved;
-    } else if (resolved && resolved.missing) {
-      cut.boardMissing = resolved.missing;
-    }
-    // ② 프리뷰 — 최종 컷 이미지가 없을 때만 슬롯을 채운다(메타는 있으면 항상 싣는다: seed 재사용).
-    const preview = resolvePreviewImage(cut, previewsDir, previewIndex);
-    if (preview) {
-      cut.previewAbs = preview.file;
-      cut.previewMeta = preview.entry;
-      if (!cut.boardSrc) cut.previewSrc = toRelative(preview.file);
-    }
+    cut.imageCandidates = buildImageCandidates(cut, context);
   }
 
   const summary = buildSummary(cuts, frontmatter);
@@ -1122,10 +1364,11 @@ function main(argv) {
         shot: cut.shotType ?? '',
         camera: cut.cameraLabel || '—',
         comp: compositionSummary(cut),
-        seed: cut.previewMeta?.seed ?? '',
-        src: cut.boardSrc ?? cut.previewSrc ?? '',
-        kind: cut.boardSrc ? 'final' : (cut.previewSrc ? 'preview' : 'none'),
+        seed: '',      // index.json 런타임 fetch가 채운다(표시 전용)
+        src: '',       // 로드 시점에 결정된다 — 굽지 않는다
+        kind: 'none',
       })),
+      previewsUrl: toRelativeUrl(outDir, previewsDir),
       sourceLabel: `${summary.total}컷 · ${summary.runtime.toFixed(1)}초`,
       sourcePath: storyboardPath,
       generatedAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
@@ -1140,7 +1383,13 @@ function main(argv) {
     console.log(`  컷 ${summary.total} · 러닝타임 ${summary.runtime.toFixed(1)}초 · 장면 ${summary.scenes} · 챕터 ${summary.chapters}`);
     console.log(`  A2V ${summary.a2v} · 무인 ${summary.noFigure}(${pct(summary.noFigure, summary.total)}) · 관모 ${summary.cap} · 모션 ${summary.motion} · 재사용 ${summary.reuse}`);
     console.log(`  분당 시각 변화 ${summary.changesPerMinute.toFixed(2)}회/분 · 컷 길이 ${summary.min.toFixed(1)}~${summary.max.toFixed(1)}(평균 ${summary.avg.toFixed(2)})초`);
-    console.log(`  이미지 슬롯 — 최종 ${summary.boards} · 프리뷰 ${summary.previews} · 빈 프레임 ${summary.total - summary.boards - summary.previews} / ${summary.total}컷${previewsDir ? ` (previews: ${previewsDir})` : ''}`);
+    // 이 수치는 **참고용 스냅샷**이다 — 시트 자체는 로드 시점에 다시 판정하므로 HTML에 굽히지 않는다.
+    let onDisk = 0;
+    for (const cut of cuts) {
+      if (cut.imageCandidates.urls.some((url) => existsSync(path.resolve(outDir, decodeURI(url))))) onDisk += 1;
+    }
+    console.log(`  이미지 후보 URL — 컷당 ${cuts[0]?.imageCandidates.urls.length ?? 0}개 (최종→프리뷰 순), 현재 디스크 실재 ${onDisk}/${summary.total}컷`);
+    console.log(`  ※ 존재 여부는 HTML에 굽지 않는다 — 파일이 생기면 새로고침만으로 붙는다. previews: ${previewsDir}`);
     const missing = cuts.filter((c) => c.boardMissing);
     if (missing.length) console.log(`  ⚠ board 기재됐으나 파일 미발견 ${missing.length}컷: ${missing.slice(0, 5).map((c) => c.id).join(', ')}${missing.length > 5 ? ' …' : ''}`);
   }

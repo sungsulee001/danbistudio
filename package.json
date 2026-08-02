@@ -8,6 +8,8 @@
   "main": "dist-electron/main/electron-app.cjs",
   "scripts": {
     "assets:icons": "node scripts/generate-app-icon.mjs",
+    "conti:sheet": "node scripts/pipeline/render-conti-sheet.mjs",
+    "conti:serve": "node scripts/pipeline/serve-boards.mjs",
     "dev": "next dev",
     "electron:build": "node scripts/build-electron.mjs",
     "electron:dev": "node scripts/dev-electron.mjs",
