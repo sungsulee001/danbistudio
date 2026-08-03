@@ -266,9 +266,9 @@
     {
       "id": "IMG-HAT-EDIT-ROUTE",
       "severity": "WARN",
-      "title": "전신·착좌·군상 관모 컷은 나노바나나 편집 경로 플래그",
+      "title": "관모 컷은 렌더 경로 선언 필수(render_route)",
       "applies_to": {
-        "field": "image_prompt",
+        "field": "render_route",
         "flags_all": [
           "hat"
         ],
@@ -284,11 +284,11 @@
       },
       "detect": {
         "type": "regex_absent",
-        "pattern": "나노바나나|nanobanana|edit-route|hat-edit",
+        "pattern": "나노바나나|Z-Image|재사용",
         "flags": "i"
       },
-      "why": "조선 관모는 Z-Image 단독으로 불가하다 — 정면 MCU에서만 신문안이 통하고(3/3) 전신·착좌·군상·뒷모습에서는 갓 prior가 이긴다. 시드 변경은 무효(0/4). 나노바나나 편집 경로가 14/15(93.3%) 1발 성공.",
-      "fix": "컷 의도에 `나노바나나 편집 경로` 를 명시하고 쿼터 예산(일일 한도)을 컷 계획에 반영한다."
+      "why": "조선 관모는 Z-Image 단독으로 불가하다 — 정면 MCU에서만 신문안이 통하고(3/3) 전신·착좌·군상·뒷모습에서는 갓 prior가 이긴다. 시드 변경은 무효(0/4). 나노바나나 편집 경로가 14/15(93.3%) 1발 성공. ★2026-08-03 개정: 종전에는 `image_prompt`에 `나노바나나 편집 경로`라는 **한국어 메모가 들어 있을 것**을 요구했는데, 그 메모가 그대로 인코더에 들어가는 결함(ep3 v1 29컷)이 확인되어 `IMG-NO-HANGUL`을 신설했다. 두 규칙이 충돌하므로 경로 선언은 프롬프트가 아니라 **`render_route` 필드**가 담당하도록 검사 대상을 옮겼다.",
+      "fix": "컷의 `render_route` 필드에 렌더 경로를 선언한다 — `**나노바나나(편집)** — 관모 + 뒷모습` 형식. 쿼터 예산(일일 한도)은 컷 계획에 반영한다. **컴파일본에는 쓰지 않는다**(IMG-NO-HANGUL 위반)."
     },
     {
       "id": "IMG-CROWD-DIVERSITY",
@@ -307,6 +307,21 @@
       },
       "why": "군상 컷에서 동일 얼굴 복제가 ep1 게시본 육안 결함으로 지적됐다. 연령대·수염 형태·체형·복색·자세를 분산 서술한 ep2는 7/7 전수 달성, 복제 0건(CUT-45 7인·CUT-36 12개체).",
       "fix": "`figures of different ages and builds, some with full beards and some clean-shaven, robes in varied muted tones, each in a different posture` 를 추가한다."
+    },
+    {
+      "id": "IMG-NO-HANGUL",
+      "severity": "ERROR",
+      "title": "컴파일된 이미지 프롬프트에 한글 금지",
+      "applies_to": {
+        "field": "image_prompt"
+      },
+      "detect": {
+        "type": "regex",
+        "pattern": "[가-힣]+",
+        "flags": "g"
+      },
+      "why": "`컴파일본`은 S4가 스타일 토큰만 치환해 **그대로 인코더에 넣는 최종 문자열**이다. 한국어 라우팅 메모(`나노바나나 편집 경로` 등)나 한국어 주석이 남으면 그 토큰이 프롬프트의 일부로 인코딩되어 의미 없는 조건이 걸린다 — cfg 1.0에서는 이를 상쇄할 네거티브 경로도 없다. ep3 콘티 v1에서 **75컷 중 29컷**의 컴파일본 말미에 한글 라우팅 메모가 그대로 남아 있었고(2026-08-02 프리뷰 작업에서 발견), 라우팅 정보는 이미 `render_route` 필드에 중복 기재돼 있어 프롬프트에 있을 이유가 없었다. 렌더 경로·주석·메모는 전부 별도 필드가 담당한다.",
+      "fix": "컴파일본에서 한국어 구절을 삭제한다. 렌더 경로는 `render_route`, 설계 근거는 `의도`/`reference` 필드에 쓴다. 화면에 한국어 문자를 그리려는 의도라면 그것은 별건이며 `IMG-TEXT-SUBJECT`(나노바나나 경로)와 설정집 §4.6 「한자만·한글 금지」 규율을 따른다."
     },
     {
       "id": "IMG-TEXT-SUBJECT",

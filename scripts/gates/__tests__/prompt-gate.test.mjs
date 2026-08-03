@@ -191,6 +191,11 @@ describe.skipIf(!hasVault)('ep2 회귀 — 규약 반영본은 이미지 측이 
       'CUT-13/IMG-FACE-BEHIND-REQ',   // `from behind` — directly behind 계약 미달
       'CUT-19/IMG-HAT-SHAPE',         // 관모 갓형 15컷(나노바나나 교정 대상)
       'CUT-21/IMG-HAT-NEGATION',      // `with no brim` — 부정 어휘 금지 위반
+      // ↓ IMG-NO-HANGUL 신설(2026-08-03)로 **새로 드러난** ep2 잔존 결함 2건.
+      //   컴파일본 말미에 한국어 라우팅 메모(`… 경로`·`… 후보`)가 남아 있다.
+      //   ep2는 게시 완료 편이므로 **게시본 무수정 원칙에 따라 파일은 고치지 않고** 기대값에만 등재한다.
+      'CUT-40A/IMG-NO-HANGUL',
+      'CUT-40C/IMG-NO-HANGUL',
       'CUT-61/IMG-HAT-SHAPE',         // 관모 갓형 15컷(나노바나나 교정 대상)
     ]);
   });

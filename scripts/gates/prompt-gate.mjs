@@ -204,6 +204,10 @@ function toItem(cut) {
     intent: f.intent ?? '',
     reference_sheet: f.reference_sheet ?? '',
     a2v: f.a2v ?? '',
+    // 렌더 경로 선언 필드(ep3 신설). 라우팅 메모는 컴파일본이 아니라 이 필드가 담당한다 —
+    // `IMG-NO-HANGUL`(컴파일본 한글 금지)과 `IMG-HAT-EDIT-ROUTE`(경로 선언 필수)가 충돌하지 않도록
+    // 경로 규칙은 이 필드를 본다.
+    render_route: f.render_route ?? '',
   };
   return {
     id: cut.id,
@@ -228,6 +232,7 @@ export function normalizeJsonInput(records, sourcePath = '<json>') {
       mode: rec.mode ?? '',
       reference_sheet: rec.reference_sheet ?? '',
       a2v: rec.a2v ? '예' : '',
+      render_route: rec.render_route ?? '',
     };
     const flags = deriveFlags(fields);
     for (const x of Array.isArray(rec.flags) ? rec.flags : []) flags.add(x);
