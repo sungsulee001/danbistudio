@@ -236,11 +236,11 @@
       },
       "detect": {
         "type": "regex_absent",
-        "pattern": "wings?\\s+(?:extending|lying|pointing|swept|sweeping)|two\\s+(?:flat|narrow|small|rounded)\\s+wings|rounded\\s+box|neck\\s+guard|swept\\s+backward|soft\\s+cloth\\s+cap|fitting\\s+close\\s+to\\s+the\\s+head|showing\\s+only\\s+a\\s+(?:small\\s+)?(?:black\\s+)?topknot",
+        "pattern": "cicada-wing\\s+uprights|uprights?\\s+(?:that\\s+)?(?:stand|standing|rising)\\b|wings?\\s+(?:extending|lying|pointing|swept|sweeping)|two\\s+(?:flat|narrow|small|rounded)\\s+wings|rounded\\s+box|neck\\s+guard|swept\\s+backward|soft\\s+cloth\\s+cap|fitting\\s+close\\s+to\\s+the\\s+head|showing\\s+only\\s+a\\s+(?:small\\s+)?(?:black\\s+)?topknot",
         "flags": "i"
       },
-      "why": "`black samo hat` 서술만으로는 부족하고 진홍 단령과 결합 시 갓(넓은 brim) prior가 이긴다 — ep1 12컷 잔존, ep2 r0 20컷 갓형. 실물 형태(2단 돔 + 후방 수평 익 2매)를 긍정 서술해야 한다.",
-      "fix": "사모 `a black sammo hat with two flat wings extending horizontally backward from the sides of the crown` / 익선관 `two small rounded wings lying flat and swept backward over the back of the crown` / 투구 `whose brim and neck guard sweep backward` 를 넣는다."
+      "why": "`black samo hat` 서술만으로는 부족하고 진홍 단령과 결합 시 갓(넓은 brim) prior가 이긴다 — ep1 12컷 잔존, ep2 r0 20컷 갓형. 실물 형태(사모 = 2단 돔 + 후방 수평 익 2매 / 익선관 = 2단 돔 + 후방 돔 위 수직 소각 2매)를 긍정 서술해야 한다. ★2026-08-04 개정: 설정집 v2.4가 익선관 정본을 재작성하면서(`lying flat and swept backward` = **형태 오류**, A/B 실측으로 소각 0/3 확인) 종전 검출 패턴이 신 정본을 잡지 못하게 되었다 — 익선관 v2.4 어휘(`cicada-wing uprights` · 수직 기립)를 검출 대안으로 추가했다. 기존 사모·투구 대안은 무수정 유지.",
+      "fix": "사모 `a black sammo hat with two flat wings extending horizontally backward from the sides of the crown` / 익선관 **설정집 §4.5 v2.4 3형**(기본형 `…a pair of small rounded cicada-wing uprights that stand straight up above the crown…` / back형 / partial형 — 형별로 골라 쓴다) / 투구 `whose brim and neck guard sweep backward` 를 넣는다. ⚠ 익선관 구문안 `two small rounded wings lying flat and swept backward over the back of the crown`은 **형태 오류로 사용 중지**(설정집 §4.5 v2.4)."
     },
     {
       "id": "IMG-HAT-NEGATION",
