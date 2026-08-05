@@ -1,7 +1,8 @@
 // ---------------------------------------------------------------------------
 // media-paths.mjs — 콘텐츠 아웃풋 트리 경로 계약 (D10)
 // ---------------------------------------------------------------------------
-// 표준 트리:  E:\danbi-media\<분류>\<소스>\<시리즈>\<epNN-슬러그>\
+// 표준 트리:  E:\danbi-media\[<장르>\<포맷>\]<분류>\<소스>\<시리즈>\<epNN-슬러그>\
+//   축 접두(장르\포맷)는 선택 — 생략하면 기존 배치와 동일하다(계층-구조-규약 §9).
 //   01-sheets  02-cuts  03-clips  04-clips-1080p  05-tts  06-sfx  07-bgm
 //   08-thumbnails  09-boards  10-renders  99-work
 //
@@ -47,28 +48,49 @@ export const TEMPLATE_DIR_NAME = '_TEMPLATE';
 /**
  * 위계 경로 해석. episode까지 주면 에피소드 루트, series까지 주면 시리즈 루트…
  * 앞 단계를 건너뛴 지정(예: series 없이 episode)은 계약 위반으로 즉시 던진다.
- * @param {{category?: string, source?: string, series?: string, episode?: string}} spec
+ *
+ * 축 구조(2026-08-05, 계층-구조-규약 §9):
+ *   E:\danbi-media\<장르>\<포맷>\<분류>\<소스>\<시리즈>\<epNN-슬러그>\
+ *
+ * **하위 호환**: `genre`·`format`을 생략하면 축 폴더 없이 `<분류>`부터 시작한다 —
+ * 기존 배치(`E:\danbi-media\한국사\조선왕조실록\장영실\…`)와 ep3 경로·episode.json 마커·
+ * 컴파일러 탐색이 전부 무변경이다. 축 폴더는 **신규 조합부터** 물리적으로 나타난다.
+ * `_library`·`_TEMPLATE`은 축 위(MEDIA_ROOT 직하)에 그대로 둔다 — base 자산이다.
+ *
+ * @param {{genre?: string, format?: string, category?: string, source?: string, series?: string, episode?: string}} spec
  * @returns {string} 절대 경로
  */
-export function resolveMediaRoot({ category, source, series, episode } = {}) {
+export function resolveMediaRoot({ genre, format, category, source, series, episode } = {}) {
   const levels = [
+    ['genre', genre],
+    ['format', format],
     ['category', category],
     ['source', source],
     ['series', series],
     ['episode', episode],
   ];
-  const parts = [];
-  let stopped = null;
+  const has = (v) => v !== undefined && v !== null && v !== '';
   for (const [name, value] of levels) {
-    if (value === undefined || value === null || value === '') {
+    if (has(value) && /[\\/]/.test(value)) {
+      throw new Error(`resolveMediaRoot: ${name} 값에 경로 구분자를 넣을 수 없습니다 (got ${value})`);
+    }
+  }
+  // 축 접두(genre·format)는 **통째로 생략 가능**하다(하위 호환). 단 format만 주는 것은 경로가
+  // 모호해지므로(장르 자리인지 포맷 자리인지) 금지한다.
+  if (has(format) && !has(genre)) {
+    throw new Error('resolveMediaRoot: genre 없이 format만 지정할 수 없습니다 (축: 장르\\포맷)');
+  }
+  const parts = [];
+  for (const [, value] of levels.slice(0, 2)) if (has(value)) parts.push(value);
+  // 분류 이하 위계는 종전대로 앞 단계 건너뛰기를 금지한다.
+  let stopped = null;
+  for (const [name, value] of levels.slice(2)) {
+    if (!has(value)) {
       stopped = stopped ?? name;
       continue;
     }
     if (stopped) {
       throw new Error(`resolveMediaRoot: ${stopped} 없이 ${name}만 지정할 수 없습니다 (위계: 분류\\소스\\시리즈\\에피소드)`);
-    }
-    if (/[\\/]/.test(value)) {
-      throw new Error(`resolveMediaRoot: ${name} 값에 경로 구분자를 넣을 수 없습니다 (got ${value})`);
     }
     parts.push(value);
   }
@@ -136,16 +158,22 @@ export function readEpisodeMarker(episodeRoot) {
  * production_id → 표준 트리의 에피소드 루트 탐색.
  * 판정 기준(권위 순): ① episode.json 마커의 production_id 일치 ② 폴더명 자체가 production_id.
  * 트리에 없으면 null — 호출측(컴파일러)은 구 배치(ComfyUI output\danbi 등)로 폴백한다.
- * 깊이는 분류\소스\시리즈\에피소드 = 4로 고정하고 _TEMPLATE은 제외한다.
+ *
+ * 깊이: 축 접두(장르\포맷)가 선택적이므로 **에피소드는 깊이 4~6 어디에나 있을 수 있다**
+ * (구 배치 = 분류\소스\시리즈\에피소드 = 4 · 축 배치 = 장르\포맷\분류\소스\시리즈\에피소드 = 6).
+ * 그래서 고정 깊이가 아니라 **마커 발견 시 즉시 에피소드로 판정**하고, 마커가 있는 폴더 아래로는
+ * 더 내려가지 않는다(에피소드 하위 01-sheets… 를 훑지 않는다). `_TEMPLATE`은 항상 제외한다.
  * @param {string} productionId
- * @param {{root?: string}} [options]
+ * @param {{root?: string, maxDepth?: number}} [options]
  * @returns {string|null}
  */
-export function findEpisodeRoot(productionId, { root = MEDIA_ROOT } = {}) {
+export function findEpisodeRoot(productionId, { root = MEDIA_ROOT, maxDepth = 6 } = {}) {
   if (!productionId || !existsSync(root)) return null;
   const stack = [{ dir: root, depth: 0 }];
+  let fallback = null;
   while (stack.length > 0) {
     const { dir, depth } = stack.pop();
+    if (depth >= maxDepth) continue;
     let entries;
     try {
       entries = readdirSync(dir, { withFileTypes: true });
@@ -155,15 +183,19 @@ export function findEpisodeRoot(productionId, { root = MEDIA_ROOT } = {}) {
     for (const entry of entries) {
       if (!entry.isDirectory() || entry.name === TEMPLATE_DIR_NAME) continue;
       const child = path.join(dir, entry.name);
-      if (depth === 3) {
-        // 에피소드 레벨 — 마커 우선, 폴더명 일치 차선.
-        const marker = readEpisodeMarker(child);
-        if (marker?.production_id === productionId) return child;
-        if (entry.name === productionId) return child;
+      const marker = readEpisodeMarker(child);
+      if (marker) {
+        // 에피소드 폴더다 — 마커가 권위. 일치하면 즉시 반환, 아니면 하위로 내려가지 않는다.
+        if (marker.production_id === productionId) return child;
+        continue;
+      }
+      // 마커가 없더라도 폴더명이 production_id면 차선 후보로 기억한다(마커 우선 원칙 유지).
+      if (entry.name === productionId) {
+        fallback = fallback ?? child;
         continue;
       }
       stack.push({ dir: child, depth: depth + 1 });
     }
   }
-  return null;
+  return fallback;
 }

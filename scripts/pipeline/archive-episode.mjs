@@ -33,7 +33,7 @@
 import path from 'node:path';
 import {
   existsSync, readdirSync, readFileSync, statSync,
-  mkdirSync, copyFileSync, rmSync, rmdirSync, writeFileSync,
+  mkdirSync, copyFileSync, rmSync, rmdirSync, writeFileSync, renameSync,
 } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -260,6 +260,77 @@ function removeEmptyDirsUpTo(dir, stopAt) {
 }
 
 // ---------------------------------------------------------------------------
+// 볼트 아카이브 경로 절 기록 (계층-구조-규약 §10 — 인간 명시 요구)
+// ---------------------------------------------------------------------------
+
+/** 절 제목은 리터럴이다 — 중복 append 방지에 쓴다. 개명 금지. */
+const ARCHIVE_SECTION_HEADING = '## 아카이브 경로';
+
+function buildArchiveSection({
+  productionId, root, releasesDir, intermediatesDir, copies, moves, mediaSize, rawDir, reportPath,
+}) {
+  const now = new Date();
+  const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} `
+    + `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const masters = copies.length > 0
+    ? copies.map((c) => `\`${c.to}\``).join('<br>')
+    : '(없음)';
+  const rows = [
+    ['마스터(릴리스)', masters, copies.length > 0 ? formatBytes(sum(copies)) : '—', `${copies.length}건`],
+    ['중간 산출물', `\`${intermediatesDir}\``, formatBytes(sum(moves)), `${moves.length}건 이관`],
+    ['미디어 트리', `\`${root}\``, mediaSize == null ? '—' : formatBytes(mediaSize), '채택 컷·클립·TTS·BGM'],
+    ['원본 자료', `\`${rawDir}\``, '—', '사료·대용량 원본'],
+    ['정리 일시', stamp, '—', 'archive-episode 실행 시각'],
+    ['정리 도구', '`scripts/pipeline/archive-episode.mjs --execute`', '—', reportPath ? `리포트 \`${reportPath}\`` : '—'],
+  ];
+  return [
+    '',
+    ARCHIVE_SECTION_HEADING,
+    '',
+    `> 자동 기록(archive-episode.mjs, ${stamp}). 볼트는 미디어를 담지 않으므로 **실물 위치를 링크로만** 남긴다`,
+    '> (CLAUDE.md §9 · [[계층-구조-규약]] §10). 본문 무수정 · 절 추가만 · status 전이 없음.',
+    '',
+    '| 항목 | 경로 | 용량 | 비고 |',
+    '|---|---|---|---|',
+    ...rows.map((r) => `| ${r.join(' | ')} |`),
+    '',
+    `- production_id: \`${productionId}\` · releases 루트: \`${releasesDir}\``,
+    '',
+  ].join('\n');
+}
+
+/** 원자적 append(mtime 확인 → temp → rename). 기존 절이 있으면 건너뛴다. */
+function appendArchiveSection({ vaultDir, productionId, section, execute }) {
+  const doc = path.join(vaultDir, '20-productions', productionId, '04-publish.md');
+  if (!existsSync(doc)) {
+    console.log(`\n⚠ 볼트 게시 문서 없음(아카이브 절 기록 건너뜀): ${doc}`);
+    return null;
+  }
+  const before = statSync(doc).mtimeMs;
+  const text = readFileSync(doc, 'utf8');
+  if (text.includes(ARCHIVE_SECTION_HEADING)) {
+    console.log(`\n볼트 아카이브 절: 이미 존재 — 건너뜀 (${doc})`);
+    return doc;
+  }
+  if (!execute) {
+    console.log(`\n[드라이런] 볼트 아카이브 절을 append할 예정: ${doc}`);
+    return doc;
+  }
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const body = text.endsWith('\n') ? text : `${text}${eol}`;
+  const out = body + section.replace(/\n/g, eol);
+  if (statSync(doc).mtimeMs !== before) {
+    console.log(`\n⚠ 볼트 문서 mtime 변경 감지 — 다른 세션 경합으로 판단해 기록을 건너뜁니다: ${doc}`);
+    return doc;
+  }
+  const tmp = `${doc}.tmp`;
+  writeFileSync(tmp, out, 'utf8');
+  renameSync(tmp, doc);
+  console.log(`\n볼트 아카이브 절 기록: ${doc}`);
+  return doc;
+}
+
+// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 
@@ -388,6 +459,7 @@ function main() {
   // 실행
   // -------------------------------------------------------------------------
   if (!execute) {
+    appendArchiveSection({ vaultDir, productionId, section: null, execute: false });
     console.log('\n[드라이런] 파일시스템 무변경으로 종료합니다. 실제 실행: --execute');
     return;
   }
@@ -418,6 +490,19 @@ function main() {
   writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
   console.log(`\n실행 완료: 복사 ${copied}건 / 이동 ${moved}건 / 보존 ${preserved.length}건`);
   console.log(`리포트: ${reportPath}`);
+
+  // 볼트에 아카이브 경로 절 기록 — 인간 명시 요구("볼트에는 안 들어갈 테니 경로라도 링크시켜놔").
+  const mediaSize = existsSync(root) ? sum(collectFiles(root)) : null;
+  appendArchiveSection({
+    vaultDir,
+    productionId,
+    execute: true,
+    section: buildArchiveSection({
+      productionId, root, releasesDir, intermediatesDir, copies, moves, mediaSize,
+      rawDir: path.join(path.dirname(releasesDir), 'raw'),
+      reportPath,
+    }),
+  });
 }
 
 try {
