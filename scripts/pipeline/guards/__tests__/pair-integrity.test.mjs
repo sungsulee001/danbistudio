@@ -163,13 +163,42 @@ describe('checkPairIntegrity', () => {
     expect(codesOf(report, 'error')).toContain('orphan-audio-scene');
   });
 
-  it('SFX가 한 컷에 둘 이상이면 ERROR', () => {
+  // 계약 개정(2026-08-07 인간 결정): SFX는 「컷 1:1」이 아니라 「배치 단위」다.
+  // ep3~는 오디오-라이브러리 원본을 직접 참조하며 한 컷에 서로 다른 소스를 겹쳐 깐다
+  // (예: 말발굽 + 군중 웅성). 결함으로 봐야 하는 것은 **같은 소스의 중복 배치**뿐이다.
+  it('한 컷에 같은 소스의 SFX가 둘이면 ERROR', () => {
+    const input = healthy();
+    input.sfxAssets = [
+      { cutId: 'CUT-01', file: 'a.wav' },
+      { cutId: 'CUT-01', file: 'a.wav' },
+    ];
+    const report = checkPairIntegrity(input);
+    expect(codesOf(report, 'error')).toContain('sfx-duplicate');
+  });
+
+  it('한 컷에 서로 다른 소스의 SFX가 둘이면 ERROR가 아니라 info', () => {
     const input = healthy();
     input.sfxAssets = [
       { cutId: 'CUT-01', file: 'a.wav' },
       { cutId: 'CUT-01', file: 'b.wav' },
     ];
     const report = checkPairIntegrity(input);
-    expect(codesOf(report, 'error')).toContain('sfx-duplicate');
+    expect(codesOf(report, 'error')).not.toContain('sfx-duplicate');
+    expect(codesOf(report, 'info')).toContain('sfx-multi-placement');
+  });
+
+  it('A2V 컷에 세그먼트가 둘이면 둘 다 바인딩 검사한다(이중 재생 방지)', () => {
+    const input = healthy();
+    const target = input.cuts[0];
+    target.isA2V = true;
+    target.a2vSegmentKey = 'N01-01';
+    target.a2vSegmentKeys = ['N01-01', 'N99-01'];
+    input.a2vTable = new Map([['CUT-01', {
+      file: 'CUT-01.mp4',
+      audioFiles: ['N01-01-narrator.wav', 'N99-01-narrator.wav'],
+    }]]);
+    const report = checkPairIntegrity(input);
+    expect(codesOf(report, 'error')).toContain('a2v-segment-missing');
+    expect(codesOf(report, 'info')).toContain('a2v-multi-segment');
   });
 });

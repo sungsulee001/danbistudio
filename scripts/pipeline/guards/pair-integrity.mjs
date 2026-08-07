@@ -110,59 +110,72 @@ export function checkPairIntegrity({
   }
 
   // ---- 3. A2V 바인딩 (ep2 CUT-16 사고) ---------------------------------
+  // 한 A2V 컷에 세그먼트가 **여럿일 수 있다**(ep3 CUT-51 = N12-04 + N12-05 두 줄 임베드).
+  // 단수만 검사하면 둘째 줄이 A1에 또 깔리는 이중 재생을 가드가 놓친다.
   const boundBySegment = new Map();
   for (const cut of cuts) {
     if (!cut.isA2V) continue;
-    const key = cut.a2vSegmentKey;
-    if (!key) {
+    const keys = (cut.a2vSegmentKeys?.length ? cut.a2vSegmentKeys : [cut.a2vSegmentKey]).filter(Boolean);
+    const row = a2vTable?.get(cut.id);
+    const rowAudioFiles = row?.audioFiles?.length ? row.audioFiles : [row?.audioFile].filter(Boolean);
+    if (keys.length === 0) {
       report.error('a2v-unbound', cut.id,
         'A2V 컷이지만 바인딩된 TTS 세그먼트가 없습니다 — 립싱크 대상 음성을 특정할 수 없습니다', {
-          sceneRef: cut.a2vSceneRef, a2vRow: a2vTable?.get(cut.id)?.audioFile,
+          sceneRef: cut.a2vSceneRef, a2vRow: rowAudioFiles,
         });
       continue;
     }
-    const segment = segmentByKey.get(key);
-    if (!segment) {
-      report.error('a2v-segment-missing', cut.id, '바인딩된 세그먼트가 §세그먼트 실측표에 없습니다', {
-        segmentKey: key,
-      });
-      continue;
+    for (const key of keys) {
+      const segment = segmentByKey.get(key);
+      if (!segment) {
+        report.error('a2v-segment-missing', cut.id, '바인딩된 세그먼트가 §세그먼트 실측표에 없습니다', {
+          segmentKey: key,
+        });
+        continue;
+      }
+      if (Number.isFinite(cut.scene) && segment.scene !== cut.scene) {
+        report.error('a2v-scene-mismatch', cut.id, 'A2V 바인딩 세그먼트의 장면이 컷 장면과 다릅니다', {
+          cutScene: cut.scene, segmentScene: segment.scene, segmentKey: key,
+        });
+      }
+      const already = boundBySegment.get(key);
+      if (already) {
+        report.error('a2v-duplicate-binding', cut.id, '한 세그먼트가 둘 이상의 A2V 컷에 바인딩됐습니다', {
+          segmentKey: key, otherCut: already,
+        });
+      } else {
+        boundBySegment.set(key, cut.id);
+      }
     }
-    if (Number.isFinite(cut.scene) && segment.scene !== cut.scene) {
-      report.error('a2v-scene-mismatch', cut.id, 'A2V 바인딩 세그먼트의 장면이 컷 장면과 다릅니다', {
-        cutScene: cut.scene, segmentScene: segment.scene, segmentKey: key,
+    if (keys.length > 1) {
+      report.info('a2v-multi-segment', cut.id, '한 A2V 컷에 세그먼트가 여럿 바인딩됐습니다 — A1 이중 배치 여부 확인', {
+        segmentKeys: keys, audioFiles: rowAudioFiles,
       });
-    }
-    const already = boundBySegment.get(key);
-    if (already) {
-      report.error('a2v-duplicate-binding', cut.id, '한 세그먼트가 둘 이상의 A2V 컷에 바인딩됐습니다', {
-        segmentKey: key, otherCut: already,
-      });
-    } else {
-      boundBySegment.set(key, cut.id);
     }
 
     // 채택 표 열 위치 오독 방어 — 클립 열은 영상, 오디오 열은 음성이어야 한다.
-    const row = a2vTable?.get(cut.id);
     if (row) {
       if (!row.file) {
-        report.error('a2v-clip-unresolved', cut.id, '§A2V 표에서 채택 클립을 해석하지 못했습니다(열 위치 확인)', {
-          audioFile: row.audioFile,
+        report.error('a2v-clip-unresolved', cut.id, 'A2V 채택 클립을 해석하지 못했습니다(열 위치 확인)', {
+          audioFiles: rowAudioFiles,
         });
       } else if (!VIDEO_EXT_RE.test(row.file)) {
         report.error('a2v-clip-not-video', cut.id, '채택 클립 열의 값이 영상 파일이 아닙니다 — 열을 잘못 집었습니다', {
           file: row.file,
         });
       }
-      if (row.audioFile && !AUDIO_EXT_RE.test(row.audioFile)) {
-        report.error('a2v-audio-not-audio', cut.id, '오디오 열의 값이 음성 파일이 아닙니다 — 열을 잘못 집었습니다', {
-          audioFile: row.audioFile,
-        });
-      }
-      if (row.audioFile && !String(row.audioFile).startsWith(key)) {
-        report.error('a2v-audio-key-mismatch', cut.id, '오디오 열 파일명이 바인딩 세그먼트 키와 어긋납니다', {
-          audioFile: row.audioFile, segmentKey: key,
-        });
+      for (const audioFile of rowAudioFiles) {
+        if (!AUDIO_EXT_RE.test(audioFile)) {
+          report.error('a2v-audio-not-audio', cut.id, '오디오 열의 값이 음성 파일이 아닙니다 — 열을 잘못 집었습니다', {
+            audioFile,
+          });
+          continue;
+        }
+        if (!keys.some((key) => String(audioFile).startsWith(key))) {
+          report.error('a2v-audio-key-mismatch', cut.id, '오디오 열 파일명이 바인딩 세그먼트 키와 어긋납니다', {
+            audioFile, segmentKeys: keys,
+          });
+        }
       }
     }
   }
@@ -209,8 +222,12 @@ export function checkPairIntegrity({
     }
   }
 
-  // ---- 5. SFX 1:1 -----------------------------------------------------
+  // ---- 5. SFX 배치 -----------------------------------------------------
+  // ep1·ep2는 컷 1:1(에피소드 폴더 채택 복사본)이지만, ep3~는 한 컷에 **여러 배치**가 설계돼 있다
+  // (오디오-라이브러리 참조형 — 예: 말발굽 + 군중 웅성을 같은 컷에 겹친다).
+  // 그래서 「같은 컷 + **같은 소스 파일**」만 결함으로 본다. 서로 다른 소스는 정상 설계다.
   const sfxSeen = new Set();
+  const sfxByCut = new Map();
   for (const entry of sfxAssets) {
     if (!cutIds.has(entry.cutId)) {
       report.error('sfx-unknown-cut', entry.cutId, 'SFX가 이 프로덕션에 없는 컷을 가리킵니다', {
@@ -218,12 +235,27 @@ export function checkPairIntegrity({
       });
       continue;
     }
-    if (sfxSeen.has(entry.cutId)) {
-      report.error('sfx-duplicate', entry.cutId, '한 컷에 SFX가 둘 이상 배치됐습니다(컷 1:1 계약 위반)', {
-        file: entry.file,
+    const signature = `${entry.cutId} ${basenameOf(entry.file ?? entry.path)}`;
+    if (sfxSeen.has(signature)) {
+      report.error('sfx-duplicate', entry.cutId, '한 컷에 **같은 소스**의 SFX가 둘 이상 배치됐습니다(중복 배치)', {
+        file: entry.file, placementKey: entry.placementKey,
       });
     }
-    sfxSeen.add(entry.cutId);
+    sfxSeen.add(signature);
+    sfxByCut.set(entry.cutId, (sfxByCut.get(entry.cutId) ?? 0) + 1);
+    // 라이브러리 참조형은 에피소드 폴더 복제본이 없다 — 경로가 라이브러리를 가리키는지 기록만 남긴다.
+    if (entry.libraryReference && !entry.path) {
+      report.error('sfx-library-path-missing', entry.cutId, '라이브러리 참조 SFX에 절대 경로가 없습니다', {
+        libId: entry.libId,
+      });
+    }
+  }
+  for (const [cutId, count] of sfxByCut) {
+    if (count > 1) {
+      report.info('sfx-multi-placement', cutId, '한 컷에 SFX가 여럿 배치됐습니다(서로 다른 소스 — 설계 확인)', {
+        count,
+      });
+    }
   }
 
   // ---- 6. 보정 표 색인 범위 (ep1 플래그가 ep2에 오적용된 사고) ----------
