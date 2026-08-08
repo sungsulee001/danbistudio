@@ -68,15 +68,15 @@ export function SourceAssetRangePanel({
   onReplaceSelected: () => void;
 }) {
   return (
-    <div className="mt-3 rounded-md border border-emerald-900/70 bg-zinc-900 p-3">
+    <div className="mt-3 rounded-md border border-accent-100/70 bg-surface p-3">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-300">Source</h3>
-        <span className="rounded bg-zinc-800 px-2 py-1 text-[11px] uppercase text-zinc-400">
+        <h3 className="text-kicker font-heading font-semibold uppercase text-accent-700">Source</h3>
+        <span className="rounded bg-ds-200 px-2 py-1 text-meta uppercase text-ds-700">
           {resolveMediaBinAssetKindLabel(asset)}
         </span>
       </div>
-      <div className="mt-2 truncate text-sm font-medium text-zinc-100">{asset.name}</div>
-      <label className="mt-3 block text-xs text-zinc-500">
+      <div className="mt-2 truncate text-sm font-medium text-ink">{asset.name}</div>
+      <label className="mt-3 block text-xs text-ds-600">
         Bin
         <input
           key={`${asset.id}-${assetBin}`}
@@ -87,7 +87,7 @@ export function SourceAssetRangePanel({
               event.currentTarget.blur();
             }
           }}
-          className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-sm text-zinc-100 outline-none focus:border-emerald-500"
+          className="mt-1 w-full rounded-md border border-ds-200 bg-paper px-2 py-2 text-sm text-ink outline-none focus:border-accent-500"
         />
       </label>
       <div className="mt-3 grid grid-cols-2 gap-2">
@@ -124,8 +124,8 @@ export function SourceAssetRangePanel({
           onClick={onTogglePrimaryPatch}
           className={`rounded border px-2 py-2 text-xs ${
             primaryPatchEnabled && hasPrimaryPatch
-              ? 'border-emerald-500 bg-emerald-950/30 text-emerald-200'
-              : 'border-zinc-700 text-zinc-400 disabled:cursor-not-allowed disabled:opacity-40'
+              ? 'border-accent-500 bg-accent-100/30 text-accent-800'
+              : 'border-ds-300 text-ds-700 disabled:cursor-not-allowed disabled:opacity-40'
           }`}
         >
           V {primaryPatchTrackName ?? 'None'}
@@ -136,8 +136,8 @@ export function SourceAssetRangePanel({
           onClick={onToggleAudioPatch}
           className={`rounded border px-2 py-2 text-xs ${
             audioPatchEnabled && hasAudioPatch
-              ? 'border-lime-500 bg-lime-950/30 text-lime-200'
-              : 'border-zinc-700 text-zinc-400 disabled:cursor-not-allowed disabled:opacity-40'
+              ? 'border-accent-500 bg-accent-100/30 text-accent-800'
+              : 'border-ds-300 text-ds-700 disabled:cursor-not-allowed disabled:opacity-40'
           }`}
         >
           A {audioPatchTrackName ?? 'None'}
@@ -165,14 +165,14 @@ export function SourceAssetRangePanel({
         <button
           type="button"
           onClick={onResetRange}
-          className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500"
+          className="rounded border border-ds-300 px-2 py-1 text-xs text-ds-700 hover:border-accent-500"
         >
           Reset
         </button>
         <button
           type="button"
           onClick={onMatchMarkedRange}
-          className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-emerald-500"
+          className="rounded border border-ds-300 px-2 py-1 text-xs text-ds-700 hover:border-accent-500"
         >
           Match marks
         </button>
@@ -180,7 +180,7 @@ export function SourceAssetRangePanel({
           type="button"
           onClick={onCreateSubclip}
           disabled={sourceDuration <= 0.05}
-          className="col-span-2 rounded border border-violet-700 bg-violet-950/30 px-2 py-2 text-xs font-medium text-violet-200 hover:border-violet-400 disabled:cursor-not-allowed disabled:opacity-50"
+          className="col-span-2 rounded border border-accent2-300 bg-accent2-100/30 px-2 py-2 text-xs font-medium text-accent2-800 hover:border-accent2-600 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Create subclip
         </button>
@@ -188,7 +188,7 @@ export function SourceAssetRangePanel({
           type="button"
           onClick={onInsert}
           disabled={sourceDuration <= 0}
-          className="rounded border border-emerald-700 bg-emerald-950/40 px-2 py-2 text-xs font-medium text-emerald-200 hover:border-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded border border-accent-300 bg-accent-100/40 px-2 py-2 text-xs font-medium text-accent-800 hover:border-accent-600 disabled:cursor-not-allowed disabled:opacity-50"
         >
           3P Insert
         </button>
@@ -196,7 +196,7 @@ export function SourceAssetRangePanel({
           type="button"
           onClick={onOverwrite}
           disabled={sourceDuration <= 0}
-          className="rounded border border-sky-700 bg-sky-950/40 px-2 py-2 text-xs font-medium text-sky-200 hover:border-sky-400 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded border border-info-300 bg-info-100/40 px-2 py-2 text-xs font-medium text-info-800 hover:border-info-600 disabled:cursor-not-allowed disabled:opacity-50"
         >
           3P Overwrite
         </button>
@@ -204,7 +204,7 @@ export function SourceAssetRangePanel({
           type="button"
           onClick={onReplaceSelected}
           disabled={!canReplaceSelected || sourceDuration <= 0}
-          className="col-span-2 rounded border border-amber-700 bg-amber-950/30 px-2 py-2 text-xs font-medium text-amber-200 hover:border-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+          className="col-span-2 rounded border border-warn-300 bg-warn-100/30 px-2 py-2 text-xs font-medium text-warn-800 hover:border-warn-600 disabled:cursor-not-allowed disabled:opacity-50"
         >
           Replace selected
         </button>
@@ -231,7 +231,7 @@ function SourcePatchTrackSelect({
   const selectedValue = value && options.some((option) => option.id === value) ? value : '';
 
   return (
-    <label className="block text-[11px] text-zinc-500">
+    <label className="block text-meta text-ds-600">
       {label}
       <select
         value={selectedValue}
@@ -241,7 +241,7 @@ function SourcePatchTrackSelect({
             onChange(event.currentTarget.value);
           }
         }}
-        className="mt-1 w-full rounded border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs text-zinc-100 outline-none focus:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+        className="mt-1 w-full rounded border border-ds-200 bg-paper px-2 py-2 text-xs text-ink outline-none focus:border-accent-500 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <option value="">{emptyLabel}</option>
         {options.map((option) => (
@@ -257,8 +257,8 @@ function SourcePatchTrackSelect({
 function Readout({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-2">
-      <dt className="text-zinc-500">{label}</dt>
-      <dd className="truncate text-right text-zinc-200">{value}</dd>
+      <dt className="text-ds-600">{label}</dt>
+      <dd className="truncate text-right text-ds-800">{value}</dd>
     </div>
   );
 }

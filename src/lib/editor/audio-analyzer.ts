@@ -312,6 +312,58 @@ export function buildProgramAudioFftSample(
   };
 }
 
+/**
+ * 프로그램 모니터 FFT는 진단 표시용이라 재생 중 매 프레임 편집기 최상위 상태를 갱신할 이유가 없다.
+ * 갱신 주기를 제한하고 값이 같은 샘플을 걸러야 재생 중 전체 트리 리렌더가 폭주하지 않는다.
+ */
+export const PROGRAM_AUDIO_FFT_EMIT_INTERVAL_MS = 250;
+
+export function isSameProgramAudioFftSample(
+  previous: ProgramAudioFftSample | null | undefined,
+  next: ProgramAudioFftSample | null | undefined,
+): boolean {
+  if (!previous || !next) {
+    return !previous && !next;
+  }
+
+  return (
+    previous.sourceLayerCount === next.sourceLayerCount &&
+    previous.capturedLayerCount === next.capturedLayerCount &&
+    previous.frequencyBinCount === next.frequencyBinCount &&
+    previous.peak === next.peak &&
+    previous.average === next.average &&
+    previous.bands.length === next.bands.length &&
+    previous.bands.every((band, index) => (
+      band.id === next.bands[index]?.id && band.value === next.bands[index]?.value
+    ))
+  );
+}
+
+export function shouldEmitProgramAudioFftSample({
+  previous,
+  next,
+  lastEmitAt,
+  now,
+  minIntervalMs = PROGRAM_AUDIO_FFT_EMIT_INTERVAL_MS,
+}: {
+  previous: ProgramAudioFftSample | null | undefined;
+  next: ProgramAudioFftSample;
+  lastEmitAt: number;
+  now: number;
+  minIntervalMs?: number;
+}): boolean {
+  if (isSameProgramAudioFftSample(previous, next)) {
+    return false;
+  }
+
+  // 레이어 수가 바뀌면 클립 경계 전환이므로 스로틀을 건너뛴다.
+  if (previous?.sourceLayerCount !== next.sourceLayerCount || previous?.capturedLayerCount !== next.capturedLayerCount) {
+    return true;
+  }
+
+  return now - lastEmitAt >= minIntervalMs;
+}
+
 function buildAnalyzerBand(
   id: AudioAnalyzerBand['id'],
   label: string,

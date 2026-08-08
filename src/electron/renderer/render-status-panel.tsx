@@ -72,25 +72,25 @@ export function RenderStatusPanel({
   return (
     <>
       {renderJob ? (
-        <div data-testid="render-job-panel" className="rounded-md border border-zinc-800 bg-zinc-950 p-3">
+        <div data-testid="render-job-panel" className="rounded-md border border-ds-200 bg-paper p-3">
           <div className="mb-2 flex items-center justify-between text-xs">
-            <span className="text-zinc-400">Render job</span>
-            <span data-testid="render-job-status" className="text-emerald-300">{renderJob.status}</span>
+            <span className="text-ds-700">Render job</span>
+            <span data-testid="render-job-status" className="text-accent-700">{renderJob.status}</span>
           </div>
-          <div className="mb-2 text-[11px] text-zinc-500">
+          <div className="mb-2 text-meta text-ds-600">
             Priority {renderJob.priority ?? 0}
           </div>
-          <div className="h-2 overflow-hidden rounded bg-zinc-800">
+          <div className="h-2 overflow-hidden rounded bg-ds-200">
             <div
-              className="h-full bg-emerald-400 transition-all"
+              className="h-full bg-accent-600 transition-all"
               style={{ width: `${Math.max(0, Math.min(renderJob.progress, 100))}%` }}
             />
           </div>
-          <div className="mt-2 flex items-center justify-between gap-3 text-xs text-zinc-500">
+          <div className="mt-2 flex items-center justify-between gap-3 text-xs text-ds-600">
             <span data-testid="render-job-progress">{renderJob.progress}%</span>
             <div className="flex flex-wrap items-center justify-end gap-3">
               {renderJob.status === 'queued' || renderJob.status === 'running' ? (
-                <button type="button" className="text-rose-300 hover:text-rose-200" onClick={() => void onCancelRender()}>
+                <button type="button" className="text-danger-700 hover:text-danger-800" onClick={() => void onCancelRender()}>
                   Cancel
                 </button>
               ) : null}
@@ -98,8 +98,8 @@ export function RenderStatusPanel({
                 <button
                   type="button"
                   className={canRetryRenderJob
-                    ? 'text-sky-300 hover:text-sky-200'
-                    : 'cursor-not-allowed text-zinc-500'}
+                    ? 'text-info-700 hover:text-info-800'
+                    : 'cursor-not-allowed text-ds-600'}
                   disabled={!canRetryRenderJob}
                   title={retryBlockedStatus ?? 'Rebuilds preflight and queues a new job from the current project, export profile, range, and output path.'}
                   onClick={() => void onRetryRender()}
@@ -110,7 +110,7 @@ export function RenderStatusPanel({
               {canQueueCurrentRender ? (
                 <button
                   type="button"
-                  className="text-emerald-300 hover:text-emerald-200"
+                  className="text-accent-700 hover:text-accent-800"
                   title="Rebuilds preflight and the FFmpeg plan from the current project, export profile, range, and output path."
                   onClick={() => void onQueueCurrentRender?.()}
                 >
@@ -122,51 +122,51 @@ export function RenderStatusPanel({
           {diagnosticView ? (
             <div className={`mt-3 rounded border p-2 text-xs ${
               diagnosticView.tone === 'blocked'
-                ? 'border-rose-500/30 bg-rose-500/10 text-rose-100'
+                ? 'border-danger-500/30 bg-danger-500/10 text-danger-900'
                 : diagnosticView.tone === 'retry'
-                  ? 'border-sky-500/30 bg-sky-500/10 text-sky-100'
-                  : 'border-amber-500/30 bg-amber-500/10 text-amber-100'
+                  ? 'border-info-500/30 bg-info-500/10 text-info-900'
+                  : 'border-warn-500/30 bg-warn-500/10 text-warn-900'
             }`}
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="font-medium">{diagnosticView.title}</div>
-                  <div className="mt-1 text-[11px] opacity-80">{diagnosticView.summary}</div>
+                  <div className="mt-1 text-meta opacity-80">{diagnosticView.summary}</div>
                 </div>
-                <span className="shrink-0 rounded border border-white/15 px-2 py-0.5 text-[10px] uppercase tracking-wide text-white/70">
+                <span className="shrink-0 rounded border border-ds-300 px-2 py-0.5 text-micro uppercase tracking-wide text-ds-700">
                   {diagnosticView.categoryLabel}
                 </span>
               </div>
-              <div className="mt-2 text-[11px] uppercase tracking-wide text-white/60">
+              <div className="mt-2 text-meta uppercase tracking-wide text-ds-700">
                 {diagnosticView.retryLabel}
               </div>
               {diagnosticView.primaryAction ? (
-                <div className="mt-2 rounded border border-white/10 bg-black/20 p-2">
+                <div className="mt-2 rounded border border-ds-200 bg-ds-100 p-2">
                   <div className="flex items-center justify-between gap-2">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-white/70">
+                    <div className="text-meta font-semibold uppercase tracking-wide text-ds-700">
                       {diagnosticView.primaryAction.label}
                     </div>
                     {onResolveDiagnosticAction ? (
                       <button
                         type="button"
-                        className="rounded border border-white/20 px-2 py-1 text-[11px] text-white/80 hover:bg-white/10"
+                        className="rounded border border-ds-300 px-2 py-1 text-meta text-ds-800 hover:bg-ds-200"
                         onClick={() => void onResolveDiagnosticAction(diagnosticView.primaryAction!)}
                       >
                         Resolve
                       </button>
                     ) : null}
                   </div>
-                  <div className="mt-1 text-[11px] text-white/75">{diagnosticView.primaryAction.detail}</div>
+                  <div className="mt-1 text-meta text-ds-700">{diagnosticView.primaryAction.detail}</div>
                 </div>
               ) : null}
-              <ul className="mt-2 space-y-1 text-[11px] text-white/75">
+              <ul className="mt-2 space-y-1 text-meta text-ds-700">
                 {diagnosticView.actions.slice(1, 3).map((action) => (
                   <li key={action.detail}>{action.detail}</li>
                 ))}
               </ul>
               {diagnosticView.evidence.length > 0 ? (
-                <details className="mt-2 text-[11px] text-white/60">
-                  <summary className="cursor-pointer text-white/70">Evidence</summary>
+                <details className="mt-2 text-meta text-ds-700">
+                  <summary className="cursor-pointer text-ds-700">Evidence</summary>
                   <ul className="mt-1 space-y-1">
                     {diagnosticView.evidence.map((line) => (
                       <li key={line} className="break-words">{line}</li>
@@ -177,19 +177,19 @@ export function RenderStatusPanel({
             </div>
           ) : null}
           {renderJob.stderrTail && (renderJob.status === 'failed' || renderJob.status === 'cancelled') ? (
-            <pre className="mt-3 max-h-24 overflow-auto whitespace-pre-wrap rounded border border-zinc-800 bg-zinc-950 p-2 text-[11px] leading-5 text-zinc-400 custom-scrollbar">
+            <pre className="mt-3 max-h-24 overflow-auto whitespace-pre-wrap rounded border border-ds-200 bg-paper p-2 text-meta leading-5 text-ds-700 custom-scrollbar">
               {renderJob.stderrTail}
             </pre>
           ) : null}
         </div>
       ) : null}
-      <div className="rounded-md border border-zinc-800 bg-zinc-950 p-2">
-        <div className="mb-2 flex items-center justify-between gap-2 text-[11px] text-zinc-500">
+      <div className="rounded-md border border-ds-200 bg-paper p-2">
+        <div className="mb-2 flex items-center justify-between gap-2 text-meta text-ds-600">
           <span>Render command</span>
           {commandPreview.isTruncated ? (
             <button
               type="button"
-              className="text-sky-300 hover:text-sky-200"
+              className="text-info-700 hover:text-info-800"
               onClick={() => setShowFullCommand((value) => !value)}
             >
               {showFullCommand ? 'Show preview' : 'Show full command'}
@@ -198,24 +198,24 @@ export function RenderStatusPanel({
         </div>
         <pre
           data-testid="render-command-preview"
-          className="max-h-28 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-zinc-400 custom-scrollbar"
+          className="max-h-28 overflow-auto whitespace-pre-wrap text-meta leading-5 text-ds-700 custom-scrollbar"
         >
           {showFullCommand ? renderPlan.commandText : commandPreview.text}
         </pre>
         {commandPreview.isTruncated && !showFullCommand ? (
-          <div className="mt-1 text-[10px] text-zinc-600">
+          <div className="mt-1 text-micro text-ds-400">
             {commandPreview.omittedCharacterCount} command characters hidden until expanded.
           </div>
         ) : null}
       </div>
       {renderOutputPath ? (
-        <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-2 text-xs text-emerald-200">
+        <div className="rounded-md border border-accent-500/40 bg-accent-500/10 p-2 text-xs text-accent-800">
           <div data-testid="render-output-path" className="break-all">Rendered file: {renderOutputPath}</div>
           <div className="mt-2 flex flex-wrap gap-2">
             {onOpenRenderOutput ? (
               <button
                 type="button"
-                className="rounded border border-emerald-400/40 px-2 py-1 text-[11px] text-emerald-100 hover:bg-emerald-500/20"
+                className="rounded border border-accent-600/40 px-2 py-1 text-meta text-accent-900 hover:bg-accent-500/20"
                 onClick={() => void onOpenRenderOutput()}
               >
                 Open
@@ -224,7 +224,7 @@ export function RenderStatusPanel({
             {onRevealRenderOutput ? (
               <button
                 type="button"
-                className="rounded border border-emerald-400/40 px-2 py-1 text-[11px] text-emerald-100 hover:bg-emerald-500/20"
+                className="rounded border border-accent-600/40 px-2 py-1 text-meta text-accent-900 hover:bg-accent-500/20"
                 onClick={() => void onRevealRenderOutput()}
               >
                 Show in folder
@@ -232,7 +232,7 @@ export function RenderStatusPanel({
             ) : null}
             <a
               href={renderOutputPath}
-              className="rounded border border-emerald-400/40 px-2 py-1 text-[11px] text-emerald-100 hover:bg-emerald-500/20"
+              className="rounded border border-accent-600/40 px-2 py-1 text-meta text-accent-900 hover:bg-accent-500/20"
               target="_blank"
               rel="noreferrer"
             >
@@ -242,7 +242,7 @@ export function RenderStatusPanel({
         </div>
       ) : null}
       {renderPlan.warnings.slice(0, 4).map((issue) => (
-        <div key={issue} className="rounded-md border border-rose-500/30 bg-rose-500/10 p-2 text-xs text-rose-200">
+        <div key={issue} className="rounded-md border border-danger-500/30 bg-danger-500/10 p-2 text-xs text-danger-800">
           {issue}
         </div>
       ))}

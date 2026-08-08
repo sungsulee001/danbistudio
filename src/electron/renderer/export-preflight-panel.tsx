@@ -29,21 +29,21 @@ export function ExportPreflightPanel({
   return (
     <div className={`rounded-md border p-3 ${
       report.status === 'blocked'
-        ? 'border-rose-500/30 bg-rose-500/10'
+        ? 'border-danger-500/30 bg-danger-500/10'
         : report.status === 'warning'
-          ? 'border-amber-500/30 bg-amber-500/10'
-          : 'border-emerald-500/30 bg-emerald-500/10'
+          ? 'border-warn-500/30 bg-warn-500/10'
+          : 'border-accent-500/30 bg-accent-500/10'
     }`}
     >
       <div className="flex items-center justify-between gap-2 text-xs">
-        <span className="font-semibold uppercase tracking-wide text-zinc-300">Preflight</span>
+        <span className="font-semibold uppercase tracking-wide text-ds-700">Preflight</span>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => void onRebuildMediaCache()}
             disabled={mediaCachePlan.targets.length === 0}
             title={`${mediaCachePlan.skipped.length} preflight cache asset${mediaCachePlan.skipped.length === 1 ? '' : 's'} skipped`}
-            className="rounded border border-zinc-700 px-2 py-1 text-[11px] text-zinc-200 hover:border-sky-400 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded border border-ds-300 px-2 py-1 text-meta text-ds-800 hover:border-info-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Cache {mediaCachePlan.targets.length}
           </button>
@@ -52,16 +52,16 @@ export function ExportPreflightPanel({
             onClick={() => void onRelinkMissingMedia()}
             disabled={bulkRelinkCandidateCount === 0}
             title={bulkRelinkCandidateCount > 0 ? 'Select replacement files for all relinkable preflight media' : 'No missing media assets need relinking'}
-            className="rounded border border-zinc-700 px-2 py-1 text-[11px] text-zinc-200 hover:border-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded border border-ds-300 px-2 py-1 text-meta text-ds-800 hover:border-warn-600 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Relink {bulkRelinkCandidateCount}
           </button>
           <span className={
             report.status === 'blocked'
-              ? 'text-rose-200'
+              ? 'text-danger-800'
               : report.status === 'warning'
-                ? 'text-amber-100'
-                : 'text-emerald-200'
+                ? 'text-warn-900'
+                : 'text-accent-800'
           }
           >
             {report.status} / {report.blockedCount} blocked / {report.warningCount} warnings
@@ -75,16 +75,16 @@ export function ExportPreflightPanel({
             const showSecondaryRelink = shouldShowSecondaryPreflightRelinkAction(issue, primaryAction);
 
             return (
-              <div key={issue.id} className="rounded border border-white/10 bg-zinc-950/60 p-2 text-xs">
+              <div key={issue.id} className="rounded border border-white/10 bg-paper/60 p-2 text-xs">
                 <div className="flex items-start justify-between gap-2">
-                  <div className={issue.severity === 'blocked' ? 'text-rose-100' : 'text-amber-100'}>
+                  <div className={issue.severity === 'blocked' ? 'text-danger-900' : 'text-warn-900'}>
                     {issue.message}
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     <button
                       type="button"
                       onClick={() => onFocusIssue(issue)}
-                      className="rounded border border-zinc-700 px-2 py-1 text-[11px] text-zinc-200 hover:border-sky-400"
+                      className="rounded border border-ds-300 px-2 py-1 text-meta text-ds-800 hover:border-info-600"
                     >
                       Focus
                     </button>
@@ -92,7 +92,7 @@ export function ExportPreflightPanel({
                       type="button"
                       onClick={() => void onResolveIssue(issue)}
                       title={primaryAction.detail}
-                      className="rounded border border-zinc-700 px-2 py-1 text-[11px] text-zinc-200 hover:border-amber-400"
+                      className="rounded border border-ds-300 px-2 py-1 text-meta text-ds-800 hover:border-warn-600"
                     >
                       {primaryAction.label}
                     </button>
@@ -100,27 +100,27 @@ export function ExportPreflightPanel({
                       <button
                         type="button"
                         onClick={() => onRelinkIssueAsset(issue)}
-                        className="rounded border border-zinc-700 px-2 py-1 text-[11px] text-zinc-200 hover:border-amber-400"
+                        className="rounded border border-ds-300 px-2 py-1 text-meta text-ds-800 hover:border-warn-600"
                       >
                         Relink
                       </button>
                     ) : null}
                   </div>
                 </div>
-                <div className="mt-1 text-[11px] text-zinc-400">
+                <div className="mt-1 text-meta text-ds-700">
                   {issue.source}{issue.time !== undefined ? ` / ${formatTimecode(issue.time, fps)}` : ''} / {primaryAction.label}: {issue.action}
                 </div>
               </div>
             );
           })}
           {issueSummary.hiddenLabel ? (
-            <div className="rounded border border-zinc-800 bg-zinc-950/40 p-2 text-[11px] text-zinc-400">
+            <div className="rounded border border-ds-200 bg-paper/40 p-2 text-meta text-ds-700">
               {issueSummary.hiddenLabel}
             </div>
           ) : null}
         </div>
       ) : (
-        <div className="mt-2 text-xs text-emerald-100">Ready for render queue</div>
+        <div className="mt-2 text-xs text-accent-900">Ready for render queue</div>
       )}
     </div>
   );

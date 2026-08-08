@@ -12,6 +12,7 @@ import { EffectParameterControls } from './inspector-controls';
 
 interface InspectorEffectsPanelProps {
   clip: TimelineClip;
+  testIdPrefix?: string;
   canAddColorEffect: boolean;
   canApplyColorLut: boolean;
   canAddColorMatch: boolean;
@@ -48,6 +49,7 @@ interface InspectorEffectsPanelProps {
 
 export function InspectorEffectsPanel({
   clip,
+  testIdPrefix = 'inspector-effects',
   canAddColorEffect,
   canApplyColorLut,
   canAddColorMatch,
@@ -82,52 +84,86 @@ export function InspectorEffectsPanel({
   onEffectParameterChange,
 }: InspectorEffectsPanelProps) {
   return (
-    <div className="rounded-md border border-zinc-800 bg-zinc-900 p-3">
+    <div
+      className="rounded-md border border-ds-200 bg-surface p-3"
+      data-testid={`${testIdPrefix}-panel`}
+      data-clip-id={clip.id}
+      data-clip-kind={clip.kind}
+      data-effect-count={clip.effects.length}
+      data-can-add-color-effect={canAddColorEffect ? 'true' : 'false'}
+      data-can-apply-color-lut={canApplyColorLut ? 'true' : 'false'}
+      data-can-add-color-match={canAddColorMatch ? 'true' : 'false'}
+      data-can-apply-ai-enhancement={canApplyAiEnhancement ? 'true' : 'false'}
+      data-can-apply-visual-filter={canApplyVisualFilter ? 'true' : 'false'}
+      data-can-add-audio-gain={canAddAudioGain ? 'true' : 'false'}
+      data-can-apply-audio-cleanup={canApplyAudioCleanup ? 'true' : 'false'}
+      data-can-apply-stabilize={canApplyStabilize ? 'true' : 'false'}
+      data-can-add-crop-mask={canAddCropMask ? 'true' : 'false'}
+      data-can-add-smart-reframe={canAddSmartReframe ? 'true' : 'false'}
+      data-can-track-subject={canTrackSubject ? 'true' : 'false'}
+      data-can-apply-object-mask={canApplyObjectMask ? 'true' : 'false'}
+      data-can-apply-crop-preset={canApplyCropPreset ? 'true' : 'false'}
+      data-can-apply-color-preset={canApplyColorPreset ? 'true' : 'false'}
+    >
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Effects</h2>
+        <h2 className="text-kicker font-heading font-semibold uppercase text-ds-600">Effects</h2>
         <div className="flex flex-wrap justify-end gap-2">
-          <QuickEffectButton label="Color" disabled={!canAddColorEffect} onClick={onAddColorEffect} />
+          <QuickEffectButton actionId="color" testIdPrefix={testIdPrefix} label="Color" disabled={!canAddColorEffect} onClick={onAddColorEffect} />
           <QuickEffectButton
+            actionId="lut"
+            testIdPrefix={testIdPrefix}
             label="LUT"
             disabled={!canApplyColorLut}
             tone="teal"
             onClick={onRequestLutFile}
           />
-          <QuickEffectButton label="Match" disabled={!canAddColorMatch} onClick={onAddColorMatchEffect} />
+          <QuickEffectButton actionId="match" testIdPrefix={testIdPrefix} label="Match" disabled={!canAddColorMatch} onClick={onAddColorMatchEffect} />
           <QuickEffectButton
+            actionId="ai-fx"
+            testIdPrefix={testIdPrefix}
             label="AI FX"
             disabled={!canApplyAiEnhancement}
             tone="fuchsia"
             onClick={() => onApplyAiEnhancementPreset('denoise-sharpen')}
           />
           <QuickEffectButton
+            actionId="visual-fx"
+            testIdPrefix={testIdPrefix}
             label="FX"
             disabled={!canApplyVisualFilter}
             tone="sky"
             onClick={() => onApplyVisualFilterPreset('blur-soft')}
           />
-          <QuickEffectButton label="Gain" disabled={!canAddAudioGain} onClick={onAddAudioGainEffect} />
+          <QuickEffectButton actionId="gain" testIdPrefix={testIdPrefix} label="Gain" disabled={!canAddAudioGain} onClick={onAddAudioGainEffect} />
           <QuickEffectButton
+            actionId="clean"
+            testIdPrefix={testIdPrefix}
             label="Clean"
             disabled={!canApplyAudioCleanup}
             tone="amber"
             onClick={() => onApplyAudioCleanupPreset('voice-clean')}
           />
           <QuickEffectButton
+            actionId="stabilize"
+            testIdPrefix={testIdPrefix}
             label="Stabilize"
             disabled={!canApplyStabilize}
             tone="lime"
             onClick={() => onApplyStabilizePreset('standard-deshake')}
           />
-          <QuickEffectButton label="Crop" disabled={!canAddCropMask} onClick={onAddCropMaskEffect} />
-          <QuickEffectButton label="Reframe" disabled={!canAddSmartReframe} onClick={onAddSmartReframeEffect} />
+          <QuickEffectButton actionId="crop" testIdPrefix={testIdPrefix} label="Crop" disabled={!canAddCropMask} onClick={onAddCropMaskEffect} />
+          <QuickEffectButton actionId="reframe" testIdPrefix={testIdPrefix} label="Reframe" disabled={!canAddSmartReframe} onClick={onAddSmartReframeEffect} />
           <QuickEffectButton
+            actionId="track"
+            testIdPrefix={testIdPrefix}
             label="Track"
             disabled={!canTrackSubject}
             tone="violet"
             onClick={onTrackSubjectReframe}
           />
           <QuickEffectButton
+            actionId="object"
+            testIdPrefix={testIdPrefix}
             label="Object"
             disabled={!canApplyObjectMask}
             tone="cyan"
@@ -140,9 +176,11 @@ export function InspectorEffectsPanel({
           <button
             key={preset.id}
             type="button"
+            data-testid={`${testIdPrefix}-crop-preset-${preset.id}`}
+            data-effect-preset-id={preset.id}
             disabled={!canApplyCropPreset}
             onClick={() => onApplyCropPreset(preset.id)}
-            className="rounded border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs text-zinc-300 hover:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded border border-ds-200 bg-paper px-2 py-2 text-xs text-ds-700 hover:border-accent-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {preset.label}
           </button>
@@ -153,9 +191,11 @@ export function InspectorEffectsPanel({
           <button
             key={preset.id}
             type="button"
+            data-testid={`${testIdPrefix}-color-preset-${preset.id}`}
+            data-effect-preset-id={preset.id}
             disabled={!canApplyColorPreset}
             onClick={() => onApplyColorPreset(preset.id)}
-            className="rounded border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs text-zinc-300 hover:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded border border-ds-200 bg-paper px-2 py-2 text-xs text-ds-700 hover:border-accent-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {preset.label}
           </button>
@@ -165,6 +205,8 @@ export function InspectorEffectsPanel({
         {VISUAL_FILTER_PRESETS.map((preset) => (
           <PresetButton
             key={preset.id}
+            testId={`${testIdPrefix}-visual-preset-${preset.id}`}
+            presetId={preset.id}
             label={preset.label}
             disabled={!canApplyVisualFilter}
             tone="sky"
@@ -176,6 +218,8 @@ export function InspectorEffectsPanel({
         {AI_ENHANCEMENT_PRESETS.map((preset) => (
           <PresetButton
             key={preset.id}
+            testId={`${testIdPrefix}-ai-preset-${preset.id}`}
+            presetId={preset.id}
             label={preset.label}
             disabled={!canApplyAiEnhancement}
             tone="fuchsia"
@@ -187,6 +231,8 @@ export function InspectorEffectsPanel({
         {STABILIZE_PRESETS.map((preset) => (
           <PresetButton
             key={preset.id}
+            testId={`${testIdPrefix}-stabilize-preset-${preset.id}`}
+            presetId={preset.id}
             label={preset.label}
             disabled={!canApplyStabilize}
             tone="lime"
@@ -198,6 +244,8 @@ export function InspectorEffectsPanel({
         {AUDIO_CLEANUP_PRESETS.map((preset) => (
           <PresetButton
             key={preset.id}
+            testId={`${testIdPrefix}-audio-cleanup-preset-${preset.id}`}
+            presetId={preset.id}
             label={preset.label}
             disabled={!canApplyAudioCleanup}
             tone="amber"
@@ -207,13 +255,14 @@ export function InspectorEffectsPanel({
       </div>
       <div className="mt-3 space-y-2">
         {clip.effects.length === 0 ? (
-          <p className="text-sm text-zinc-500">No effects</p>
+          <p className="text-sm text-ds-600">No effects</p>
         ) : clip.effects.map((effect, effectIndex) => (
           <EffectStackItem
             key={effect.id}
             effect={effect}
             effectIndex={effectIndex}
             effectCount={clip.effects.length}
+            testIdPrefix={testIdPrefix}
             onToggleClipEffect={onToggleClipEffect}
             onMoveClipEffect={onMoveClipEffect}
             onRemoveClipEffect={onRemoveClipEffect}
@@ -229,6 +278,7 @@ function EffectStackItem({
   effect,
   effectIndex,
   effectCount,
+  testIdPrefix,
   onToggleClipEffect,
   onMoveClipEffect,
   onRemoveClipEffect,
@@ -237,6 +287,7 @@ function EffectStackItem({
   effect: ClipEffect;
   effectIndex: number;
   effectCount: number;
+  testIdPrefix: string;
   onToggleClipEffect: (effectId: string) => void;
   onMoveClipEffect: (effectId: string, direction: 'up' | 'down') => void;
   onRemoveClipEffect: (effectId: string) => void;
@@ -245,44 +296,55 @@ function EffectStackItem({
   const trackingQuality = buildEffectTrackingQualityView(effect);
 
   return (
-    <div className="rounded-md border border-zinc-800 bg-zinc-950 p-3">
+    <div
+      className="rounded-md border border-ds-200 bg-paper p-3"
+      data-testid={`${testIdPrefix}-stack-item-${effect.id}`}
+      data-effect-id={effect.id}
+      data-effect-type={effect.type}
+      data-effect-enabled={effect.enabled ? 'true' : 'false'}
+      data-effect-index={effectIndex}
+    >
       <div className="flex items-center gap-2">
         <button
           type="button"
+          data-testid={`${testIdPrefix}-stack-toggle-${effect.id}`}
           onClick={() => onToggleClipEffect(effect.id)}
           className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left text-sm"
         >
           <span className="truncate">{effect.label}</span>
-          <span className={effect.enabled ? 'shrink-0 text-emerald-300' : 'shrink-0 text-zinc-500'}>
+          <span className={effect.enabled ? 'shrink-0 text-accent-700' : 'shrink-0 text-ds-600'}>
             {effect.enabled ? 'On' : 'Off'}
           </span>
         </button>
         <button
           type="button"
+          data-testid={`${testIdPrefix}-stack-move-up-${effect.id}`}
           disabled={effectIndex === 0}
           onClick={() => onMoveClipEffect(effect.id, 'up')}
-          className="shrink-0 rounded border border-zinc-800 px-2 py-1 text-[11px] text-zinc-300 hover:border-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
+          className="shrink-0 rounded border border-ds-200 px-2 py-1 text-meta text-ds-700 hover:border-info-500 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Up
         </button>
         <button
           type="button"
+          data-testid={`${testIdPrefix}-stack-move-down-${effect.id}`}
           disabled={effectIndex === effectCount - 1}
           onClick={() => onMoveClipEffect(effect.id, 'down')}
-          className="shrink-0 rounded border border-zinc-800 px-2 py-1 text-[11px] text-zinc-300 hover:border-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
+          className="shrink-0 rounded border border-ds-200 px-2 py-1 text-meta text-ds-700 hover:border-info-500 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Down
         </button>
         <button
           type="button"
+          data-testid={`${testIdPrefix}-stack-remove-${effect.id}`}
           onClick={() => onRemoveClipEffect(effect.id)}
-          className="shrink-0 rounded border border-zinc-800 px-2 py-1 text-[11px] text-rose-300 hover:border-rose-500"
+          className="shrink-0 rounded border border-ds-200 px-2 py-1 text-meta text-danger-700 hover:border-danger-500"
         >
           Remove
         </button>
       </div>
       {trackingQuality ? (
-        <div className={`mt-2 flex flex-wrap items-center justify-between gap-2 rounded border px-2 py-1 text-[11px] ${trackingQuality.className}`}>
+        <div className={`mt-2 flex flex-wrap items-center justify-between gap-2 rounded border px-2 py-1 text-meta ${trackingQuality.className}`}>
           <span>Tracking</span>
           <span>{trackingQuality.statusLabel} {trackingQuality.scorePercent}%</span>
           <span>jump {trackingQuality.maxJumpLabel}</span>
@@ -319,17 +381,21 @@ export function buildEffectTrackingQualityView(effect: ClipEffect): EffectTracki
     scorePercent: Math.round(clampNumber(score, 0, 1) * 100),
     maxJumpLabel: maxJump.toFixed(3),
     className: needsReview
-      ? 'border-amber-500/30 bg-amber-500/10 text-amber-100'
-      : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100',
+      ? 'border-warn-500/30 bg-warn-500/10 text-warn-900'
+      : 'border-accent-500/30 bg-accent-500/10 text-accent-900',
   };
 }
 
 function QuickEffectButton({
+  actionId,
+  testIdPrefix,
   label,
   disabled,
   tone = 'zinc',
   onClick,
 }: {
+  actionId: string;
+  testIdPrefix: string;
   label: string;
   disabled: boolean;
   tone?: 'zinc' | 'teal' | 'fuchsia' | 'sky' | 'amber' | 'lime' | 'violet' | 'cyan';
@@ -338,9 +404,11 @@ function QuickEffectButton({
   return (
     <button
       type="button"
+      data-testid={`${testIdPrefix}-quick-${actionId}`}
+      data-effect-action={actionId}
       disabled={disabled}
       onClick={onClick}
-      className={`rounded border px-2 py-1 text-[11px] disabled:cursor-not-allowed disabled:opacity-40 ${quickEffectToneClass(tone)}`}
+      className={`rounded border px-2 py-1 text-meta disabled:cursor-not-allowed disabled:opacity-40 ${quickEffectToneClass(tone)}`}
     >
       {label}
     </button>
@@ -348,11 +416,15 @@ function QuickEffectButton({
 }
 
 function PresetButton({
+  testId,
+  presetId,
   label,
   disabled,
   tone,
   onClick,
 }: {
+  testId: string;
+  presetId: string;
   label: string;
   disabled: boolean;
   tone: 'sky' | 'fuchsia' | 'lime' | 'amber';
@@ -361,9 +433,11 @@ function PresetButton({
   return (
     <button
       type="button"
+      data-testid={testId}
+      data-effect-preset-id={presetId}
       disabled={disabled}
       onClick={onClick}
-      className={`min-h-10 rounded border px-2 py-2 text-[11px] leading-tight disabled:cursor-not-allowed disabled:opacity-40 ${presetToneClass(tone)}`}
+      className={`min-h-10 rounded border px-2 py-2 text-meta leading-tight disabled:cursor-not-allowed disabled:opacity-40 ${presetToneClass(tone)}`}
     >
       {label}
     </button>
@@ -373,36 +447,36 @@ function PresetButton({
 function quickEffectToneClass(tone: 'zinc' | 'teal' | 'fuchsia' | 'sky' | 'amber' | 'lime' | 'violet' | 'cyan'): string {
   switch (tone) {
     case 'teal':
-      return 'border-teal-500/40 bg-teal-500/10 text-teal-100 hover:border-teal-300';
+      return 'border-accent-500/40 bg-accent-500/10 text-accent-900 hover:border-accent-700';
     case 'fuchsia':
-      return 'border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-100 hover:border-fuchsia-300';
+      return 'border-accent2-500/40 bg-accent2-500/10 text-accent2-900 hover:border-accent2-700';
     case 'sky':
-      return 'border-sky-500/40 bg-sky-500/10 text-sky-100 hover:border-sky-300';
+      return 'border-info-500/40 bg-info-500/10 text-info-900 hover:border-info-700';
     case 'amber':
-      return 'border-amber-500/40 bg-amber-500/10 text-amber-100 hover:border-amber-300';
+      return 'border-warn-500/40 bg-warn-500/10 text-warn-900 hover:border-warn-700';
     case 'lime':
-      return 'border-lime-500/40 bg-lime-500/10 text-lime-100 hover:border-lime-300';
+      return 'border-accent-500/40 bg-accent-500/10 text-accent-900 hover:border-accent-700';
     case 'violet':
-      return 'border-violet-500/40 bg-violet-500/10 text-violet-100 hover:border-violet-300';
+      return 'border-accent2-500/40 bg-accent2-500/10 text-accent2-900 hover:border-accent2-700';
     case 'cyan':
-      return 'border-cyan-500/40 bg-cyan-500/10 text-cyan-100 hover:border-cyan-300';
+      return 'border-info-500/40 bg-info-500/10 text-info-900 hover:border-info-700';
     case 'zinc':
     default:
-      return 'border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-emerald-500';
+      return 'border-ds-200 bg-paper text-ds-700 hover:border-accent-500';
   }
 }
 
 function presetToneClass(tone: 'sky' | 'fuchsia' | 'lime' | 'amber'): string {
   switch (tone) {
     case 'fuchsia':
-      return 'border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-100 hover:border-fuchsia-300';
+      return 'border-accent2-500/30 bg-accent2-500/10 text-accent2-900 hover:border-accent2-700';
     case 'lime':
-      return 'border-lime-500/30 bg-lime-500/10 text-lime-100 hover:border-lime-300';
+      return 'border-accent-500/30 bg-accent-500/10 text-accent-900 hover:border-accent-700';
     case 'amber':
-      return 'border-amber-500/30 bg-amber-500/10 text-amber-100 hover:border-amber-300';
+      return 'border-warn-500/30 bg-warn-500/10 text-warn-900 hover:border-warn-700';
     case 'sky':
     default:
-      return 'border-sky-500/30 bg-sky-500/10 text-sky-100 hover:border-sky-300';
+      return 'border-info-500/30 bg-info-500/10 text-info-900 hover:border-info-700';
   }
 }
 

@@ -15,6 +15,9 @@ export function TimelineClipList({
   audioPeaksByAssetId,
   selectedClipIds,
   visibleTimeRange,
+  showWaveforms,
+  showThumbnails,
+  trackHeight,
   pixelsPerSecond,
   getScrollLeft,
   isTrackPlayable,
@@ -36,6 +39,7 @@ export function TimelineClipList({
   onSlide,
   onTransitionDuration,
   onKeyframeTime,
+  onVolumeChange,
   onTrim,
 }: {
   track: TimelineTrack;
@@ -44,6 +48,9 @@ export function TimelineClipList({
   audioPeaksByAssetId: Record<string, number[]>;
   selectedClipIds: string[];
   visibleTimeRange?: TimelineWorkspaceRange;
+  showWaveforms: boolean;
+  showThumbnails: boolean;
+  trackHeight: number;
   pixelsPerSecond: number;
   getScrollLeft: () => number;
   isTrackPlayable: (track: TimelineTrack, tracks: TimelineTrack[]) => boolean;
@@ -65,6 +72,7 @@ export function TimelineClipList({
   onSlide: (clip: TimelineClip, deltaSeconds: number) => void;
   onTransitionDuration: (clip: TimelineClip, duration: number) => void;
   onKeyframeTime: (clip: TimelineClip, keyframeId: string, time: number) => void;
+  onVolumeChange: (clip: TimelineClip, volume: number) => void;
   onTrim: (clip: TimelineClip, edge: 'start' | 'end', deltaSeconds: number) => void;
 }) {
   const selectedClipIdSet = new Set(selectedClipIds);
@@ -89,9 +97,10 @@ export function TimelineClipList({
             clip={clip}
             asset={asset}
             assetKind={resolveTimelineClipDisplayAssetKind(clip, asset)}
-            thumbnailSource={resolveTimelineThumbnailSource(asset, clip.kind)}
+            thumbnailSource={showThumbnails ? resolveTimelineThumbnailSource(asset, clip.kind) : undefined}
             audioPeaks={audioPeaks}
-            showAudioWaveform={shouldRenderTimelineAudioWaveform({ clip, asset, peaks: assetWaveformPeaks })}
+            showAudioWaveform={showWaveforms && shouldRenderTimelineAudioWaveform({ clip, asset, peaks: assetWaveformPeaks })}
+            trackHeight={trackHeight}
             pixelsPerSecond={pixelsPerSecond}
             selected={selectedClipIdSet.has(clip.id)}
             muted={Boolean(track.muted || clip.muted || !playable)}
@@ -122,6 +131,7 @@ export function TimelineClipList({
             onSlide={(deltaSeconds) => onSlide(clip, deltaSeconds)}
             onTransitionDuration={(duration) => onTransitionDuration(clip, duration)}
             onKeyframeTime={(keyframeId, time) => onKeyframeTime(clip, keyframeId, time)}
+            onVolumeChange={(volume) => onVolumeChange(clip, volume)}
             onTrim={(edge, deltaSeconds) => onTrim(clip, edge, deltaSeconds)}
           />
         );

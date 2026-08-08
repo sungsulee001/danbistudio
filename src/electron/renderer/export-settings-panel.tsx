@@ -54,12 +54,12 @@ export function ExportSettingsPanel({
 }) {
   return (
     <>
-      <label className="block text-xs text-zinc-500">
+      <label className="block text-xs text-ds-600">
         Profile
         <select
           value={activeExportProfileId}
           onChange={(event) => onSelectExportProfile(event.target.value)}
-          className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-sm text-zinc-100 outline-none focus:border-emerald-500"
+          className="mt-1 w-full rounded-md border border-ds-200 bg-paper px-2 py-2 text-sm text-ink outline-none focus:border-accent-500"
         >
           {exportProfiles.map((profile) => (
             <option key={profile.id} value={profile.id}>
@@ -69,14 +69,14 @@ export function ExportSettingsPanel({
         </select>
       </label>
       {selectedExportProfile ? (
-        <div className="rounded-md border border-zinc-800 bg-zinc-950 p-2">
+        <div className="rounded-md border border-ds-200 bg-paper p-2">
           <div className="mb-2 flex items-center justify-between gap-2 text-xs">
-            <span className="font-semibold uppercase tracking-wide text-zinc-500">Profile settings</span>
+            <span className="font-semibold uppercase tracking-wide text-ds-600">Profile settings</span>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={onDuplicateExportProfile}
-                className="rounded border border-zinc-700 px-2 py-1 text-[11px] text-zinc-200 hover:border-sky-400"
+                className="rounded border border-ds-300 px-2 py-1 text-meta text-ds-800 hover:border-info-600"
               >
                 Duplicate
               </button>
@@ -84,13 +84,13 @@ export function ExportSettingsPanel({
                 type="button"
                 onClick={onRemoveExportProfile}
                 disabled={exportProfiles.length <= 1}
-                className="rounded border border-zinc-700 px-2 py-1 text-[11px] text-zinc-200 hover:border-rose-400 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded border border-ds-300 px-2 py-1 text-meta text-ds-800 hover:border-danger-600 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Delete
               </button>
             </div>
           </div>
-          <label className="block text-xs text-zinc-500">
+          <label className="block text-xs text-ds-600">
             Label
             <input
               key={`${selectedExportProfile.id}-${selectedExportProfile.label}`}
@@ -101,11 +101,11 @@ export function ExportSettingsPanel({
                   event.currentTarget.blur();
                 }
               }}
-              className="mt-1 w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-100 outline-none focus:border-emerald-500"
+              className="mt-1 w-full rounded border border-ds-200 bg-surface px-2 py-1 text-ink outline-none focus:border-accent-500"
             />
           </label>
           <div className="mt-2 grid grid-cols-2 gap-2">
-            <label className="text-xs text-zinc-500">
+            <label className="text-xs text-ds-600">
               Purpose
               <select
                 value={selectedExportProfile.purpose ?? ''}
@@ -114,7 +114,7 @@ export function ExportSettingsPanel({
                     ? event.currentTarget.value as NonNullable<ExportProfile['purpose']>
                     : undefined,
                 })}
-                className="mt-1 w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-100 outline-none focus:border-emerald-500"
+                className="mt-1 w-full rounded border border-ds-200 bg-surface px-2 py-1 text-ink outline-none focus:border-accent-500"
               >
                 <option value="">Delivery</option>
                 <option value="master">Master</option>
@@ -122,31 +122,31 @@ export function ExportSettingsPanel({
                 <option value="proxy">Proxy</option>
               </select>
             </label>
-            <label className="text-xs text-zinc-500">
+            <label className="text-xs text-ds-600">
               Container
               <select
                 value={selectedExportProfile.container}
                 onChange={(event) => onPatchExportProfile({ container: event.currentTarget.value as ExportProfile['container'] })}
-                className="mt-1 w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-100 outline-none focus:border-emerald-500"
+                className="mt-1 w-full rounded border border-ds-200 bg-surface px-2 py-1 text-ink outline-none focus:border-accent-500"
               >
                 <option value="mp4">MP4</option>
                 <option value="mov">MOV</option>
                 <option value="webm">WebM</option>
               </select>
             </label>
-            <label className="text-xs text-zinc-500">
+            <label className="text-xs text-ds-600">
               Codec
               <select
                 value={selectedExportProfile.codec}
                 onChange={(event) => onPatchExportProfile({ codec: event.currentTarget.value as ExportProfile['codec'] })}
-                className="mt-1 w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-100 outline-none focus:border-emerald-500"
+                className="mt-1 w-full rounded border border-ds-200 bg-surface px-2 py-1 text-ink outline-none focus:border-accent-500"
               >
                 {getExportProfileCodecOptions(selectedExportProfile.container).map((codec) => (
                   <option key={codec} value={codec}>{formatExportCodecLabel(codec)}</option>
                 ))}
               </select>
             </label>
-            <label className="text-xs text-zinc-500">
+            <label className="text-xs text-ds-600">
               Preset
               <select
                 value={selectedExportProfile.ffmpegPreset ?? ''}
@@ -155,7 +155,7 @@ export function ExportSettingsPanel({
                     ? event.currentTarget.value as NonNullable<ExportProfile['ffmpegPreset']>
                     : undefined,
                 })}
-                className="mt-1 w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-100 outline-none focus:border-emerald-500"
+                className="mt-1 w-full rounded border border-ds-200 bg-surface px-2 py-1 text-ink outline-none focus:border-accent-500"
               >
                 <option value="">Codec default</option>
                 <option value="ultrafast">Ultrafast</option>
@@ -172,7 +172,7 @@ export function ExportSettingsPanel({
             <NumberField label="FPS" value={selectedExportProfile.fps} step={1} min={1} max={240} onChange={(value) => onPatchExportProfile({ fps: value })} />
             <NumberField label="Video Mbps" value={selectedExportProfile.videoBitrateMbps} step={0.5} min={0.5} max={300} onChange={(value) => onPatchExportProfile({ videoBitrateMbps: value })} />
             <NumberField label="Audio kbps" value={selectedExportProfile.audioBitrateKbps} step={16} min={32} max={1024} onChange={(value) => onPatchExportProfile({ audioBitrateKbps: value })} />
-            <label className="text-xs text-zinc-500">
+            <label className="text-xs text-ds-600">
               CRF
               <input
                 key={`${selectedExportProfile.id}-${selectedExportProfile.crf ?? 'none'}`}
@@ -191,13 +191,13 @@ export function ExportSettingsPanel({
                     event.currentTarget.blur();
                   }
                 }}
-                className="mt-1 w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-emerald-500"
+                className="mt-1 w-full rounded border border-ds-200 bg-surface px-2 py-1 text-ink outline-none placeholder:text-ds-400 focus:border-accent-500"
               />
             </label>
           </div>
         </div>
       ) : null}
-      <div className="rounded-md border border-zinc-800 bg-zinc-950 p-2">
+      <div className="rounded-md border border-ds-200 bg-paper p-2">
         <div className="grid grid-cols-2 gap-2">
           <ToggleButton
             label="Full"
@@ -217,7 +217,7 @@ export function ExportSettingsPanel({
             }}
           />
         </div>
-        <div className="mt-2 text-[11px] text-zinc-500">
+        <div className="mt-2 text-meta text-ds-600">
           {activeExportRange
             ? `${formatTimecode(activeExportRange.start, fps)} - ${formatTimecode(activeExportRange.end, fps)} / ${activeExportRange.end - activeExportRange.start}s`
             : `Full timeline / ${timelineDuration}s`}
@@ -232,27 +232,27 @@ export function ExportSettingsPanel({
       <ExportReadout label="HW encoders" value={ffmpegCapabilities ? String(ffmpegCapabilities.hardwareEncoders.length) : 'detecting'} />
       <ExportReadout label="Bitrate" value={`${exportManifest.profile.videoBitrateMbps} Mbps`} />
       <ExportReadout label="Filters" value={String(renderPlan.filterGraph.length)} />
-      <div className="rounded-md border border-zinc-800 bg-zinc-950 p-2">
+      <div className="rounded-md border border-ds-200 bg-paper p-2">
         <div className="mb-2 flex items-center justify-between gap-2 text-xs">
-          <span className="font-semibold uppercase tracking-wide text-zinc-500">Quick export</span>
+          <span className="font-semibold uppercase tracking-wide text-ds-600">Quick export</span>
           <button
             type="button"
             onClick={onQueueBatchRender}
             disabled={isRendering || batchExportProfileIds.length === 0}
-            className="rounded border border-sky-500/50 px-2 py-1 text-[11px] text-sky-200 hover:bg-sky-500/10 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:text-zinc-600"
+            className="rounded border border-info-500/50 px-2 py-1 text-meta text-info-800 hover:bg-info-500/10 disabled:cursor-not-allowed disabled:border-ds-300 disabled:text-ds-400"
           >
             Queue Batch
           </button>
         </div>
         <div className="space-y-1">
           {exportProfiles.map((profile) => (
-            <label key={profile.id} className="flex items-center justify-between gap-3 rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-zinc-300">
+            <label key={profile.id} className="flex items-center justify-between gap-3 rounded border border-ds-200 bg-surface px-2 py-1 text-xs text-ds-700">
               <span className="min-w-0 truncate">{profile.label}</span>
               <input
                 type="checkbox"
                 checked={batchExportProfileIds.includes(profile.id)}
                 onChange={() => onToggleBatchExportProfile(profile.id)}
-                className="h-4 w-4 accent-emerald-500"
+                className="h-4 w-4 accent-accent-500"
               />
             </label>
           ))}
@@ -278,9 +278,9 @@ function formatExportCodecLabel(codec: ExportProfile['codec']): string {
 
 function ExportReadout({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between border-b border-zinc-800 py-2 text-sm">
-      <span className="text-zinc-500">{label}</span>
-      <span className="text-zinc-100">{value}</span>
+    <div className="flex items-center justify-between border-b border-ds-200 py-2 text-sm">
+      <span className="text-ds-600">{label}</span>
+      <span className="text-ink">{value}</span>
     </div>
   );
 }

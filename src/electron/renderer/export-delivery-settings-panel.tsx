@@ -20,10 +20,10 @@ export function MasterAudioExportPanel({
   onChange: (patch: MasterAudioSettings) => void;
 }) {
   return (
-    <div className="rounded-md border border-zinc-800 bg-zinc-950 p-2">
+    <div className="rounded-md border border-ds-200 bg-paper p-2">
       <div className="mb-2 flex items-center justify-between gap-2 text-xs">
-        <span className="font-semibold uppercase tracking-wide text-zinc-500">Master audio</span>
-        <span className="text-sky-300">
+        <span className="font-semibold uppercase tracking-wide text-ds-600">Master audio</span>
+        <span className="text-info-700">
           {settings.loudnessLufs ?? DEFAULT_MASTER_LOUDNESS_LUFS} LUFS / {settings.truePeakDb ?? DEFAULT_MASTER_TRUE_PEAK_DB} dBTP
         </span>
       </div>
@@ -60,7 +60,7 @@ export function CaptionSidecarExportPanel({
 }) {
   return (
     <>
-      <div className="rounded-md border border-zinc-800 bg-zinc-950 p-2">
+      <div className="rounded-md border border-ds-200 bg-paper p-2">
         <div className="grid grid-cols-3 gap-2">
           <ToggleButton
             label="Speaker"
@@ -95,14 +95,14 @@ export function CaptionSidecarExportPanel({
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 hover:border-emerald-500"
+          className="rounded-md border border-ds-200 bg-paper px-3 py-2 text-xs text-ds-800 hover:border-accent-500"
           onClick={() => void onDownload('srt')}
         >
           SRT
         </button>
         <button
           type="button"
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 hover:border-emerald-500"
+          className="rounded-md border border-ds-200 bg-paper px-3 py-2 text-xs text-ds-800 hover:border-accent-500"
           onClick={() => void onDownload('vtt')}
         >
           VTT
@@ -140,10 +140,10 @@ export function InterchangeExportPanel({
   onMarkerFileChange: (event: ChangeEvent<HTMLInputElement>) => void | Promise<void>;
 }) {
   return (
-    <div className="rounded-md border border-zinc-800 bg-zinc-950 p-2">
+    <div className="rounded-md border border-ds-200 bg-paper p-2">
       <div className="mb-2 flex items-center justify-between gap-2 text-xs">
-        <span className="font-semibold uppercase tracking-wide text-zinc-500">Interchange</span>
-        <span className="text-zinc-500">EDL / FCPXML / Markers</span>
+        <span className="font-semibold uppercase tracking-wide text-ds-600">Interchange</span>
+        <span className="text-ds-600">EDL / FCPXML / Markers</span>
       </div>
       <input
         ref={edlFileInputRef}
@@ -169,14 +169,14 @@ export function InterchangeExportPanel({
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 hover:border-emerald-500"
+          className="rounded-md border border-ds-200 bg-paper px-3 py-2 text-xs text-ds-800 hover:border-accent-500"
           onClick={() => void onDownloadEdl()}
         >
           Export EDL
         </button>
         <button
           type="button"
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 hover:border-sky-500"
+          className="rounded-md border border-ds-200 bg-paper px-3 py-2 text-xs text-ds-800 hover:border-info-500"
           onClick={onImportEdl}
         >
           Import EDL
@@ -185,14 +185,14 @@ export function InterchangeExportPanel({
       <div className="mt-2 grid grid-cols-2 gap-2">
         <button
           type="button"
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 hover:border-emerald-500"
+          className="rounded-md border border-ds-200 bg-paper px-3 py-2 text-xs text-ds-800 hover:border-accent-500"
           onClick={() => void onDownloadFcpxml()}
         >
           Export XML
         </button>
         <button
           type="button"
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 hover:border-sky-500"
+          className="rounded-md border border-ds-200 bg-paper px-3 py-2 text-xs text-ds-800 hover:border-info-500"
           onClick={onImportFcpxml}
         >
           Import XML
@@ -201,21 +201,21 @@ export function InterchangeExportPanel({
       <div className="mt-2 grid grid-cols-3 gap-2">
         <button
           type="button"
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs text-zinc-200 hover:border-emerald-500"
+          className="rounded-md border border-ds-200 bg-paper px-2 py-2 text-xs text-ds-800 hover:border-accent-500"
           onClick={() => void onDownloadMarkers('csv')}
         >
           Marker CSV
         </button>
         <button
           type="button"
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs text-zinc-200 hover:border-emerald-500"
+          className="rounded-md border border-ds-200 bg-paper px-2 py-2 text-xs text-ds-800 hover:border-accent-500"
           onClick={() => void onDownloadMarkers('youtube-chapters')}
         >
           Chapters
         </button>
         <button
           type="button"
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs text-zinc-200 hover:border-sky-500"
+          className="rounded-md border border-ds-200 bg-paper px-2 py-2 text-xs text-ds-800 hover:border-info-500"
           onClick={onImportMarkers}
         >
           Import

@@ -6,7 +6,23 @@ export const DETACHED_AUDIO_TAG_PREFIX = 'detached-audio:';
 export const LINKED_VIDEO_TAG_PREFIX = 'linked-video:';
 
 export function hasEmbeddedAudio(asset?: EditorAsset): boolean {
-  return resolveRenderableAssetMediaKind(asset) === 'video' && asset?.metadata?.hasAudio === true;
+  if (!asset || resolveRenderableAssetMediaKind(asset) !== 'video') {
+    return false;
+  }
+
+  if (hasAudioStreamMetadata(asset)) {
+    return true;
+  }
+
+  if (asset.metadata?.hasAudio === true) {
+    return true;
+  }
+
+  if (asset.metadata?.hasAudio === false) {
+    return isAudioAnalysisUnknown(asset);
+  }
+
+  return isImportedVideoWithUnverifiedAudio(asset);
 }
 
 export function hasTimelineAudio(asset?: EditorAsset): boolean {
@@ -59,4 +75,22 @@ export function withoutEmbeddedAudioLinkTags(tags: string[]): string[] {
 
 export function withUniqueTags(tags: string[], additions: string[]): string[] {
   return Array.from(new Set([...tags, ...additions]));
+}
+
+function isAudioAnalysisUnknown(asset: EditorAsset): boolean {
+  const warning = asset.metadata?.analysisWarning;
+  return typeof warning === 'string' && warning.startsWith('ffprobe analysis failed:');
+}
+
+function hasAudioStreamMetadata(asset: EditorAsset): boolean {
+  const audioCodec = asset.metadata?.audioCodec;
+  const audioChannels = asset.metadata?.audioChannels;
+  return (typeof audioCodec === 'string' && audioCodec.trim().length > 0)
+    || (typeof audioChannels === 'number' && audioChannels > 0);
+}
+
+function isImportedVideoWithUnverifiedAudio(asset: EditorAsset): boolean {
+  return asset.metadata?.imported === true
+    && asset.metadata?.analyzed !== true
+    && asset.metadata?.hasAudio !== false;
 }

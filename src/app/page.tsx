@@ -12,15 +12,6 @@ const runtimeItems = [
   { label: 'Fresh Windows QA', value: 'External pending', tone: 'pending' as const },
 ];
 
-const workspaceRows = [
-  { name: 'Editor', status: 'Ready', href: '/editor' },
-  { name: 'AI Studio', status: 'Separated', href: '/ai-studio' },
-  { name: 'Automation', status: 'Operational', href: '/automation' },
-  { name: 'Render Queue', status: 'Operational', href: '/render-queue' },
-  { name: 'Extensions', status: 'Managed', href: '/extensions' },
-  { name: 'Settings', status: 'Diagnostics', href: '/settings' },
-];
-
 export default function ProjectHubPage() {
   return (
     <DanbiAppShell
@@ -33,38 +24,37 @@ export default function ProjectHubPage() {
         <div className="grid gap-4">
           <WorkspacePanel
             eyebrow="Start"
-            title="Project Entry"
-            action={<AppLink href="/editor">New Session</AppLink>}
+            title="Open A Project"
+            action={<AppLink href="/editor">Edit</AppLink>}
           >
-            <div className="grid gap-3 md:grid-cols-3">
-              <AppLink href="/editor">Open Editor</AppLink>
-              <AppLink href="/editor" variant="secondary">Open Sample</AppLink>
-              <AppLink href="/editor" variant="secondary">Import Media</AppLink>
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+              <div className="rounded border border-neutral-800 bg-neutral-950/60 p-4">
+                <p className="text-sm font-medium text-neutral-100">Getting Started</p>
+                <p className="mt-1 text-sm text-neutral-500">
+                  Open the editor workspace, then choose a saved project, sample package, or local media.
+                </p>
+              </div>
+              <div className="grid content-start gap-2">
+                <AppLink href="/editor">Open Editor</AppLink>
+                <AppLink href="/settings" variant="secondary">Runtime Settings</AppLink>
+              </div>
             </div>
           </WorkspacePanel>
 
-          <WorkspacePanel eyebrow="Workspaces" title="Top-Level Navigation">
-            <div className="overflow-hidden rounded-lg border border-zinc-800">
-              <table className="w-full border-collapse text-left text-sm">
-                <thead className="bg-zinc-900 text-xs uppercase text-zinc-500">
-                  <tr>
-                    <th className="px-3 py-2 font-medium">Workspace</th>
-                    <th className="px-3 py-2 font-medium">State</th>
-                    <th className="px-3 py-2 font-medium">Open</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-800">
-                  {workspaceRows.map((row) => (
-                    <tr key={row.name} className="bg-zinc-950/40">
-                      <td className="px-3 py-3 font-medium text-zinc-100">{row.name}</td>
-                      <td className="px-3 py-3 text-zinc-400">{row.status}</td>
-                      <td className="px-3 py-3">
-                        <AppLink href={row.href} variant="secondary">Open</AppLink>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <WorkspacePanel eyebrow="Workspace" title="Commercial Editor Layout">
+            <div className="grid gap-3 lg:grid-cols-[260px_minmax(0,1fr)_260px]">
+              <div className="rounded border border-neutral-800 bg-neutral-950/60 p-3">
+                <p className="text-xs font-medium uppercase text-neutral-500">Left</p>
+                <p className="mt-1 text-sm text-neutral-100">Media Bin / Project Assets / AI Results</p>
+              </div>
+              <div className="rounded border border-neutral-800 bg-neutral-950/60 p-3">
+                <p className="text-xs font-medium uppercase text-neutral-500">Center</p>
+                <p className="mt-1 text-sm text-neutral-100">Source Monitor / Program Monitor / Timeline</p>
+              </div>
+              <div className="rounded border border-neutral-800 bg-neutral-950/60 p-3">
+                <p className="text-xs font-medium uppercase text-neutral-500">Right</p>
+                <p className="mt-1 text-sm text-neutral-100">Inspector / Effects / Motion / Audio</p>
+              </div>
             </div>
           </WorkspacePanel>
         </div>

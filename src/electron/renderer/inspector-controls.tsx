@@ -34,7 +34,7 @@ export function CaptionStyleControls({
   const style = normalizeCaptionStyle(caption.style, Math.max(18, Math.round(projectHeight * 0.045)));
 
   return (
-    <div className="mt-3 border-t border-zinc-800 pt-3">
+    <div className="mt-3 border-t border-ds-200 pt-3">
       <TextStylePackButtons target="caption" onApply={onChange} />
       <div className="grid grid-cols-2 gap-2">
         <NumberField
@@ -45,24 +45,24 @@ export function CaptionStyleControls({
           max={180}
           onChange={(value) => onChange({ fontSize: value })}
         />
-        <label className="block text-xs text-zinc-500">
+        <label className="block text-xs text-ds-600">
           Position
           <select
             value={style.position}
             onChange={(event) => onChange({ position: event.target.value as CaptionStyle['position'] })}
-            className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-sm text-zinc-100 outline-none focus:border-emerald-500"
+            className="mt-1 w-full rounded-md border border-ds-200 bg-paper px-2 py-2 text-sm text-ink outline-none focus:border-accent-500"
           >
             <option value="bottom">bottom</option>
             <option value="middle">middle</option>
             <option value="top">top</option>
           </select>
         </label>
-        <label className="block text-xs text-zinc-500">
+        <label className="block text-xs text-ds-600">
           Align
           <select
             value={style.align}
             onChange={(event) => onChange({ align: event.target.value as CaptionStyle['align'] })}
-            className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-sm text-zinc-100 outline-none focus:border-emerald-500"
+            className="mt-1 w-full rounded-md border border-ds-200 bg-paper px-2 py-2 text-sm text-ink outline-none focus:border-accent-500"
           >
             <option value="center">center</option>
             <option value="left">left</option>
@@ -79,24 +79,24 @@ export function CaptionStyleControls({
         />
       </div>
       <div className="mt-3 grid grid-cols-[1fr_1fr_auto] gap-2">
-        <label className="block text-xs text-zinc-500">
+        <label className="block text-xs text-ds-600">
           Text
           <input
             aria-label="Caption text color"
             type="color"
             value={normalizeHexColor(style.fontColor, DEFAULT_CAPTION_STYLE.fontColor)}
             onChange={(event) => onChange({ fontColor: event.target.value })}
-            className="mt-1 h-9 w-full rounded-md border border-zinc-800 bg-zinc-950"
+            className="mt-1 h-9 w-full rounded-md border border-ds-200 bg-paper"
           />
         </label>
-        <label className="block text-xs text-zinc-500">
+        <label className="block text-xs text-ds-600">
           Box
           <input
             aria-label="Caption box color"
             type="color"
             value={normalizeHexColor(style.boxColor, DEFAULT_CAPTION_STYLE.boxColor)}
             onChange={(event) => onChange({ boxColor: event.target.value })}
-            className="mt-1 h-9 w-full rounded-md border border-zinc-800 bg-zinc-950"
+            className="mt-1 h-9 w-full rounded-md border border-ds-200 bg-paper"
           />
         </label>
         <div className="flex items-end">
@@ -124,7 +124,7 @@ export function TitleStyleControls({
   const style = readTitleStyle(clip, Math.max(18, Math.round(projectHeight * 0.065)));
 
   return (
-    <div className="mt-3 border-t border-zinc-800 pt-3">
+    <div className="mt-3 border-t border-ds-200 pt-3">
       <TextStylePackButtons target="title" onApply={onChange} />
       <div className="grid grid-cols-2 gap-2">
         <NumberField
@@ -135,24 +135,24 @@ export function TitleStyleControls({
           max={220}
           onChange={(value) => onChange({ fontSize: value })}
         />
-        <label className="block text-xs text-zinc-500">
+        <label className="block text-xs text-ds-600">
           Position
           <select
             value={style.position}
             onChange={(event) => onChange({ position: event.target.value as CaptionStyle['position'] })}
-            className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-sm text-zinc-100 outline-none focus:border-emerald-500"
+            className="mt-1 w-full rounded-md border border-ds-200 bg-paper px-2 py-2 text-sm text-ink outline-none focus:border-accent-500"
           >
             <option value="middle">middle</option>
             <option value="top">top</option>
             <option value="bottom">bottom</option>
           </select>
         </label>
-        <label className="block text-xs text-zinc-500">
+        <label className="block text-xs text-ds-600">
           Align
           <select
             value={style.align}
             onChange={(event) => onChange({ align: event.target.value as CaptionStyle['align'] })}
-            className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-sm text-zinc-100 outline-none focus:border-emerald-500"
+            className="mt-1 w-full rounded-md border border-ds-200 bg-paper px-2 py-2 text-sm text-ink outline-none focus:border-accent-500"
           >
             <option value="center">center</option>
             <option value="left">left</option>
@@ -169,24 +169,24 @@ export function TitleStyleControls({
         />
       </div>
       <div className="mt-3 grid grid-cols-[1fr_1fr_auto] gap-2">
-        <label className="block text-xs text-zinc-500">
+        <label className="block text-xs text-ds-600">
           Text
           <input
             aria-label="Title text color"
             type="color"
             value={normalizeHexColor(style.fontColor, DEFAULT_CAPTION_STYLE.fontColor)}
             onChange={(event) => onChange({ fontColor: event.target.value })}
-            className="mt-1 h-9 w-full rounded-md border border-zinc-800 bg-zinc-950"
+            className="mt-1 h-9 w-full rounded-md border border-ds-200 bg-paper"
           />
         </label>
-        <label className="block text-xs text-zinc-500">
+        <label className="block text-xs text-ds-600">
           Box
           <input
             aria-label="Title box color"
             type="color"
             value={normalizeHexColor(style.boxColor, DEFAULT_CAPTION_STYLE.boxColor)}
             onChange={(event) => onChange({ boxColor: event.target.value })}
-            className="mt-1 h-9 w-full rounded-md border border-zinc-800 bg-zinc-950"
+            className="mt-1 h-9 w-full rounded-md border border-ds-200 bg-paper"
           />
         </label>
         <div className="flex items-end">
@@ -213,14 +213,14 @@ function TextShadowControls({
 }) {
   return (
     <div className="mt-3 grid grid-cols-[1fr_1fr_1fr_auto] gap-2">
-      <label className="block text-xs text-zinc-500">
+      <label className="block text-xs text-ds-600">
         Shadow
         <input
           aria-label={`${labelPrefix} shadow color`}
           type="color"
           value={normalizeHexColor(style.shadowColor, DEFAULT_CAPTION_STYLE.shadowColor)}
           onChange={(event) => onChange({ shadowColor: event.target.value })}
-          className="mt-1 h-9 w-full rounded-md border border-zinc-800 bg-zinc-950"
+          className="mt-1 h-9 w-full rounded-md border border-ds-200 bg-paper"
         />
       </label>
       <NumberField
@@ -257,7 +257,7 @@ function TextStylePackButtons({
 
   return (
     <div className="mb-3">
-      <div className="mb-2 text-xs font-medium text-zinc-500">Style packs</div>
+      <div className="mb-2 text-xs font-medium text-ds-600">Style packs</div>
       <div className="grid grid-cols-3 gap-2">
         {packs.map((pack) => (
           <button
@@ -266,13 +266,13 @@ function TextStylePackButtons({
             title={pack.description}
             aria-label={`Apply ${target} style pack ${pack.label}`}
             onClick={() => onApply(textStylePackToPatch(pack))}
-            className="flex h-10 min-w-0 items-center gap-2 rounded-md border border-zinc-800 bg-zinc-950 px-2 text-left text-[11px] text-zinc-200 hover:border-emerald-500 focus:border-emerald-500 focus:outline-none"
+            className="flex h-10 min-w-0 items-center gap-2 rounded-md border border-ds-200 bg-paper px-2 text-left text-meta text-ds-800 hover:border-accent-500 focus:border-accent-500 focus:outline-none"
           >
-            <span className="grid h-5 w-5 shrink-0 grid-cols-2 gap-0.5 overflow-hidden rounded-sm border border-zinc-700 bg-zinc-900">
+            <span className="grid h-5 w-5 shrink-0 grid-cols-2 gap-0.5 overflow-hidden rounded-sm border border-ds-300 bg-surface">
               <span style={{ backgroundColor: pack.style.fontColor }} />
               <span style={{ backgroundColor: pack.style.boxColor }} />
               <span style={{ backgroundColor: pack.style.shadowColor }} />
-              <span className={pack.style.boxEnabled ? 'bg-emerald-400' : 'bg-zinc-700'} />
+              <span className={pack.style.boxEnabled ? 'bg-accent-600' : 'bg-ds-300'} />
             </span>
             <span className="min-w-0 truncate font-medium">{pack.label}</span>
           </button>
@@ -299,12 +299,12 @@ export function EffectParameterControls({
       {controls.map((control) => {
         if (control.kind === 'select') {
           return (
-            <label key={`${effect.id}-${control.key}`} className="block text-xs text-zinc-500">
+            <label key={`${effect.id}-${control.key}`} className="block text-xs text-ds-600">
               {control.label}
               <select
                 value={control.value}
                 onChange={(event) => onChange(effect.id, control.key, event.currentTarget.value)}
-                className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-sm text-zinc-100 outline-none focus:border-emerald-500"
+                className="mt-1 w-full rounded-md border border-ds-200 bg-paper px-2 py-2 text-sm text-ink outline-none focus:border-accent-500"
               >
                 {control.options.map((option) => (
                   <option key={option.value} value={option.value}>

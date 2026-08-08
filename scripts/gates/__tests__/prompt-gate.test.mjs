@@ -117,27 +117,42 @@ describe.skipIf(!hasVault)('콘티 파서', () => {
     expect(parsed.cuts.every((c) => c.fields.motion_prompt.length > 10)).toBe(true);
   });
 
-  it('ep2 콘티 v1을 67컷으로 파싱한다', () => {
+  it('ep2 콘티 v1.1을 73컷으로 파싱한다 (접미 컷 6개 포함)', () => {
+    // 회귀 대상: 접미 컷(CUT-40A/40B/40C/41A/48A/50A) 누락.
+    // v1.1 개정(2026-07-30 N08·N11 재구성)이 번호 재배열 대신 알파벳 접미를 택했고,
+    // 종전 `CUT-\d{2,3}` 헤딩 정규식은 그 6컷을 **에러 없이 조용히 건너뛰었다**.
+    // 73 = v1 67 + 신설 6. 이 수치가 다시 67로 떨어지면 파서가 접미 컷을 놓친 것이다.
     const { parsed } = runFile(EP2);
-    expect(parsed.cuts.length).toBe(67);
-    expect(parsed.declaredCutCount).toBe(67);
+    expect(parsed.cuts.length).toBe(73);
+    expect(parsed.declaredCutCount).toBe(73);
+    expect(parsed.cuts.map((c) => c.id)).toEqual(
+      expect.arrayContaining(['CUT-40A', 'CUT-40B', 'CUT-40C', 'CUT-41A', 'CUT-48A', 'CUT-50A']),
+    );
     expect(parsed.productionId).toBe('2026-07-29-jagyeongnu-night');
   });
 
   it('ep2 플래그가 콘티 §시각 문법 계약과 일치한다', () => {
     const { parsed } = runFile(EP2);
     const ids = (flag) => parsed.cuts.filter((c) => c.flags.includes(flag)).map((c) => c.id);
-    // A2V 6컷 (계약 4)
+    // A2V 6컷 (계약 4). v1.1 신설 6컷은 전부 VO/무발화라 A2V 집합은 v1과 동일하다.
     expect(ids('a2v')).toEqual(['CUT-16', 'CUT-18', 'CUT-21', 'CUT-25', 'CUT-33', 'CUT-40']);
-    // MCU/CU 단독 인물 = portrait-painterly 대상(손 컷 제외)
-    expect(ids('single_figure')).toEqual(['CUT-16', 'CUT-18', 'CUT-21', 'CUT-25', 'CUT-33', 'CUT-40']);
-    // hands-only 선언 8컷
+    // 클로즈업 단독 인물 = shot_type이 MCU/CU/ECU/BCU인 컷만 잡는다(손·군상·무인 제외).
+    // v1.1에서 CUT-40이 `MCU` → `BS(바스트샷)`으로 전면 개정돼 이 집합에서 빠졌다
+    // (style_variant는 여전히 portrait-painterly다 — 신설 CUT-40B도 같은 BS/portrait-painterly 조합).
+    // 즉 이 목록은 "portrait-painterly 전량"이 아니라 "shot_type 코드가 클로즈업인 컷"의 회귀다.
+    expect(ids('single_figure')).toEqual(['CUT-16', 'CUT-18', 'CUT-21', 'CUT-25', 'CUT-33']);
+    // hands-only 선언 8컷 (v1.1 무접촉 — 신설 컷에 손 컷 없음)
     expect(ids('hands')).toEqual(
       ['CUT-02', 'CUT-11', 'CUT-22', 'CUT-32', 'CUT-37', 'CUT-41', 'CUT-48', 'CUT-54'],
     );
-    // 무인 컷 33컷 (03-assets §검증 ③ "무인 컷 자체가 33컷으로 증가")
-    expect(ids('nofigure_intent').length).toBe(33);
-    // 군상 컷 (계약 6-②의 7컷 + 컷 본문이 군상 어휘 의무를 선언한 CUT-52)
+    // 무인 컷 36컷 = v1 33컷(03-assets §검증 ③ "무인 컷 자체가 33컷으로 증가")
+    //   + v1.1 신설 무인 3컷(CUT-41A 야간 부감 · CUT-48A 살대 ECU · CUT-50A 궁궐 야간 풀샷).
+    // 신설 6컷 중 나머지 3컷(40A 임금 뒷모습·40B 선임 BS·40C OTS)은 인물 컷이라 무인이 아니다.
+    expect(ids('nofigure_intent').length).toBe(36);
+    expect(ids('nofigure_intent')).toEqual(
+      expect.arrayContaining(['CUT-41A', 'CUT-48A', 'CUT-50A']),
+    );
+    // 군상 컷 (계약 6-②의 7컷 + 컷 본문이 군상 어휘 의무를 선언한 CUT-52). v1.1 무접촉.
     expect(ids('crowd')).toEqual(
       ['CUT-17', 'CUT-34', 'CUT-35', 'CUT-36', 'CUT-43', 'CUT-45', 'CUT-52', 'CUT-53'],
     );
@@ -219,10 +234,15 @@ describe.skipIf(!hasVault)('ep2 회귀 — 규약 반영본은 이미지 측이 
 describe.skipIf(!hasVault)('ep2 회귀 — 영상 측 결함(71회 재생성의 원인)을 S3 단계에서 잡는다', () => {
   const { result } = hasVault ? runFile(EP2) : { result: null };
 
-  it('§프롬프트 계약 6의 "콘티 어휘 중화 4컷"을 전부 검출한다', () => {
-    // 근거: CUT-03 inner darkness / CUT-51 in the darkness behind / CUT-60 ink darkens / CUT-62 solid dark shape
+  it('§프롬프트 계약 6의 "콘티 어휘 중화" 대상 중 v1.1 잔존 3컷을 전부 검출한다', () => {
+    // 근거(03-assets §검증 6 "콘티 어휘 중화 4컷"): CUT-03 inner darkness / CUT-51 in the darkness
+    // behind / CUT-60 ink darkens / CUT-62 solid dark shape — S6가 런타임 프롬프트에서 중화한 4컷.
+    // v1.1(N11 재구성)에서 CUT-51이 "옆모습 마주보고 대화(대청마루)"로 **전면 개정**되며
+    // `in the darkness behind` 절이 콘티에서 사라졌다 — 4컷 중 3컷만 콘티에 남아 있다.
     const hit = cutsFor(result, 'VID-DARK-VOCAB');
-    for (const cut of ['CUT-03', 'CUT-51', 'CUT-60', 'CUT-62']) expect(hit).toContain(cut);
+    for (const cut of ['CUT-03', 'CUT-60', 'CUT-62']) expect(hit).toContain(cut);
+    // CUT-51이 다시 걸리면 개정 전 문안이 되살아난 것이므로 회귀로 잡는다.
+    expect(hit).not.toContain('CUT-51');
   });
 
   it('§실증 C의 이동 함의어 실패 9컷 중 8컷 이상을 검출한다', () => {
@@ -233,8 +253,15 @@ describe.skipIf(!hasVault)('ep2 회귀 — 영상 측 결함(71회 재생성의 
     expect(caught.length).toBeGreaterThanOrEqual(8);
   });
 
-  it('A2V 말미 암전을 유발한 시간 종점 호명(CUT-40)을 검출한다', () => {
-    expect(cutsFor(result, 'VID-TIME-ENDPOINT')).toContain('CUT-40');
+  it('A2V 말미 암전을 유발한 시간 종점 호명(CUT-25)을 검출한다', () => {
+    // 회귀 대상: A2V 립싱크 컷의 motion_prompt가 시간 종점을 호명하면 클립 말미가 어두워진다.
+    // v1 앵커는 CUT-40이었으나 v1.1에서 CUT-40이 5.0초 BS로 전면 개정되며 종점 어휘가 사라졌다.
+    // 현행 A2V 6컷 중 종점을 호명하는 컷은 CUT-25(`his chin lifting slightly at the end`) 하나다.
+    const hit = cutsFor(result, 'VID-TIME-ENDPOINT');
+    expect(hit).toContain('CUT-25');
+    // A2V 밖의 잔여 2컷 — 말미 암전 프라이어 **대응 절**(`light level stays constant to the last
+    // frame`)이 그 자체로 종점을 호명하는 사례. 규칙이 A2V에만 좁혀지면 이 2컷이 사라진다.
+    for (const cut of ['CUT-48', 'CUT-64']) expect(hit).toContain(cut);
   });
 
   it('무효 억제 절(`with no change of pose` 등)을 부정문 규칙으로 검출한다', () => {

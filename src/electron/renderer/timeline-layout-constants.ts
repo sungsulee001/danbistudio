@@ -1,0 +1,1 @@
+export const TIMELINE_TRACK_HEADER_WIDTH = 128;

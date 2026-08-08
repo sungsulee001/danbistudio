@@ -7,9 +7,9 @@ import {
 import type { EditorAsset, EditorProject } from '../../lib/editor/types';
 
 const PROJECT_SAVE_STATE_CLASS_NAMES: Record<ProjectSaveState, string> = {
-  dirty: 'border-amber-700 bg-amber-950/40 text-amber-200',
-  autosaved: 'border-sky-700 bg-sky-950/40 text-sky-200',
-  saved: 'border-emerald-700 bg-emerald-950/40 text-emerald-200',
+  dirty: 'border-warn-300 bg-warn-100/40 text-warn-800',
+  autosaved: 'border-info-300 bg-info-100/40 text-info-800',
+  saved: 'border-accent-300 bg-accent-100/40 text-accent-800',
 };
 
 export interface ProjectSessionWorkspaceState {

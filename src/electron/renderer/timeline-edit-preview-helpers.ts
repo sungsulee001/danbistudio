@@ -9,11 +9,12 @@ import {
   snapTimeToEditPoints,
 } from '../../lib/editor/timeline';
 import { resolveTimelineGroupMoveFromProject, type TimelineGroupMoveNewTrack } from '../../lib/editor/timeline-group-move';
+import { resolveTimelineGroupResizeFromProject, type TimelineGroupResizeUpdate } from '../../lib/editor/timeline-group-resize';
 import { canPlaceTimeSpansOnTrack, canPlaceTimeSpansTogether, type TimelinePlacementTimeSpan } from '../../lib/editor/timeline-placement';
 import { timelineTrackIdsInVerticalRange } from '../../lib/editor/timeline-view';
 import type { EditorProject, TimelineClip, TimelineTrack } from '../../lib/editor/types';
 import type { TimelineClipDropPreview, TimelineClipEditPreview, TimelineEditGuide } from './editor-view-model';
-import { clampNumber, formatSignedEditDelta, roundTime } from './editor-time-helpers';
+import { clampNumber, formatRulerTime, formatSignedEditDelta, roundTime } from './editor-time-helpers';
 import { trackKindForTimelineClip } from './timeline-source-helpers';
 
 export interface TimelineLaneBounds {
@@ -31,11 +32,20 @@ interface TimelinePreviewOptions {
   selectedClipIds: string[];
   snapEnabled: boolean;
   snapExtraPoints?: number[];
+  includeLinked?: boolean;
 }
 
 export interface TimelineClipMoveEdit {
   group: TimelineClip[];
   appliedDelta: number;
+  preview: TimelineClipEditPreview;
+}
+
+export interface TimelineClipTrimEdit {
+  group: TimelineClip[];
+  edge: 'start' | 'end';
+  appliedDelta: number;
+  updates: TimelineGroupResizeUpdate[];
   preview: TimelineClipEditPreview;
 }
 
@@ -86,13 +96,14 @@ export function resolveTimelineClipMoveEdit({
   selectedClipIds,
   snapEnabled,
   snapExtraPoints,
+  includeLinked,
   anchorClip,
   nextStart,
 }: TimelinePreviewOptions & {
   anchorClip: TimelineClip;
   nextStart: number;
 }): TimelineClipMoveEdit {
-  const groupIds = resolvePreviewClipGroupIds(project, selectedClipIds, anchorClip);
+  const groupIds = resolvePreviewClipGroupIds(project, selectedClipIds, anchorClip, includeLinked);
   const group = findPreviewClips(project, groupIds);
   const requestedStart = roundTime(Math.max(0, nextStart));
   const snappedStart = snapEnabled
@@ -120,6 +131,9 @@ export function resolveTimelineClipMoveEdit({
       duration: anchorClip.duration,
       snapped: Math.abs(snappedStart - requestedStart) > 0.001,
       constrained: Math.abs(appliedStart - snappedStart) > 0.001,
+      operation: 'move',
+      delta: appliedDelta,
+      groupCount: group.length,
     },
   };
 }
@@ -127,12 +141,14 @@ export function resolveTimelineClipMoveEdit({
 export function resolveTimelineClipDropTrack({
   project,
   selectedClipIds,
+  includeLinked,
   anchorClip,
   clientY,
   laneBounds,
 }: {
   project: EditorProject;
   selectedClipIds: string[];
+  includeLinked?: boolean;
   anchorClip: TimelineClip;
   clientY: number;
   laneBounds: TimelineLaneBounds[];
@@ -143,7 +159,7 @@ export function resolveTimelineClipDropTrack({
     return undefined;
   }
 
-  const groupIds = resolvePreviewClipGroupIds(project, selectedClipIds, anchorClip);
+  const groupIds = resolvePreviewClipGroupIds(project, selectedClipIds, anchorClip, includeLinked);
   const group = findPreviewClips(project, groupIds);
   const assetById = new Map(project.assets.map((asset) => [asset.id, asset]));
   const groupKinds = Array.from(new Set(group.map((clip) => trackKindForTimelineClip(
@@ -160,12 +176,14 @@ export function resolveTimelineClipDropTrack({
 export function resolveTimelineClipNewTrackDrop({
   project,
   selectedClipIds,
+  includeLinked,
   anchorClip,
   clientY,
   laneBounds,
 }: {
   project: EditorProject;
   selectedClipIds: string[];
+  includeLinked?: boolean;
   anchorClip: TimelineClip;
   clientY: number;
   laneBounds: TimelineLaneBounds[];
@@ -186,7 +204,7 @@ export function resolveTimelineClipNewTrackDrop({
     return undefined;
   }
 
-  const groupIds = resolvePreviewClipGroupIds(project, selectedClipIds, anchorClip);
+  const groupIds = resolvePreviewClipGroupIds(project, selectedClipIds, anchorClip, includeLinked);
   const movePlan = resolveTimelineGroupMoveFromProject({
     project,
     clipIds: groupIds,
@@ -202,6 +220,7 @@ export function resolveTimelineClipDropPreview({
   selectedClipIds,
   snapEnabled,
   snapExtraPoints,
+  includeLinked,
   anchorClip,
   nextStart,
   targetTrack,
@@ -216,7 +235,7 @@ export function resolveTimelineClipDropPreview({
     return null;
   }
 
-  const groupIds = resolvePreviewClipGroupIds(project, selectedClipIds, anchorClip);
+  const groupIds = resolvePreviewClipGroupIds(project, selectedClipIds, anchorClip, includeLinked);
   const group = findPreviewClips(project, groupIds);
   if (group.length === 0) {
     return null;
@@ -266,6 +285,11 @@ export function resolveTimelineClipDropPreview({
       ? group.length > 1 ? `Create ${newTrack.name} for ${group.length} clips` : `Create ${newTrack.name}`
       : group.length > 1 ? `Drop ${group.length} clips` : `Drop ${anchorClip.name}`,
     valid: canPlaceOnTarget,
+    snapped: Math.abs(snappedStart - requestedStart) > 0.001,
+    constrained: !canPlaceOnTarget,
+    collision: !canPlaceOnTarget,
+    operation: newTrack ? 'new-track' : 'clip-drop',
+    groupCount: group.length,
     isNewTrack: Boolean(newTrack),
   };
 }
@@ -273,12 +297,14 @@ export function resolveTimelineClipDropPreview({
 export function resolveTimelineClipDragPointerPlan({
   project,
   selectedClipIds,
+  includeLinked,
   anchorClip,
   clientY,
   laneBounds,
 }: {
   project: EditorProject;
   selectedClipIds: string[];
+  includeLinked?: boolean;
   anchorClip: TimelineClip;
   clientY?: number;
   laneBounds: TimelineLaneBounds[];
@@ -294,6 +320,7 @@ export function resolveTimelineClipDragPointerPlan({
   const targetTrack = resolveTimelineClipDropTrack({
     project,
     selectedClipIds,
+    includeLinked,
     anchorClip,
     clientY,
     laneBounds,
@@ -303,6 +330,7 @@ export function resolveTimelineClipDragPointerPlan({
     : resolveTimelineClipNewTrackDrop({
       project,
       selectedClipIds,
+      includeLinked,
       anchorClip,
       clientY,
       laneBounds,
@@ -319,6 +347,7 @@ export function resolveTimelineClipDragPreviewState({
   selectedClipIds,
   snapEnabled,
   snapExtraPoints,
+  includeLinked,
   anchorClip,
   nextStart,
   clientY,
@@ -334,12 +363,14 @@ export function resolveTimelineClipDragPreviewState({
     selectedClipIds,
     snapEnabled,
     snapExtraPoints,
+    includeLinked,
     anchorClip,
     nextStart,
   });
   const targetTrack = resolveTimelineClipDropTrack({
     project,
     selectedClipIds,
+    includeLinked,
     anchorClip,
     clientY,
     laneBounds,
@@ -349,6 +380,7 @@ export function resolveTimelineClipDragPreviewState({
     : resolveTimelineClipNewTrackDrop({
       project,
       selectedClipIds,
+      includeLinked,
       anchorClip,
       clientY,
       laneBounds,
@@ -358,6 +390,7 @@ export function resolveTimelineClipDragPreviewState({
     selectedClipIds,
     snapEnabled,
     snapExtraPoints,
+    includeLinked,
     anchorClip,
     nextStart,
     targetTrack,
@@ -371,6 +404,7 @@ export function resolveTimelineClipDragPreviewState({
       anchorClip,
       movePreview: moveEdit.preview,
       dropPreview,
+      groupCount: moveEdit.group.length,
     }),
   };
 }
@@ -380,6 +414,7 @@ export function resolveTimelineClipDragCommitState({
   selectedClipIds,
   snapEnabled,
   snapExtraPoints,
+  includeLinked,
   anchorClip,
   nextStart,
   clientY,
@@ -395,6 +430,7 @@ export function resolveTimelineClipDragCommitState({
     : resolveTimelineClipDropTrack({
       project,
       selectedClipIds,
+      includeLinked,
       anchorClip,
       clientY,
       laneBounds,
@@ -404,6 +440,7 @@ export function resolveTimelineClipDragCommitState({
     : resolveTimelineClipNewTrackDrop({
       project,
       selectedClipIds,
+      includeLinked,
       anchorClip,
       clientY,
       laneBounds,
@@ -415,6 +452,7 @@ export function resolveTimelineClipDragCommitState({
       selectedClipIds,
       snapEnabled,
       snapExtraPoints,
+      includeLinked,
       anchorClip,
       nextStart,
     }),
@@ -427,10 +465,12 @@ export function buildTimelineClipDragGuide({
   anchorClip,
   movePreview,
   dropPreview,
+  groupCount,
 }: {
   anchorClip: TimelineClip;
   movePreview: TimelineClipEditPreview;
   dropPreview: TimelineClipDropPreview | null;
+  groupCount: number;
 }): TimelineEditGuide {
   return {
     trackId: dropPreview?.isNewTrack ? anchorClip.trackId : dropPreview?.trackId ?? anchorClip.trackId,
@@ -441,6 +481,13 @@ export function buildTimelineClipDragGuide({
     tone: dropPreview
       ? dropPreview.valid ? 'drop' : 'limit'
       : movePreview.constrained ? 'limit' : movePreview.snapped ? 'snap' : 'move',
+    operation: dropPreview?.operation ?? movePreview.operation,
+    delta: movePreview.delta,
+    duration: dropPreview?.duration ?? movePreview.duration,
+    groupCount: dropPreview?.groupCount ?? groupCount,
+    snapped: dropPreview?.snapped ?? movePreview.snapped,
+    constrained: dropPreview?.constrained ?? movePreview.constrained,
+    ripple: dropPreview?.ripple ?? movePreview.ripple,
   };
 }
 
@@ -458,13 +505,22 @@ export function buildTimelineClipEditGuide(
     time: edge === 'end' ? roundTime(preview.start + preview.duration) : preview.start,
     label: preview.label ?? (preview.constrained ? 'Limit' : preview.snapped ? 'Snap' : edge ? 'Trim' : 'Move'),
     tone: preview.constrained ? 'limit' : preview.snapped ? 'snap' : 'move',
+    operation: preview.operation,
+    delta: preview.delta,
+    duration: preview.duration,
+    groupCount: preview.groupCount ?? 1,
+    snapped: preview.snapped,
+    constrained: preview.constrained,
+    ripple: preview.ripple,
   };
 }
 
-export function resolveTimelineClipTrimPreview({
+export function resolveTimelineClipTrimEdit({
   project,
+  selectedClipIds,
   snapEnabled,
   snapExtraPoints,
+  includeLinked,
   rippleMode,
   clip,
   edge,
@@ -474,10 +530,56 @@ export function resolveTimelineClipTrimPreview({
   clip: TimelineClip;
   edge: 'start' | 'end';
   deltaSeconds: number;
-}): TimelineClipEditPreview {
+}): TimelineClipTrimEdit {
   const clipEnd = roundTime(clip.start + clip.duration);
-  const trimGroupIds = getLinkedClipIds(project, clip.id);
+  const trimGroupIds = rippleMode && includeLinked !== false
+    ? getLinkedClipIds(project, clip.id)
+    : resolvePreviewClipGroupIds(project, selectedClipIds, clip, includeLinked);
   const trimOptions = { ripple: rippleMode, preventOverlap: !rippleMode };
+
+  if (!rippleMode && trimGroupIds.length > 1) {
+    const requestedAnchorTime = roundTime(edge === 'start'
+      ? Math.min(clipEnd - 0.25, Math.max(0, clip.start + deltaSeconds))
+      : Math.max(clip.start + 0.25, clipEnd + deltaSeconds));
+    const snappedAnchorTime = snapEnabled
+      ? snapTimeToEditPoints(project, requestedAnchorTime, {
+        threshold: 0.18,
+        excludeClipIds: trimGroupIds,
+        extraPoints: snapExtraPoints,
+      })
+      : requestedAnchorTime;
+    const resizePlan = resolveTimelineGroupResizeFromProject({
+      project,
+      clipIds: trimGroupIds,
+      edge,
+      anchorClipId: clip.id,
+      requestedAnchorTimelineTime: snappedAnchorTime,
+    });
+    const group = resizePlan?.group.members.map((member) => member.clip) ?? findPreviewClips(project, trimGroupIds);
+    const appliedAnchorTime = resizePlan?.appliedAnchorTimelineTime ?? (edge === 'start' ? clip.start : clipEnd);
+    const nextDuration = edge === 'start'
+      ? roundTime(Math.max(0.25, clipEnd - appliedAnchorTime))
+      : roundTime(Math.max(0.25, appliedAnchorTime - clip.start));
+    const appliedDelta = resizePlan?.appliedDelta ?? 0;
+
+    return {
+      group,
+      edge,
+      appliedDelta,
+      updates: resizePlan?.updates ?? [],
+      preview: {
+        start: edge === 'start' ? appliedAnchorTime : clip.start,
+        duration: nextDuration,
+        snapped: Math.abs(snappedAnchorTime - requestedAnchorTime) > 0.001,
+        constrained: resizePlan?.constrained ?? false,
+        operation: 'trim',
+        ripple: false,
+        delta: appliedDelta,
+        groupCount: group.length,
+        label: `Trim ${edge === 'start' ? 'head' : 'tail'} ${formatSignedEditDelta(appliedDelta)} / ${formatRulerTime(nextDuration)} / ${group.length} clips`,
+      },
+    };
+  }
 
   if (edge === 'start') {
     const requestedStart = roundTime(Math.min(clipEnd - 0.25, Math.max(0, clip.start + deltaSeconds)));
@@ -493,10 +595,26 @@ export function resolveTimelineClipTrimPreview({
       : snappedStart;
 
     return {
-      start: appliedStart,
-      duration: roundTime(Math.max(0.25, clipEnd - appliedStart)),
-      snapped: Math.abs(snappedStart - requestedStart) > 0.001,
-      constrained: Math.abs(appliedStart - snappedStart) > 0.001,
+      group: findPreviewClips(project, trimGroupIds),
+      edge,
+      appliedDelta: roundTime(appliedStart - clip.start),
+      updates: [{
+        clipId: clip.id,
+        trackId: clip.trackId,
+        currentTimelineTime: clip.start,
+        appliedTimelineTime: appliedStart,
+      }],
+      preview: {
+        start: appliedStart,
+        duration: roundTime(Math.max(0.25, clipEnd - appliedStart)),
+        snapped: Math.abs(snappedStart - requestedStart) > 0.001,
+        constrained: Math.abs(appliedStart - snappedStart) > 0.001,
+        operation: 'trim',
+        ripple: rippleMode,
+        delta: roundTime(appliedStart - clip.start),
+        groupCount: 1,
+        label: `Trim head ${formatSignedEditDelta(appliedStart - clip.start)} / ${formatRulerTime(roundTime(Math.max(0.25, clipEnd - appliedStart)))}`,
+      },
     };
   }
 
@@ -513,11 +631,36 @@ export function resolveTimelineClipTrimPreview({
     : snappedEnd;
 
   return {
-    start: clip.start,
-    duration: roundTime(Math.max(0.25, appliedEnd - clip.start)),
-    snapped: Math.abs(snappedEnd - requestedEnd) > 0.001,
-    constrained: Math.abs(appliedEnd - snappedEnd) > 0.001,
+    group: findPreviewClips(project, trimGroupIds),
+    edge,
+    appliedDelta: roundTime(appliedEnd - clipEnd),
+    updates: [{
+      clipId: clip.id,
+      trackId: clip.trackId,
+      currentTimelineTime: clipEnd,
+      appliedTimelineTime: appliedEnd,
+    }],
+    preview: {
+      start: clip.start,
+      duration: roundTime(Math.max(0.25, appliedEnd - clip.start)),
+      snapped: Math.abs(snappedEnd - requestedEnd) > 0.001,
+      constrained: Math.abs(appliedEnd - snappedEnd) > 0.001,
+      operation: 'trim',
+      ripple: rippleMode,
+      delta: roundTime(appliedEnd - clipEnd),
+      groupCount: 1,
+      label: `Trim tail ${formatSignedEditDelta(appliedEnd - clipEnd)} / ${formatRulerTime(roundTime(Math.max(0.25, appliedEnd - clip.start)))}`,
+    },
   };
+}
+
+export function resolveTimelineClipTrimPreview(options: TimelinePreviewOptions & {
+  rippleMode: boolean;
+  clip: TimelineClip;
+  edge: 'start' | 'end';
+  deltaSeconds: number;
+}): TimelineClipEditPreview {
+  return resolveTimelineClipTrimEdit(options).preview;
 }
 
 export function resolveTimelineClipSlipPreview(
@@ -535,17 +678,25 @@ export function resolveTimelineClipSlipPreview(
       duration: clip.duration,
       snapped: false,
       constrained: Math.abs(appliedDelta - deltaSeconds) > 0.001,
+      operation: 'slip',
+      delta: appliedDelta,
+      sourceIn: previewClip?.sourceIn ?? clip.sourceIn,
+      sourceInDelta: appliedDelta,
       label: `Slip ${formatSignedEditDelta(appliedDelta)}`,
     };
   } catch {
     return {
-      start: clip.start,
-      duration: clip.duration,
-      snapped: false,
-      constrained: true,
-      label: 'Slip blocked',
-    };
-  }
+    start: clip.start,
+    duration: clip.duration,
+    snapped: false,
+    constrained: true,
+    operation: 'slip',
+    delta: 0,
+    sourceIn: clip.sourceIn,
+    sourceInDelta: 0,
+    label: 'Slip blocked',
+  };
+}
 }
 
 export function resolveTimelineClipSlidePreview(
@@ -563,17 +714,25 @@ export function resolveTimelineClipSlidePreview(
       duration: previewClip?.duration ?? clip.duration,
       snapped: false,
       constrained: Math.abs(appliedDelta - deltaSeconds) > 0.001,
+      operation: 'slide',
+      delta: appliedDelta,
+      sourceIn: previewClip?.sourceIn ?? clip.sourceIn,
+      sourceInDelta: previewClip ? roundTime(previewClip.sourceIn - clip.sourceIn) : 0,
       label: `Slide ${formatSignedEditDelta(appliedDelta)}`,
     };
   } catch {
     return {
-      start: clip.start,
-      duration: clip.duration,
-      snapped: false,
-      constrained: true,
-      label: 'Slide blocked',
-    };
-  }
+    start: clip.start,
+    duration: clip.duration,
+    snapped: false,
+    constrained: true,
+    operation: 'slide',
+    delta: 0,
+    sourceIn: clip.sourceIn,
+    sourceInDelta: 0,
+    label: 'Slide blocked',
+  };
+}
 }
 
 export function resolveTimelineClipRollTrimPreview(
@@ -596,27 +755,38 @@ export function resolveTimelineClipRollTrimPreview(
       duration: previewClip?.duration ?? clip.duration,
       snapped: false,
       constrained: Math.abs(appliedDelta - deltaSeconds) > 0.001,
+      operation: 'roll',
+      delta: appliedDelta,
+      sourceIn: previewClip?.sourceIn ?? clip.sourceIn,
+      sourceInDelta: previewClip ? roundTime(previewClip.sourceIn - clip.sourceIn) : 0,
       label: `Roll ${formatSignedEditDelta(appliedDelta)}`,
     };
   } catch {
     return {
-      start: clip.start,
-      duration: clip.duration,
-      snapped: false,
-      constrained: true,
-      label: 'Roll blocked',
-    };
-  }
+    start: clip.start,
+    duration: clip.duration,
+    snapped: false,
+    constrained: true,
+    operation: 'roll',
+    delta: 0,
+    sourceIn: clip.sourceIn,
+    sourceInDelta: 0,
+    label: 'Roll blocked',
+  };
+}
 }
 
 function resolvePreviewClipGroupIds(
   project: EditorProject,
   selectedClipIds: string[],
   anchorClip: TimelineClip,
+  includeLinked = true,
 ): string[] {
   return selectedClipIds.includes(anchorClip.id)
     ? selectedClipIds
-    : getGroupedClipIds(project, anchorClip.id);
+    : includeLinked
+      ? getGroupedClipIds(project, anchorClip.id)
+      : [anchorClip.id];
 }
 
 function findPreviewClips(project: EditorProject, clipIds: string[]): TimelineClip[] {

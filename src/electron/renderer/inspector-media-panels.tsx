@@ -1,4 +1,5 @@
 import type { CaptionStyle, ClipSpeedRampPoint, EditorAsset, TimelineClip, TimelineTrack } from '../../lib/editor/types';
+import type { DanbiMenuLanguage } from '../../lib/editor/menu-language';
 import type { updateClip, updateClips } from '../../lib/editor/timeline';
 import type { WaveformSyncPlan } from '../../lib/editor/audio-sync';
 import { CLIP_GAIN_MAX_DB, CLIP_GAIN_MIN_DB, clipGainDbToVolume, clipVolumeToGainDb, formatClipGainDbFromVolume, normalizeClipVolume } from '../../lib/editor/audio-mixer';
@@ -13,12 +14,198 @@ import { CLIP_LABEL_COLORS, type MediaCacheJobView } from './editor-view-model';
 import { NumberField, ToggleButton } from './editor-form-controls';
 import { TitleStyleControls } from './inspector-controls';
 import { AssetHealthBadge, CacheJobStatus } from './media-health-cache-panels';
+import { useMenuLanguage } from './use-menu-language';
 
 type ClipPatch = Parameters<typeof updateClip>[2];
 type ClipsPatch = Parameters<typeof updateClips>[2];
 type FadeEdge = 'in' | 'out' | 'both';
 type FormatTimecode = (seconds: number, fps: number) => string;
 type FormatSignedDelta = (seconds: number) => string;
+
+const inspectorMediaText: Record<DanbiMenuLanguage, {
+  add: string;
+  audio: string;
+  audioFadeNone: string;
+  audioNeeded: string;
+  average: string;
+  blend: string;
+  both: string;
+  cache: string;
+  caching: string;
+  clear: string;
+  clearFreeze: string;
+  clip: string;
+  clipLabel: string;
+  clipLock: string;
+  clipMute: string;
+  confidence: string;
+  constant: string;
+  detachAudio: string;
+  duration: string;
+  fade: string;
+  fadeIn: string;
+  fadeOut: string;
+  freezeHere: string;
+  gainDb: string;
+  kind: string;
+  labelColor: string;
+  length: string;
+  linkVa: string;
+  live: string;
+  mediaMissing: string;
+  mixed: string;
+  missing: string;
+  name: string;
+  noPreviewSource: string;
+  opacity: string;
+  offset: string;
+  proxy: string;
+  ready: string;
+  relink: string;
+  relinkAudio: string;
+  render: string;
+  reverse: string;
+  sourceIn: string;
+  sourceMedia: string;
+  sourceUse: string;
+  speed: string;
+  speedRamp: string;
+  start: string;
+  sync: string;
+  syncLink: string;
+  syncReady: string;
+  titleText: string;
+  track: string;
+  unlinkVa: string;
+  visual: string;
+  volume: string;
+  waveform: string;
+  waveformNeeded: string;
+  waveformSync: string;
+}> = {
+  en: {
+    add: 'Add',
+    audio: 'Audio',
+    audioFadeNone: 'none',
+    audioNeeded: 'select V+A',
+    average: 'Average',
+    blend: 'Blend',
+    both: 'Both',
+    cache: 'Cache',
+    caching: 'Caching',
+    clear: 'Clear',
+    clearFreeze: 'Clear freeze',
+    clip: 'Clip',
+    clipLabel: 'Label',
+    clipLock: 'Clip lock',
+    clipMute: 'Clip mute',
+    confidence: 'confidence',
+    constant: 'Constant',
+    detachAudio: 'Detach audio',
+    duration: 'Duration',
+    fade: 'Fade',
+    fadeIn: 'Fade in',
+    fadeOut: 'Fade out',
+    freezeHere: 'Freeze here',
+    gainDb: 'Gain dB',
+    kind: 'Kind',
+    labelColor: 'Clip label color',
+    length: 'Length',
+    linkVa: 'Link V/A',
+    live: 'live',
+    mediaMissing: 'No source asset attached',
+    mixed: 'Mixed',
+    missing: 'missing',
+    name: 'Name',
+    noPreviewSource: 'No preview source',
+    opacity: 'Opacity',
+    offset: 'Offset',
+    proxy: 'Proxy',
+    ready: 'ready',
+    relink: 'Relink',
+    relinkAudio: 'Relink audio',
+    render: 'Render',
+    reverse: 'Reverse',
+    sourceIn: 'Source In',
+    sourceMedia: 'Source Media',
+    sourceUse: 'Source use',
+    speed: 'Speed',
+    speedRamp: 'Speed Ramp',
+    start: 'Start',
+    sync: 'Sync',
+    syncLink: 'Sync+Link',
+    syncReady: 'ready',
+    titleText: 'Title text',
+    track: 'Track',
+    unlinkVa: 'Unlink V/A',
+    visual: 'Visual',
+    volume: 'Volume',
+    waveform: 'Waveform',
+    waveformNeeded: 'waveform needed',
+    waveformSync: 'Waveform sync',
+  },
+  ko: {
+    add: '더하기',
+    audio: '오디오',
+    audioFadeNone: '없음',
+    audioNeeded: 'V+A 선택',
+    average: '평균',
+    blend: '블렌드',
+    both: '둘 다',
+    cache: '캐시',
+    caching: '캐시 중',
+    clear: '해제',
+    clearFreeze: '프리즈 해제',
+    clip: '클립',
+    clipLabel: '라벨',
+    clipLock: '클립 잠금',
+    clipMute: '클립 음소거',
+    confidence: '신뢰도',
+    constant: '고정',
+    detachAudio: '오디오 분리',
+    duration: '길이',
+    fade: '페이드',
+    fadeIn: '페이드 인',
+    fadeOut: '페이드 아웃',
+    freezeHere: '현재 프레임 고정',
+    gainDb: '게인 dB',
+    kind: '종류',
+    labelColor: '클립 라벨 색상',
+    length: '길이',
+    linkVa: 'V/A 연결',
+    live: '라이브',
+    mediaMissing: '연결된 소스 에셋 없음',
+    mixed: '혼합',
+    missing: '없음',
+    name: '이름',
+    noPreviewSource: '프리뷰 소스 없음',
+    opacity: '불투명도',
+    offset: '오프셋',
+    proxy: '프록시',
+    ready: '준비됨',
+    relink: '다시 연결',
+    relinkAudio: '오디오 다시 연결',
+    render: '렌더',
+    reverse: '역재생',
+    sourceIn: '소스 인',
+    sourceMedia: '소스 미디어',
+    sourceUse: '소스 사용',
+    speed: '속도',
+    speedRamp: '속도 램프',
+    start: '시작',
+    sync: '싱크',
+    syncLink: '싱크+연결',
+    syncReady: '준비됨',
+    titleText: '타이틀 텍스트',
+    track: '트랙',
+    unlinkVa: 'V/A 해제',
+    visual: '비주얼',
+    volume: '볼륨',
+    waveform: '파형',
+    waveformNeeded: '파형 필요',
+    waveformSync: '파형 싱크',
+  },
+};
 
 interface InspectorClipMediaPanelProps {
   clip: TimelineClip;
@@ -137,12 +324,15 @@ export function InspectorClipMediaPanel({
   onRelinkAsset,
   formatTimecode,
 }: InspectorClipMediaPanelProps) {
+  const language = useMenuLanguage();
+  const text = inspectorMediaText[language];
+
   return (
-    <div className="rounded-md border border-zinc-800 bg-zinc-900 p-3">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Clip</h2>
+    <div className="rounded-md border border-ds-200 bg-surface p-3">
+      <h2 className="text-kicker font-heading font-semibold uppercase text-ds-600">{text.clip}</h2>
       <div className="mt-3 grid grid-cols-[1fr_44px] gap-3">
-        <label className="block text-xs text-zinc-500">
-          Name
+        <label className="block text-xs text-ds-600">
+          {text.name}
           <input
             key={clip.id}
             defaultValue={clip.name}
@@ -151,24 +341,24 @@ export function InspectorClipMediaPanel({
                 onClipPatch('Clip name updated', { name: event.currentTarget.value });
               }
             }}
-            className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-sm text-zinc-100 outline-none focus:border-emerald-500"
+            className="mt-1 w-full rounded-md border border-ds-200 bg-paper px-2 py-2 text-sm text-ink outline-none focus:border-accent-500"
           />
         </label>
-        <label className="block text-xs text-zinc-500">
-          Label
+        <label className="block text-xs text-ds-600">
+          {text.clipLabel}
           <input
-            aria-label="Clip label color"
+            aria-label={text.labelColor}
             type="color"
             value={summary.color.value ?? clip.color}
             onChange={(event) => onSelectedClipsPatch('Clip color updated', { color: event.target.value })}
-            className={`mt-1 h-[38px] w-full rounded-md border bg-zinc-950 p-1 ${
-              summary.color.mixed ? 'border-amber-500' : 'border-zinc-800'
+            className={`mt-1 h-[38px] w-full rounded-md border bg-paper p-1 ${
+              summary.color.mixed ? 'border-warn-500' : 'border-ds-200'
             }`}
           />
         </label>
       </div>
-      <label className="mt-3 block text-xs text-zinc-500">
-        Track
+      <label className="mt-3 block text-xs text-ds-600">
+        {text.track}
         <select
           value={clip.trackId}
           disabled={moveTrackOptions.length === 0}
@@ -177,7 +367,7 @@ export function InspectorClipMediaPanel({
               onMoveSelectedClipsToTrack(event.currentTarget.value);
             }
           }}
-          className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-sm text-zinc-100 outline-none focus:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-1 w-full rounded-md border border-ds-200 bg-paper px-2 py-2 text-sm text-ink outline-none focus:border-accent-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <option value={clip.trackId}>
             {tracks.find((track) => track.id === clip.trackId)?.name ?? clip.trackId}
@@ -189,8 +379,8 @@ export function InspectorClipMediaPanel({
       </label>
       {isTitleClip ? (
         <>
-          <label className="mt-3 block text-xs text-zinc-500">
-            Title text
+          <label className="mt-3 block text-xs text-ds-600">
+            {text.titleText}
             <textarea
               key={`${clip.id}-${asset?.id ?? 'title'}-${titleText}`}
               defaultValue={titleText}
@@ -200,7 +390,7 @@ export function InspectorClipMediaPanel({
                 }
               }}
               rows={3}
-              className="mt-1 w-full resize-y rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-sm text-zinc-100 outline-none focus:border-emerald-500"
+              className="mt-1 w-full resize-y rounded-md border border-ds-200 bg-paper px-2 py-2 text-sm text-ink outline-none focus:border-accent-500"
             />
           </label>
           <TitleStyleControls
@@ -217,7 +407,7 @@ export function InspectorClipMediaPanel({
             type="button"
             aria-label={`Set clip label ${color}`}
             onClick={() => onSelectedClipsPatch('Clip color updated', { color })}
-            className={`h-7 rounded border ${summary.color.value === color ? 'border-white' : 'border-zinc-800 hover:border-white/70'}`}
+            className={`h-7 rounded border ${summary.color.value === color ? 'border-white' : 'border-ds-200 hover:border-white/70'}`}
             style={{ backgroundColor: color }}
           />
         ))}
@@ -232,12 +422,12 @@ export function InspectorClipMediaPanel({
         onRelinkAsset={onRelinkAsset}
       />
       <div className="mt-3 grid grid-cols-2 gap-3">
-        <NumberField label="Start" value={clip.start} step={1 / fps} onChange={onInspectorStartChange} />
-        <NumberField label="Duration" value={clip.duration} step={1 / fps} min={0.25} onChange={onInspectorDurationChange} />
-        <NumberField label="Source In" value={clip.sourceIn} step={1 / fps} min={0} onChange={(value) => onClipPatch('Clip source updated', { sourceIn: value })} />
-        <NumberField label="Speed" value={clip.speed} step={0.05} min={0.05} max={8} onChange={onRetimeSpeedChange} />
+        <NumberField label={text.start} value={clip.start} step={1 / fps} onChange={onInspectorStartChange} />
+        <NumberField label={text.duration} value={clip.duration} step={1 / fps} min={0.25} onChange={onInspectorDurationChange} />
+        <NumberField label={text.sourceIn} value={clip.sourceIn} step={1 / fps} min={0} onChange={(value) => onClipPatch('Clip source updated', { sourceIn: value })} />
+        <NumberField label={text.speed} value={clip.speed} step={0.05} min={0.05} max={8} onChange={onRetimeSpeedChange} />
         <NumberField
-          label="Volume"
+          label={text.volume}
           value={normalizeClipVolume(summary.volume.value ?? clip.volume)}
           mixed={summary.volume.mixed}
           step={0.05}
@@ -246,7 +436,7 @@ export function InspectorClipMediaPanel({
           onChange={(value) => onSelectedClipsPatch('Clip volume updated', { volume: normalizeClipVolume(value) })}
         />
         <NumberField
-          label="Gain dB"
+          label={text.gainDb}
           value={clipVolumeToGainDb(summary.volume.value ?? clip.volume)}
           mixed={summary.volume.mixed}
           step={0.5}
@@ -255,7 +445,7 @@ export function InspectorClipMediaPanel({
           onChange={(value) => onSelectedClipsPatch('Clip gain updated', { volume: clipGainDbToVolume(value) })}
         />
         <NumberField
-          label="Opacity"
+          label={text.opacity}
           value={summary.opacity.value ?? clip.opacity}
           mixed={summary.opacity.mixed}
           step={0.05}
@@ -264,8 +454,8 @@ export function InspectorClipMediaPanel({
           onChange={(value) => onSelectedClipsPatch('Clip opacity updated', { opacity: value })}
         />
       </div>
-      <div className="mt-2 text-[11px] text-zinc-500">
-        Clip gain {summary.volume.mixed ? 'Mixed' : formatClipGainDbFromVolume(summary.volume.value ?? clip.volume)}
+      <div className="mt-2 text-meta text-ds-600">
+        {text.gainDb} {summary.volume.mixed ? text.mixed : formatClipGainDbFromVolume(summary.volume.value ?? clip.volume)}
       </div>
       <div className="mt-3 grid grid-cols-4 gap-2">
         {[0.5, 1, 2, 4].map((speed) => (
@@ -273,18 +463,18 @@ export function InspectorClipMediaPanel({
             key={speed}
             type="button"
             onClick={() => onRetimeSpeedChange(speed)}
-            className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs text-zinc-200 hover:border-emerald-500"
+            className="rounded-md border border-ds-200 bg-paper px-2 py-2 text-xs text-ds-800 hover:border-accent-500"
           >
             {speed}x
           </button>
         ))}
       </div>
-      <div className="mt-3 rounded-md border border-zinc-800 bg-zinc-950 p-3">
+      <div className="mt-3 rounded-md border border-ds-200 bg-paper p-3">
         <div className="flex items-center justify-between gap-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Speed Ramp</h3>
+          <h3 className="text-kicker font-heading font-semibold uppercase text-ds-600">{text.speedRamp}</h3>
           {selectedAnyHasSpeedRamp ? (
-            <button type="button" onClick={onClearSpeedRamp} className="text-xs text-rose-300 hover:text-rose-200">
-              Clear
+            <button type="button" onClick={onClearSpeedRamp} className="text-xs text-danger-700 hover:text-danger-800">
+              {text.clear}
             </button>
           ) : null}
         </div>
@@ -294,54 +484,54 @@ export function InspectorClipMediaPanel({
               key={preset.id}
               type="button"
               onClick={() => onApplySpeedRamp(preset.id)}
-              className="rounded border border-zinc-800 px-2 py-2 text-[11px] text-zinc-200 hover:border-emerald-500"
+              className="rounded border border-ds-200 px-2 py-2 text-meta text-ds-800 hover:border-accent-500"
             >
               {preset.label}
             </button>
           ))}
         </div>
         {selectedHasSpeedRamp ? (
-          <div className="mt-3 space-y-2 text-[11px] text-zinc-400">
+          <div className="mt-3 space-y-2 text-meta text-ds-700">
             <div className="flex justify-between gap-2">
-              <span>Average</span>
-              <span className="text-zinc-200">{getAverageSpeed(clip).toFixed(2)}x</span>
+              <span>{text.average}</span>
+              <span className="text-ds-800">{getAverageSpeed(clip).toFixed(2)}x</span>
             </div>
             <div className="flex justify-between gap-2">
-              <span>Source use</span>
-              <span className="text-zinc-200">{formatTimecode(getSpeedRampSourceDuration(clip), fps)}</span>
+              <span>{text.sourceUse}</span>
+              <span className="text-ds-800">{formatTimecode(getSpeedRampSourceDuration(clip), fps)}</span>
             </div>
             <div className="grid grid-cols-2 gap-1">
               {selectedSpeedRampPoints.map((point) => (
-                <span key={point.id} className="rounded bg-zinc-900 px-2 py-1 tabular-nums">
+                <span key={point.id} className="rounded bg-surface px-2 py-1 tabular-nums">
                   {formatTimecode(point.time, fps)} / {point.speed.toFixed(2)}x
                 </span>
               ))}
             </div>
           </div>
         ) : (
-          <div className="mt-2 text-[11px] text-zinc-500">Constant {clip.speed.toFixed(2)}x</div>
+          <div className="mt-2 text-meta text-ds-600">{text.constant} {clip.speed.toFixed(2)}x</div>
         )}
       </div>
-      <label className="mt-3 block text-xs text-zinc-500">
-        Blend
+      <label className="mt-3 block text-xs text-ds-600">
+        {text.blend}
         <select
           value={summary.blendMode.value ?? ''}
           onChange={(event) => onSelectedClipsPatch('Blend mode updated', { blendMode: event.target.value as TimelineClip['blendMode'] })}
-          className={`mt-1 w-full rounded-md border bg-zinc-950 px-2 py-2 text-sm text-zinc-100 outline-none focus:border-emerald-500 ${
-            summary.blendMode.mixed ? 'border-amber-500' : 'border-zinc-800'
+          className={`mt-1 w-full rounded-md border bg-paper px-2 py-2 text-sm text-ink outline-none focus:border-accent-500 ${
+            summary.blendMode.mixed ? 'border-warn-500' : 'border-ds-200'
           }`}
         >
-          {summary.blendMode.mixed ? <option value="">Mixed</option> : null}
-          <option value="normal">Normal</option>
-          <option value="screen">Screen</option>
-          <option value="multiply">Multiply</option>
-          <option value="overlay">Overlay</option>
-          <option value="add">Add</option>
+          {summary.blendMode.mixed ? <option value="">{text.mixed}</option> : null}
+          <option value="normal">{language === 'ko' ? '기본' : 'Normal'}</option>
+          <option value="screen">{language === 'ko' ? '스크린' : 'Screen'}</option>
+          <option value="multiply">{language === 'ko' ? '곱하기' : 'Multiply'}</option>
+          <option value="overlay">{language === 'ko' ? '오버레이' : 'Overlay'}</option>
+          <option value="add">{text.add}</option>
         </select>
       </label>
       <div className="mt-3 grid grid-cols-3 gap-2">
         <ToggleButton
-          label="Reverse"
+          label={text.reverse}
           active={summary.reversed.value === true}
           mixed={summary.reversed.mixed}
           onClick={() => onSelectedClipsPatch('Clip reverse toggled', {
@@ -349,13 +539,13 @@ export function InspectorClipMediaPanel({
           })}
         />
         <ToggleButton
-          label="Clip mute"
+          label={text.clipMute}
           active={summary.muted.value === true}
           mixed={summary.muted.mixed}
           onClick={() => onToggleSelectedClipState('muted')}
         />
         <ToggleButton
-          label="Clip lock"
+          label={text.clipLock}
           active={summary.locked.value === true}
           mixed={summary.locked.mixed}
           onClick={() => onToggleSelectedClipState('locked')}
@@ -366,20 +556,20 @@ export function InspectorClipMediaPanel({
           type="button"
           disabled={!canApplyFreezeFrame}
           onClick={onApplyFreezeFrame}
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 hover:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-md border border-ds-200 bg-paper px-3 py-2 text-sm text-ds-800 hover:border-accent-500 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Freeze here
+          {text.freezeHere}
         </button>
         <button
           type="button"
           disabled={!canClearFreezeFrame}
           onClick={onClearFreezeFrame}
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 hover:border-amber-500 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-md border border-ds-200 bg-paper px-3 py-2 text-sm text-ds-800 hover:border-warn-500 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Clear freeze
+          {text.clearFreeze}
         </button>
-        <span className="text-[11px] text-zinc-500">
-          {clip.freezeFrameTime === undefined ? 'live' : formatTimecode(clip.freezeFrameTime, fps)}
+        <span className="text-meta text-ds-600">
+          {clip.freezeFrameTime === undefined ? text.live : formatTimecode(clip.freezeFrameTime, fps)}
         </span>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
@@ -387,33 +577,33 @@ export function InspectorClipMediaPanel({
           type="button"
           disabled={!canDetachAudio}
           onClick={onDetachAudio}
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 hover:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-md border border-ds-200 bg-paper px-3 py-2 text-sm text-ds-800 hover:border-accent-500 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Detach audio
+          {text.detachAudio}
         </button>
         <button
           type="button"
           disabled={!canRelinkAudio}
           onClick={onRelinkAudio}
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 hover:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-md border border-ds-200 bg-paper px-3 py-2 text-sm text-ds-800 hover:border-accent-500 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Relink audio
+          {text.relinkAudio}
         </button>
         <button
           type="button"
           disabled={!canUnlinkAudio}
           onClick={onUnlinkAudio}
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 hover:border-amber-500 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-md border border-ds-200 bg-paper px-3 py-2 text-sm text-ds-800 hover:border-warn-500 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Unlink V/A
+          {text.unlinkVa}
         </button>
         <button
           type="button"
           disabled={!canLinkAudio}
           onClick={onLinkAudio}
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 hover:border-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-md border border-ds-200 bg-paper px-3 py-2 text-sm text-ds-800 hover:border-info-500 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Link V/A
+          {text.linkVa}
         </button>
       </div>
     </div>
@@ -437,10 +627,13 @@ function InspectorAssetCacheSection({
   onRetryMediaCache?: (assetId: string) => void | Promise<void>;
   onRelinkAsset?: (assetId: string) => void;
 }) {
+  const language = useMenuLanguage();
+  const text = inspectorMediaText[language];
+
   if (!asset) {
     return (
-      <div className="mt-3 border-t border-zinc-800 pt-3 text-xs text-zinc-500">
-        No source asset attached
+      <div className="mt-3 border-t border-ds-200 pt-3 text-xs text-ds-600">
+        {text.mediaMissing}
       </div>
     );
   }
@@ -450,22 +643,22 @@ function InspectorAssetCacheSection({
   const hasActiveCacheJob = cacheJob?.status === 'queued' || cacheJob?.status === 'running';
 
   return (
-    <div className="mt-3 border-t border-zinc-800 pt-3">
+    <div className="mt-3 border-t border-ds-200 pt-3">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Source Media</h3>
-        <span className={`rounded px-2 py-0.5 text-[11px] ${previewSource.mode === 'proxy' ? 'bg-emerald-500/15 text-emerald-200' : previewSource.mode === 'source' ? 'bg-sky-500/15 text-sky-200' : 'bg-rose-500/15 text-rose-200'}`}>
+        <h3 className="text-kicker font-heading font-semibold uppercase text-ds-600">{text.sourceMedia}</h3>
+        <span className={`rounded px-2 py-0.5 text-meta ${previewSource.mode === 'proxy' ? 'bg-accent-500/15 text-accent-800' : previewSource.mode === 'source' ? 'bg-info-500/15 text-info-800' : 'bg-danger-500/15 text-danger-800'}`}>
           {formatPreviewSourceMode(previewSource)}
         </span>
       </div>
-      <div className="mt-2 min-w-0 truncate text-sm font-medium text-zinc-100">{asset.name}</div>
-      <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-zinc-400">
-        <InspectorMediaPill label="Kind" value={resolveMediaBinAssetKindLabel(asset)} />
-        <InspectorMediaPill label="Render" value={asset.renderPath ? 'ready' : 'missing'} tone={asset.renderPath ? 'ok' : 'bad'} />
-        <InspectorMediaPill label="Proxy" value={previewSource.hasProxy ? 'ready' : 'missing'} tone={previewSource.hasProxy ? 'ok' : 'warn'} />
-        <InspectorMediaPill label="Waveform" value={previewSource.hasWaveform ? 'ready' : 'missing'} tone={previewSource.hasWaveform ? 'ok' : 'warn'} />
+      <div className="mt-2 min-w-0 truncate text-sm font-medium text-ink">{asset.name}</div>
+      <div className="mt-2 grid grid-cols-2 gap-2 text-meta text-ds-700">
+        <InspectorMediaPill label={text.kind} value={formatInspectorAssetKind(asset, language)} />
+        <InspectorMediaPill label={text.render} value={asset.renderPath ? text.ready : text.missing} tone={asset.renderPath ? 'ok' : 'bad'} />
+        <InspectorMediaPill label={text.proxy} value={previewSource.hasProxy ? text.ready : text.missing} tone={previewSource.hasProxy ? 'ok' : 'warn'} />
+        <InspectorMediaPill label={text.waveform} value={previewSource.hasWaveform ? text.ready : text.missing} tone={previewSource.hasWaveform ? 'ok' : 'warn'} />
       </div>
-      <div className="mt-2 truncate text-[11px] text-zinc-500">
-        {previewSource.source || 'No preview source'}
+      <div className="mt-2 truncate text-meta text-ds-600">
+        {previewSource.source || text.noPreviewSource}
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
         <button
@@ -476,17 +669,17 @@ function InspectorAssetCacheSection({
               void onRebuildMediaCache?.(asset);
             }
           }}
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 hover:border-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-md border border-ds-200 bg-paper px-3 py-2 text-xs text-ds-800 hover:border-info-500 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {hasActiveCacheJob ? 'Caching' : 'Cache'}
+          {hasActiveCacheJob ? text.caching : text.cache}
         </button>
         <button
           type="button"
           disabled={!onRelinkAsset}
           onClick={() => onRelinkAsset?.(asset.id)}
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 hover:border-amber-500 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-md border border-ds-200 bg-paper px-3 py-2 text-xs text-ds-800 hover:border-warn-500 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Relink
+          {text.relink}
         </button>
       </div>
       <AssetHealthBadge health={health} />
@@ -511,19 +704,42 @@ function InspectorMediaPill({
   tone?: 'neutral' | 'ok' | 'warn' | 'bad';
 }) {
   const toneClassName = tone === 'ok'
-    ? 'text-emerald-200'
+    ? 'text-accent-800'
     : tone === 'warn'
-      ? 'text-amber-200'
+      ? 'text-warn-800'
       : tone === 'bad'
-        ? 'text-rose-200'
-        : 'text-zinc-200';
+        ? 'text-danger-800'
+        : 'text-ds-800';
 
   return (
-    <div className="min-w-0 rounded border border-zinc-800 bg-zinc-950 px-2 py-1">
-      <div className="text-[9px] uppercase tracking-normal text-zinc-500">{label}</div>
+    <div className="min-w-0 rounded border border-ds-200 bg-paper px-2 py-1">
+      <div className="text-micro uppercase tracking-normal text-ds-600">{label}</div>
       <div className={`truncate ${toneClassName}`}>{value}</div>
     </div>
   );
+}
+
+function formatInspectorAssetKind(asset: EditorAsset, language: DanbiMenuLanguage): string {
+  if (language !== 'ko') {
+    return resolveMediaBinAssetKindLabel(asset);
+  }
+
+  switch (asset.kind) {
+    case 'video':
+      return '비디오';
+    case 'audio':
+      return '오디오';
+    case 'image':
+      return '이미지';
+    case 'text':
+      return '텍스트';
+    case 'ai':
+      return 'AI';
+    case 'effect':
+      return '효과';
+    default:
+      return resolveMediaBinAssetKindLabel(asset);
+  }
 }
 
 export function InspectorVisualPanel({
@@ -538,14 +754,17 @@ export function InspectorVisualPanel({
   onApplyCanvasLayout,
   onApplyVisualFade,
 }: InspectorVisualPanelProps) {
+  const language = useMenuLanguage();
+  const text = inspectorMediaText[language];
+
   return (
-    <div className="rounded-md border border-zinc-800 bg-zinc-900 p-3">
+    <div className="rounded-md border border-ds-200 bg-surface p-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Visual</h2>
-        <span className="text-[11px] text-zinc-500">
+        <h2 className="text-kicker font-heading font-semibold uppercase text-ds-600">{text.visual}</h2>
+        <span className="text-meta text-ds-600">
           {canApplyCanvasLayout
-            ? `${canvasLayoutLabel(canvasLayoutMode)} / ${visualFadeClipCount} fade`
-            : `${visualFadeClipCount} fade`}
+            ? `${canvasLayoutLabel(canvasLayoutMode)} / ${visualFadeClipCount} ${text.fade}`
+            : `${visualFadeClipCount} ${text.fade}`}
         </span>
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2">
@@ -557,8 +776,8 @@ export function InspectorVisualPanel({
             onClick={() => onApplyCanvasLayout(mode)}
             className={`rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40 ${
               canvasLayoutMode === mode
-                ? 'border-emerald-500 bg-emerald-500/15 text-emerald-100'
-                : 'border-zinc-800 bg-zinc-950 text-zinc-200 hover:border-emerald-500'
+                ? 'border-accent-500 bg-accent-500/15 text-accent-900'
+                : 'border-ds-200 bg-paper text-ds-800 hover:border-accent-500'
             }`}
           >
             {canvasLayoutLabel(mode)}
@@ -567,7 +786,7 @@ export function InspectorVisualPanel({
       </div>
       <div className="mt-3">
         <NumberField
-          label="Fade"
+          label={text.fade}
           value={visualFadeDuration}
           step={1 / fps}
           min={0.05}
@@ -576,9 +795,9 @@ export function InspectorVisualPanel({
         />
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2">
-        <FadeButton label="Fade in" disabled={!canApplyVisualFade} onClick={() => onApplyVisualFade('in')} />
-        <FadeButton label="Fade out" disabled={!canApplyVisualFade} onClick={() => onApplyVisualFade('out')} />
-        <FadeButton label="Both" disabled={!canApplyVisualFade} onClick={() => onApplyVisualFade('both')} />
+        <FadeButton label={text.fadeIn} disabled={!canApplyVisualFade} onClick={() => onApplyVisualFade('in')} />
+        <FadeButton label={text.fadeOut} disabled={!canApplyVisualFade} onClick={() => onApplyVisualFade('out')} />
+        <FadeButton label={text.both} disabled={!canApplyVisualFade} onClick={() => onApplyVisualFade('both')} />
       </div>
     </div>
   );
@@ -598,61 +817,88 @@ export function InspectorAudioPanel({
   onSyncByWaveform,
   formatSignedEditDelta,
 }: InspectorAudioPanelProps) {
+  const language = useMenuLanguage();
+  const text = inspectorMediaText[language];
+  const syncState = hasAudioSyncPair
+    ? canSyncByWaveform ? 'ready' : 'waveform-needed'
+    : 'select-video-audio';
+
   return (
-    <div className="rounded-md border border-zinc-800 bg-zinc-900 p-3">
+    <div
+      className="rounded-md border border-ds-200 bg-surface p-3"
+      data-testid="inspector-audio-panel"
+      data-clip-id={clip.id}
+      data-can-apply-audio-fade={canApplyAudioFade ? 'true' : 'false'}
+      data-audio-fade-clip-count={audioFadeClipCount}
+      data-has-audio-sync-pair={hasAudioSyncPair ? 'true' : 'false'}
+      data-can-sync-by-waveform={canSyncByWaveform ? 'true' : 'false'}
+      data-waveform-sync-state={syncState}
+    >
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Audio</h2>
-        <span className="text-[11px] text-zinc-500">
-          {canApplyAudioFade ? `${audioFadeClipCount} fade` : 'none'}
+        <h2 className="text-kicker font-heading font-semibold uppercase text-ds-600">{text.audio}</h2>
+        <span className="text-meta text-ds-600" data-testid="inspector-audio-fade-state">
+          {canApplyAudioFade ? `${audioFadeClipCount} ${text.fade}` : text.audioFadeNone}
         </span>
       </div>
       <div className="mt-3">
         <NumberField
-          label="Fade"
+          label={text.fade}
           value={audioFadeDuration}
           step={1 / fps}
           min={0.05}
           max={clip.duration}
+          testId="inspector-audio-fade-duration"
           onChange={onAudioFadeDurationChange}
         />
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2">
-        <FadeButton label="Fade in" disabled={!canApplyAudioFade} onClick={() => onApplyAudioFade('in')} />
-        <FadeButton label="Fade out" disabled={!canApplyAudioFade} onClick={() => onApplyAudioFade('out')} />
-        <FadeButton label="Both" disabled={!canApplyAudioFade} onClick={() => onApplyAudioFade('both')} />
+        <FadeButton testId="inspector-audio-fade-in" label={text.fadeIn} disabled={!canApplyAudioFade} onClick={() => onApplyAudioFade('in')} />
+        <FadeButton testId="inspector-audio-fade-out" label={text.fadeOut} disabled={!canApplyAudioFade} onClick={() => onApplyAudioFade('out')} />
+        <FadeButton testId="inspector-audio-fade-both" label={text.both} disabled={!canApplyAudioFade} onClick={() => onApplyAudioFade('both')} />
       </div>
-      <div className="mt-3 rounded-md border border-zinc-800 bg-zinc-950 p-2">
+      <div
+        className="mt-3 rounded-md border border-ds-200 bg-paper p-2"
+        data-testid="inspector-audio-waveform-sync"
+        data-waveform-sync-state={syncState}
+      >
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-lime-300">Waveform sync</span>
-          <span className="text-[11px] text-zinc-500">
+          <span className="text-meta font-semibold uppercase tracking-wide text-accent-700">{text.waveformSync}</span>
+          <span className="text-meta text-ds-600" data-testid="inspector-audio-waveform-sync-state">
             {hasAudioSyncPair
-              ? canSyncByWaveform ? 'ready' : 'waveform needed'
-              : 'select V+A'}
+              ? canSyncByWaveform ? text.syncReady : text.waveformNeeded
+              : text.audioNeeded}
           </span>
         </div>
         <div className="mt-2 grid grid-cols-2 gap-2">
           <button
             type="button"
+            data-testid="inspector-audio-sync"
             disabled={!canSyncByWaveform}
             onClick={() => onSyncByWaveform(false)}
-            className="rounded-md border border-lime-700 bg-lime-950/30 px-3 py-2 text-xs font-medium text-lime-200 hover:border-lime-400 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-accent-300 bg-accent-100/30 px-3 py-2 text-xs font-medium text-accent-800 hover:border-accent-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Sync
+            {text.sync}
           </button>
           <button
             type="button"
+            data-testid="inspector-audio-sync-link"
             disabled={!canSyncByWaveform}
             onClick={() => onSyncByWaveform(true)}
-            className="rounded-md border border-emerald-700 bg-emerald-950/30 px-3 py-2 text-xs font-medium text-emerald-200 hover:border-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-accent-300 bg-accent-100/30 px-3 py-2 text-xs font-medium text-accent-800 hover:border-accent-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Sync+Link
+            {text.syncLink}
           </button>
         </div>
         {lastAudioSyncPlan ? (
-          <div className="mt-2 rounded border border-lime-400/20 bg-lime-400/10 px-2 py-1 text-[11px] text-lime-100">
-            Offset {formatSignedEditDelta(lastAudioSyncPlan.appliedDelta)} / confidence {lastAudioSyncPlan.confidence.toFixed(2)}
+          <div
+            className="mt-2 rounded border border-accent-600/20 bg-accent-600/10 px-2 py-1 text-meta text-accent-900"
+            data-testid="inspector-audio-last-sync-plan"
+            data-sync-confidence={lastAudioSyncPlan.confidence}
+            data-sync-delta={lastAudioSyncPlan.appliedDelta}
+          >
+            {text.offset} {formatSignedEditDelta(lastAudioSyncPlan.appliedDelta)} / {text.confidence} {lastAudioSyncPlan.confidence.toFixed(2)}
             {lastAudioSyncPlan.warnings[0] ? (
-              <div className="mt-1 text-amber-200/80">{lastAudioSyncPlan.warnings[0]}</div>
+              <div className="mt-1 text-warn-800/80">{lastAudioSyncPlan.warnings[0]}</div>
             ) : null}
           </div>
         ) : null}
@@ -662,10 +908,12 @@ export function InspectorAudioPanel({
 }
 
 function FadeButton({
+  testId,
   label,
   disabled,
   onClick,
 }: {
+  testId?: string;
   label: string;
   disabled: boolean;
   onClick: () => void;
@@ -673,9 +921,10 @@ function FadeButton({
   return (
     <button
       type="button"
+      data-testid={testId}
       disabled={disabled}
       onClick={onClick}
-      className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 hover:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+      className="rounded-md border border-ds-200 bg-paper px-3 py-2 text-sm text-ds-800 hover:border-accent-500 disabled:cursor-not-allowed disabled:opacity-40"
     >
       {label}
     </button>

@@ -54,9 +54,9 @@ export function CommandPalette({
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
-        className="w-full max-w-2xl overflow-hidden rounded-md border border-zinc-700 bg-zinc-950 shadow-2xl"
+        className="w-full max-w-2xl overflow-hidden rounded-md border border-ds-300 bg-paper shadow-2xl"
       >
-        <div className="border-b border-zinc-800 p-3">
+        <div className="border-b border-ds-200 p-3">
           <input
             ref={inputRef}
             value={query}
@@ -117,9 +117,9 @@ export function CommandPalette({
               }
             }}
             placeholder="Search commands"
-            className="h-11 w-full rounded border border-zinc-800 bg-zinc-900 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-emerald-500"
+            className="h-11 w-full rounded border border-ds-200 bg-surface px-3 text-sm text-ink outline-none placeholder:text-ds-600 focus:border-accent-500"
           />
-          <div className="mt-2 text-xs text-zinc-500" aria-live="polite">
+          <div className="mt-2 text-xs text-ds-600" aria-live="polite">
             {resultLabel}
           </div>
         </div>
@@ -134,24 +134,24 @@ export function CommandPalette({
                 onClick={() => onRunCommand(item.id, item.payload)}
                 className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded px-3 py-2 text-left ${
                   index === activeIndex
-                    ? 'bg-emerald-500/15 text-emerald-100'
-                    : 'text-zinc-200 hover:bg-zinc-900'
+                    ? 'bg-accent-500/15 text-accent-900'
+                    : 'text-ds-800 hover:bg-surface'
                 }`}
               >
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium">{item.label}</span>
-                  <span className="mt-0.5 block truncate text-xs text-zinc-500">{item.group} / {item.id}</span>
+                  <span className="mt-0.5 block truncate text-xs text-ds-600">{item.group} / {item.id}</span>
                 </span>
-                <span className="rounded border border-zinc-700 bg-zinc-900 px-2 py-1 font-mono text-[11px] text-zinc-300">
+                <span className="rounded border border-ds-300 bg-surface px-2 py-1 tabular-nums text-meta text-ds-700">
                   {item.keys || 'no key'}
                 </span>
               </button>
             ))
           ) : (
-            <div className="px-3 py-8 text-center text-sm text-zinc-500">No matching command</div>
+            <div className="px-3 py-8 text-center text-sm text-ds-600">No matching command</div>
           )}
           {hiddenCount > 0 && hiddenLabel ? (
-            <div className="px-3 py-2 text-xs text-zinc-500">{hiddenLabel}</div>
+            <div className="px-3 py-2 text-xs text-ds-600">{hiddenLabel}</div>
           ) : null}
         </div>
       </div>

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   buildProgramAudioFftLayerSample,
   buildProgramAudioFftSample,
+  shouldEmitProgramAudioFftSample,
   type ProgramAudioFftLayerSample,
   type ProgramAudioFftSample,
 } from '../../lib/editor/audio-analyzer';
@@ -16,6 +17,14 @@ interface ProgramAudioGraph {
   analyser: AnalyserNode;
   panner: StereoPannerNode | null;
   frequencyData?: Uint8Array<ArrayBuffer>;
+}
+
+type ProgramAudioOutputMode = 'blocked' | 'native' | 'web-audio';
+
+interface ProgramAudioPlaybackDiagnostic {
+  outputMode: ProgramAudioOutputMode;
+  contextState: AudioContextState | 'none';
+  playError: string;
 }
 
 let sharedProgramAudioContext: AudioContext | null = null;
@@ -34,12 +43,29 @@ export function ProgramAudioMixer({
   onFftSample?: (sample: ProgramAudioFftSample) => void;
 }) {
   const layerSamplesRef = useRef<Record<string, ProgramAudioFftLayerSample>>({});
+  const lastEmitRef = useRef<{ at: number; sample: ProgramAudioFftSample | null }>({ at: 0, sample: null });
   const audioLayerIds = useMemo(() => stack.audioLayers.map(buildProgramAudioLayerId), [stack.audioLayers]);
   const audioLayerSignature = audioLayerIds.join('|');
   const emitFftSample = useCallback(() => {
-    onFftSample?.(buildProgramAudioFftSample(Object.values(layerSamplesRef.current), {
+    if (!onFftSample) {
+      return;
+    }
+
+    const sample = buildProgramAudioFftSample(Object.values(layerSamplesRef.current), {
       sourceLayerCount: stack.audioLayers.length,
-    }));
+    });
+    const now = Date.now();
+    if (!shouldEmitProgramAudioFftSample({
+      previous: lastEmitRef.current.sample,
+      next: sample,
+      lastEmitAt: lastEmitRef.current.at,
+      now,
+    })) {
+      return;
+    }
+
+    lastEmitRef.current = { at: now, sample };
+    onFftSample(sample);
   }, [onFftSample, stack.audioLayers.length]);
   const handleFftLayerSample = useCallback((sample: ProgramAudioFftLayerSample) => {
     layerSamplesRef.current[sample.layerId] = sample;
@@ -82,8 +108,8 @@ export function ProgramAudioMixer({
           isPlaying={isPlaying}
           playbackRate={playbackRate}
           active={active}
-          onFftLayerSample={handleFftLayerSample}
-          onFftLayerEnd={handleFftLayerEnd}
+          onFftLayerSample={onFftSample ? handleFftLayerSample : undefined}
+          onFftLayerEnd={onFftSample ? handleFftLayerEnd : undefined}
         />
       ))}
     </div>
@@ -107,8 +133,28 @@ function ProgramAudioLayerPreview({
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const graphRef = useRef<ProgramAudioGraph | null>(null);
+  const [playbackDiagnostic, setPlaybackDiagnostic] = useState<ProgramAudioPlaybackDiagnostic>({
+    outputMode: 'blocked',
+    contextState: 'none',
+    playError: '',
+  });
   const source = resolvePreviewMediaSource(layer.asset).source;
   const layerId = buildProgramAudioLayerId(layer);
+  const monitorState = resolveProgramAudioMonitorState(layer, playbackRate, active);
+  const monitorCanPlay = monitorState.canPlay;
+  const monitorGain = monitorState.gain;
+  const monitorPan = monitorState.pan;
+  const monitorPlaybackRate = monitorState.playbackRate;
+  const monitorSeekTime = monitorState.seekTime;
+  const updatePlaybackDiagnostic = useCallback((nextDiagnostic: ProgramAudioPlaybackDiagnostic) => {
+    setPlaybackDiagnostic((current) => (
+      current.outputMode === nextDiagnostic.outputMode
+      && current.contextState === nextDiagnostic.contextState
+      && current.playError === nextDiagnostic.playError
+        ? current
+        : nextDiagnostic
+    ));
+  }, []);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -116,40 +162,134 @@ function ProgramAudioLayerPreview({
       return;
     }
 
-    const monitorState = resolveProgramAudioMonitorState(layer, playbackRate, active);
+    let cancelled = false;
     audio.muted = false;
-    audio.playbackRate = monitorState.playbackRate > 0 ? monitorState.playbackRate : 1;
+    audio.playbackRate = monitorPlaybackRate > 0 ? monitorPlaybackRate : 1;
 
     try {
-      if (Math.abs(audio.currentTime - monitorState.seekTime) > 0.18) {
-        audio.currentTime = monitorState.seekTime;
+      if (Math.abs(audio.currentTime - monitorSeekTime) > 0.18) {
+        audio.currentTime = monitorSeekTime;
       }
     } catch {
       // The element may reject seeks before metadata is ready.
     }
 
-    const graph = ensureProgramAudioGraph(audio, graphRef);
-    if (graph) {
-      graph.gain.gain.setTargetAtTime(monitorState.gain, graph.context.currentTime, 0.015);
-      graph.panner?.pan.setTargetAtTime(monitorState.pan, graph.context.currentTime, 0.015);
-      audio.volume = 1;
-    } else {
-      audio.volume = Math.min(1, monitorState.gain);
-    }
+    audio.volume = Math.min(1, monitorGain);
 
-    if (!isPlaying || !monitorState.canPlay || monitorState.gain <= 0) {
+    if (!isPlaying || !monitorCanPlay || monitorGain <= 0) {
       audio.pause();
-      return;
+      updatePlaybackDiagnostic({
+        outputMode: 'blocked',
+        contextState: graphRef.current?.context.state ?? 'none',
+        playError: '',
+      });
+      return () => {
+        cancelled = true;
+      };
     }
 
-    if (graph?.context.state === 'suspended') {
-      void graph.context.resume().catch(() => undefined);
+    const existingGraph = graphRef.current;
+    if (existingGraph?.context.state === 'running') {
+      configureProgramAudioGraph(existingGraph, monitorGain, monitorPan);
+      audio.volume = 1;
+      updatePlaybackDiagnostic({
+        outputMode: 'web-audio',
+        contextState: existingGraph.context.state,
+        playError: '',
+      });
+    } else {
+      updatePlaybackDiagnostic({
+        outputMode: 'native',
+        contextState: existingGraph?.context.state ?? sharedProgramAudioContext?.state ?? 'none',
+        playError: '',
+      });
     }
 
     if (audio.paused) {
-      void audio.play().catch(() => undefined);
+      void audio.play()
+        .then(() => {
+          if (!cancelled) {
+            updatePlaybackDiagnostic({
+              outputMode: graphRef.current?.context.state === 'running' ? 'web-audio' : 'native',
+              contextState: graphRef.current?.context.state ?? sharedProgramAudioContext?.state ?? 'none',
+              playError: '',
+            });
+          }
+        })
+        .catch((error: unknown) => {
+          if (!cancelled) {
+            updatePlaybackDiagnostic({
+              outputMode: graphRef.current?.context.state === 'running' ? 'web-audio' : 'native',
+              contextState: graphRef.current?.context.state ?? sharedProgramAudioContext?.state ?? 'none',
+              playError: error instanceof Error ? error.name : 'playback-error',
+            });
+          }
+        });
     }
-  }, [active, isPlaying, layer, layer.clip.id, layer.clip.reversed, layer.clip.speed, layer.localTime, layer.style.pan, layer.style.volume, playbackRate, source]);
+
+    const context = existingGraph?.context ?? getSharedProgramAudioContext();
+    if (!context) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const prepareGraph = () => {
+      if (cancelled) {
+        return;
+      }
+
+      const graph = ensureProgramAudioGraph(audio, graphRef);
+      if (!graph || graph.context.state !== 'running') {
+        updatePlaybackDiagnostic({
+          outputMode: 'native',
+          contextState: graph?.context.state ?? context.state,
+          playError: '',
+        });
+        audio.volume = Math.min(1, monitorGain);
+        return;
+      }
+
+      configureProgramAudioGraph(graph, monitorGain, monitorPan);
+      audio.volume = 1;
+      updatePlaybackDiagnostic({
+        outputMode: 'web-audio',
+        contextState: graph.context.state,
+        playError: '',
+      });
+    };
+
+    if (context.state === 'running') {
+      prepareGraph();
+    } else {
+      void context.resume()
+        .then(prepareGraph)
+        .catch(() => {
+          if (!cancelled) {
+            updatePlaybackDiagnostic({
+              outputMode: 'native',
+              contextState: context.state,
+              playError: '',
+            });
+            audio.volume = Math.min(1, monitorGain);
+          }
+        });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isPlaying,
+    layer.clip.id,
+    monitorCanPlay,
+    monitorGain,
+    monitorPan,
+    monitorPlaybackRate,
+    monitorSeekTime,
+    source,
+    updatePlaybackDiagnostic,
+  ]);
 
   useEffect(() => {
     if (!onFftLayerSample || !onFftLayerEnd || !active || !isPlaying) {
@@ -200,7 +340,31 @@ function ProgramAudioLayerPreview({
     return null;
   }
 
-  return <audio ref={audioRef} src={source} preload="auto" />;
+  return (
+    <audio
+      ref={audioRef}
+      src={source}
+      preload="auto"
+      data-testid={`program-audio-layer-${layer.clip.id}`}
+      data-audio-layer-id={layerId}
+      data-audio-asset-id={layer.asset.id}
+      data-audio-clip-id={layer.clip.id}
+      data-audio-can-play={monitorState.canPlay ? 'true' : 'false'}
+      data-audio-gain={monitorState.gain}
+      data-audio-pan={monitorState.pan}
+      data-audio-playback-rate={monitorState.playbackRate}
+      data-audio-seek-time={monitorState.seekTime}
+      data-audio-reason={monitorState.reason ?? ''}
+      data-audio-output-mode={playbackDiagnostic.outputMode}
+      data-audio-context-state={playbackDiagnostic.contextState}
+      data-audio-play-error={playbackDiagnostic.playError}
+    />
+  );
+}
+
+function configureProgramAudioGraph(graph: ProgramAudioGraph, gain: number, pan: number) {
+  graph.gain.gain.setTargetAtTime(gain, graph.context.currentTime, 0.015);
+  graph.panner?.pan.setTargetAtTime(pan, graph.context.currentTime, 0.015);
 }
 
 function ensureProgramAudioGraph(

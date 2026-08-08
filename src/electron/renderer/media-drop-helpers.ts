@@ -242,7 +242,7 @@ export function buildAssetTimelineDropOptions({
   const includePrimary = track.kind !== 'audio' && mediaKind !== 'audio';
   const includeAudio = track.kind === 'audio'
     ? mediaKind === 'audio' || hasEmbeddedAudio(asset)
-    : settings.sourceAudioPatchEnabled && hasEmbeddedAudio(asset);
+    : hasEmbeddedAudio(asset);
 
   return {
     start,
@@ -530,12 +530,21 @@ function buildDropPreviewPlan({
       label,
       mode: editMode,
       valid,
+      operation: 'asset-drop',
+      ripple: editMode === 'insert',
+      collision: !valid,
+      constrained: !valid,
     },
     editGuide: {
       trackId,
       time: start,
       label: valid ? editMode : 'Invalid',
       tone: valid ? 'drop' : 'limit',
+      operation: 'asset-drop',
+      duration,
+      groupCount: 1,
+      constrained: !valid,
+      ripple: editMode === 'insert',
     },
   };
 }

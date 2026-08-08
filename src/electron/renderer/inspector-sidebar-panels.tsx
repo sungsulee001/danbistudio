@@ -63,8 +63,8 @@ interface CaptionEditorPanelProps {
 
 export function InspectorTechnicalPanel({ clip }: InspectorTechnicalPanelProps) {
   return (
-    <div className="rounded-md border border-zinc-800 bg-zinc-900 p-3">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Technical</h2>
+    <div className="rounded-md border border-ds-200 bg-surface p-3">
+      <h2 className="text-kicker font-heading font-semibold uppercase text-ds-600">Technical</h2>
       <dl className="mt-3 space-y-3 text-sm">
         <Readout label="Track" value={clip.trackId} />
         <Readout label="Asset" value={clip.assetId ?? 'none'} />
@@ -89,22 +89,22 @@ export function MarkerPanel({
   formatTimecode,
 }: MarkerPanelProps) {
   return (
-    <div className="mt-6 rounded-md border border-zinc-800 bg-zinc-900 p-3">
+    <div className="mt-6 rounded-md border border-ds-200 bg-surface p-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Markers</h2>
+        <h2 className="text-kicker font-heading font-semibold uppercase text-ds-600">Markers</h2>
         <div className="flex gap-2">
-          <button type="button" className="text-xs text-zinc-300 hover:text-emerald-200" onClick={() => onJumpAdjacentMarker('previous')}>Prev</button>
-          <button type="button" className="text-xs text-zinc-300 hover:text-emerald-200" onClick={() => onJumpAdjacentMarker('next')}>Next</button>
+          <button type="button" className="text-xs text-ds-700 hover:text-accent-800" onClick={() => onJumpAdjacentMarker('previous')}>Prev</button>
+          <button type="button" className="text-xs text-ds-700 hover:text-accent-800" onClick={() => onJumpAdjacentMarker('next')}>Next</button>
         </div>
       </div>
       <div className="mt-3 flex gap-2">
         <input
           value={markerLabel}
           onChange={(event) => onMarkerLabelChange(event.target.value)}
-          className="min-w-0 flex-1 rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-sm outline-none focus:border-emerald-500"
+          className="min-w-0 flex-1 rounded-md border border-ds-200 bg-paper px-2 py-2 text-sm outline-none focus:border-accent-500"
         />
         <button
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm hover:border-emerald-500"
+          className="rounded-md border border-ds-200 bg-paper px-3 py-2 text-sm hover:border-accent-500"
           onClick={onAddMarkerAtPlayhead}
         >
           Add
@@ -112,29 +112,29 @@ export function MarkerPanel({
       </div>
       <div className="mt-3 max-h-72 space-y-2 overflow-auto pr-1 custom-scrollbar">
         {markers.length === 0 ? (
-          <div className="rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-500">
+          <div className="rounded-md border border-ds-200 bg-paper p-3 text-xs text-ds-600">
             No markers
           </div>
         ) : markers.map((marker) => (
-          <div key={marker.id} className="rounded-md border border-zinc-800 bg-zinc-950 p-2 text-xs text-zinc-300">
+          <div key={marker.id} className="rounded-md border border-ds-200 bg-paper p-2 text-xs text-ds-700">
             <div className="flex items-center justify-between gap-2">
               <button
                 type="button"
-                className="rounded border border-zinc-800 px-2 py-1 font-mono text-[11px] text-emerald-200 hover:border-emerald-500"
+                className="rounded border border-ds-200 px-2 py-1 tabular-nums text-meta text-accent-800 hover:border-accent-500"
                 onClick={() => onJumpToMarker(marker.id)}
               >
                 {formatTimecode(marker.time, fps)}
               </button>
               <button
                 type="button"
-                className="rounded border border-zinc-800 px-2 py-1 text-[11px] hover:border-sky-500"
+                className="rounded border border-ds-200 px-2 py-1 text-meta hover:border-info-500"
                 onClick={() => onMoveMarkerToPlayhead(marker.id)}
               >
                 At playhead
               </button>
               <button
                 type="button"
-                className="text-rose-300 hover:text-rose-200"
+                className="text-danger-700 hover:text-danger-800"
                 onClick={() => onDeleteMarker(marker.id)}
               >
                 Delete
@@ -143,13 +143,13 @@ export function MarkerPanel({
             <input
               defaultValue={marker.label}
               onBlur={(event) => onMarkerPatch(marker.id, { label: event.currentTarget.value })}
-              className="mt-2 w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-100 outline-none focus:border-emerald-500"
+              className="mt-2 w-full rounded border border-ds-200 bg-surface px-2 py-1 text-ink outline-none focus:border-accent-500"
             />
             <textarea
               defaultValue={marker.note ?? ''}
               rows={2}
               onBlur={(event) => onMarkerPatch(marker.id, { note: event.currentTarget.value })}
-              className="mt-2 w-full resize-none rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-100 outline-none focus:border-emerald-500"
+              className="mt-2 w-full resize-none rounded border border-ds-200 bg-surface px-2 py-1 text-ink outline-none focus:border-accent-500"
             />
             <div className="mt-2 grid grid-cols-[1fr_1fr_88px_38px] gap-2">
               <input
@@ -164,7 +164,7 @@ export function MarkerPanel({
                     onMarkerPatch(marker.id, { time: value });
                   }
                 }}
-                className="rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-100 outline-none focus:border-emerald-500"
+                className="rounded border border-ds-200 bg-surface px-2 py-1 text-ink outline-none focus:border-accent-500"
               />
               <input
                 aria-label="Marker duration"
@@ -184,12 +184,12 @@ export function MarkerPanel({
                     onMarkerPatch(marker.id, { duration });
                   }
                 }}
-                className="rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-100 outline-none focus:border-emerald-500"
+                className="rounded border border-ds-200 bg-surface px-2 py-1 text-ink outline-none focus:border-accent-500"
               />
               <select
                 defaultValue={marker.kind}
                 onChange={(event) => onMarkerPatch(marker.id, { kind: event.currentTarget.value as TimelineMarker['kind'] })}
-                className="rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-100 outline-none focus:border-emerald-500"
+                className="rounded border border-ds-200 bg-surface px-2 py-1 text-ink outline-none focus:border-accent-500"
               >
                 <option value="chapter">chapter</option>
                 <option value="beat">beat</option>
@@ -201,7 +201,7 @@ export function MarkerPanel({
                 type="color"
                 defaultValue={marker.color}
                 onChange={(event) => onMarkerPatch(marker.id, { color: event.currentTarget.value })}
-                className="h-8 w-full rounded border border-zinc-800 bg-zinc-900"
+                className="h-8 w-full rounded border border-ds-200 bg-surface"
               />
             </div>
           </div>
@@ -245,23 +245,23 @@ export function CaptionEditorPanel({
   formatTimecode,
 }: CaptionEditorPanelProps) {
   return (
-    <div className="mt-6 rounded-md border border-zinc-800 bg-zinc-900 p-3">
+    <div className="mt-6 rounded-md border border-ds-200 bg-surface p-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Captions</h2>
+        <h2 className="text-kicker font-heading font-semibold uppercase text-ds-600">Captions</h2>
         <div className="flex flex-wrap justify-end gap-2">
-          <button className="text-xs text-emerald-300 hover:text-emerald-200" onClick={onAddCaption}>Add</button>
-          <button className="text-xs text-sky-300 hover:text-sky-200" onClick={onGenerateCaptionDraft}>Draft</button>
-          <button className="text-xs text-zinc-300 hover:text-emerald-200" onClick={onImportCaptionSidecar}>Import</button>
-          <button className="text-xs text-zinc-300 hover:text-emerald-200" onClick={onSelectSttCaptionIssues}>STT Issues</button>
-          <button className="text-xs text-zinc-300 hover:text-emerald-200" onClick={onCleanSttCaptions}>Clean STT</button>
-          <button className="text-xs text-cyan-300 hover:text-cyan-200" onClick={onDiarizeSpeakers}>Diarize</button>
-          <button className="text-xs text-zinc-300 hover:text-emerald-200" onClick={() => onMoveCaptionsToPlayhead()}>At playhead</button>
-          <button className="text-xs text-zinc-300 hover:text-emerald-200" onClick={onSplitActiveCaption}>Split</button>
-          <button className="text-xs text-zinc-300 hover:text-emerald-200" onClick={onMergeSelectedCaptions}>Merge</button>
+          <button className="text-xs text-accent-700 hover:text-accent-800" onClick={onAddCaption}>Add</button>
+          <button className="text-xs text-info-700 hover:text-info-800" onClick={onGenerateCaptionDraft}>Draft</button>
+          <button className="text-xs text-ds-700 hover:text-accent-800" onClick={onImportCaptionSidecar}>Import</button>
+          <button className="text-xs text-ds-700 hover:text-accent-800" onClick={onSelectSttCaptionIssues}>STT Issues</button>
+          <button className="text-xs text-ds-700 hover:text-accent-800" onClick={onCleanSttCaptions}>Clean STT</button>
+          <button className="text-xs text-info-700 hover:text-info-800" onClick={onDiarizeSpeakers}>Diarize</button>
+          <button className="text-xs text-ds-700 hover:text-accent-800" onClick={() => onMoveCaptionsToPlayhead()}>At playhead</button>
+          <button className="text-xs text-ds-700 hover:text-accent-800" onClick={onSplitActiveCaption}>Split</button>
+          <button className="text-xs text-ds-700 hover:text-accent-800" onClick={onMergeSelectedCaptions}>Merge</button>
         </div>
       </div>
       {sttCaptionReview.captionCount > 0 ? (
-        <div className="mt-2 grid grid-cols-4 gap-2 text-[11px] text-zinc-400">
+        <div className="mt-2 grid grid-cols-4 gap-2 text-meta text-ds-700">
           <span>STT {sttCaptionReview.captionCount}</span>
           <span>Issues {sttCaptionReview.issueCount}</span>
           <span>Low conf {sttCaptionReview.lowConfidenceCount}</span>
@@ -269,7 +269,7 @@ export function CaptionEditorPanel({
         </div>
       ) : null}
       {speakerDiarizationReport.captionCount > 0 ? (
-        <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-zinc-400 sm:grid-cols-6">
+        <div className="mt-2 grid grid-cols-3 gap-2 text-meta text-ds-700 sm:grid-cols-6">
           <span>Speakers {speakerDiarizationReport.speakerCount}</span>
           <span>Turns {speakerDiarizationReport.turnCount}</span>
           <span>Missing {speakerDiarizationReport.missingSpeakerCount}</span>
@@ -286,7 +286,7 @@ export function CaptionEditorPanel({
         onChange={onCaptionSidecarFileChange}
       />
       {selectedCaptionIds.length > 0 ? (
-        <div className="mt-2 space-y-2 text-[11px] text-zinc-500">
+        <div className="mt-2 space-y-2 text-meta text-ds-600">
           <div className="flex items-center justify-between gap-2">
             <span>
               {selectedCaptionIds.length} caption{selectedCaptionIds.length > 1 ? 's' : ''} selected
@@ -294,7 +294,7 @@ export function CaptionEditorPanel({
             <button
               type="button"
               onClick={onDeleteSelectedCaptions}
-              className="text-rose-300 hover:text-rose-200"
+              className="text-danger-700 hover:text-danger-800"
             >
               Delete selected
             </button>
@@ -306,7 +306,7 @@ export function CaptionEditorPanel({
             <CaptionNudgeButton label="+0.1s" onClick={() => onNudgeSelectedCaptions(0.1)} />
           </div>
           <div className="grid grid-cols-[1fr_104px] items-end gap-2">
-            <label className="text-zinc-500">
+            <label className="text-ds-600">
               Speaker
               <input
                 value={captionSpeakerDraft}
@@ -318,13 +318,13 @@ export function CaptionEditorPanel({
                   }
                 }}
                 placeholder="Speaker"
-                className="mt-1 w-full rounded border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs text-zinc-100 outline-none focus:border-emerald-500"
+                className="mt-1 w-full rounded border border-ds-200 bg-paper px-2 py-2 text-xs text-ink outline-none focus:border-accent-500"
               />
             </label>
             <button
               type="button"
               onClick={onApplyCaptionSpeaker}
-              className="rounded border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs text-zinc-200 hover:border-emerald-500"
+              className="rounded border border-ds-200 bg-paper px-2 py-2 text-xs text-ds-800 hover:border-accent-500"
             >
               Apply
             </button>
@@ -342,7 +342,7 @@ export function CaptionEditorPanel({
               <button
                 type="button"
                 onClick={onTightenSelectedCaptions}
-                className="rounded border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs text-zinc-200 hover:border-emerald-500"
+                className="rounded border border-ds-200 bg-paper px-2 py-2 text-xs text-ds-800 hover:border-accent-500"
               >
                 Tighten
               </button>
@@ -352,7 +352,7 @@ export function CaptionEditorPanel({
       ) : null}
       <div className="mt-3 max-h-64 space-y-3 overflow-auto pr-1 custom-scrollbar">
         {captions.length === 0 ? (
-          <div className="rounded-md border border-zinc-800 bg-zinc-950 p-3 text-xs text-zinc-500">
+          <div className="rounded-md border border-ds-200 bg-paper p-3 text-xs text-ds-600">
             No captions
           </div>
         ) : captions.map((caption) => (
@@ -403,38 +403,38 @@ function CaptionEditorItem({
 }) {
   return (
     <div
-      className={`rounded-md border p-2 text-xs text-zinc-300 ${
+      className={`rounded-md border p-2 text-xs text-ds-700 ${
         selected
-          ? 'border-emerald-500 bg-emerald-500/10'
-          : 'border-zinc-800 bg-zinc-950'
+          ? 'border-accent-500 bg-accent-500/10'
+          : 'border-ds-200 bg-paper'
       }`}
     >
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex gap-2">
           <button
             type="button"
-            className="rounded border border-zinc-800 px-2 py-1 font-mono text-[11px] text-emerald-200 hover:border-emerald-500"
+            className="rounded border border-ds-200 px-2 py-1 tabular-nums text-meta text-accent-800 hover:border-accent-500"
             onClick={() => onJumpToCaption(caption.id)}
           >
             {formatTimecode(caption.start, fps)}
           </button>
           <button
             type="button"
-            className="rounded border border-zinc-800 px-2 py-1 text-[11px] hover:border-emerald-500"
+            className="rounded border border-ds-200 px-2 py-1 text-meta hover:border-accent-500"
             onClick={() => onSelectCaption(caption.id)}
           >
             Select
           </button>
           <button
             type="button"
-            className="rounded border border-zinc-800 px-2 py-1 text-[11px] hover:border-emerald-500"
+            className="rounded border border-ds-200 px-2 py-1 text-meta hover:border-accent-500"
             onClick={() => onSelectCaption(caption.id, true)}
           >
             Multi
           </button>
           <button
             type="button"
-            className="rounded border border-zinc-800 px-2 py-1 text-[11px] hover:border-sky-500"
+            className="rounded border border-ds-200 px-2 py-1 text-meta hover:border-info-500"
             onClick={() => onMoveCaptionsToPlayhead([caption.id])}
           >
             At playhead
@@ -442,7 +442,7 @@ function CaptionEditorItem({
         </div>
         <button
           type="button"
-          className="text-rose-300 hover:text-rose-200"
+          className="text-danger-700 hover:text-danger-800"
           onClick={() => onDeleteCaption(caption.id)}
         >
           Delete
@@ -462,18 +462,18 @@ function CaptionEditorItem({
           onChange={(value) => onCaptionPatch(caption.id, { end: value })}
         />
       </div>
-      <label className="mt-2 block text-zinc-500">
+      <label className="mt-2 block text-ds-600">
         Speaker
         <input
           defaultValue={caption.speaker ?? ''}
           onBlur={(event) => onCaptionPatch(caption.id, { speaker: event.currentTarget.value })}
-          className="mt-1 w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-100 outline-none focus:border-emerald-500"
+          className="mt-1 w-full rounded border border-ds-200 bg-surface px-2 py-1 text-ink outline-none focus:border-accent-500"
         />
       </label>
       <textarea
         defaultValue={caption.text}
         onBlur={(event) => onCaptionPatch(caption.id, { text: event.currentTarget.value })}
-        className="mt-2 min-h-16 w-full resize-y rounded border border-zinc-800 bg-zinc-900 px-2 py-2 text-zinc-100 outline-none focus:border-emerald-500"
+        className="mt-2 min-h-16 w-full resize-y rounded border border-ds-200 bg-surface px-2 py-2 text-ink outline-none focus:border-accent-500"
       />
       <CaptionStyleControls
         caption={caption}
@@ -496,7 +496,7 @@ function CaptionTimeInput({
   onChange: (value: number) => void;
 }) {
   return (
-    <label className="text-zinc-500">
+    <label className="text-ds-600">
       {label}
       <input
         type="number"
@@ -509,7 +509,7 @@ function CaptionTimeInput({
             onChange(nextValue);
           }
         }}
-        className="mt-1 w-full rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-zinc-100 outline-none focus:border-emerald-500"
+        className="mt-1 w-full rounded border border-ds-200 bg-surface px-2 py-1 text-ink outline-none focus:border-accent-500"
       />
     </label>
   );
@@ -520,7 +520,7 @@ function CaptionNudgeButton({ label, onClick }: { label: string; onClick: () => 
     <button
       type="button"
       onClick={onClick}
-      className="rounded border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs text-zinc-200 hover:border-sky-500"
+      className="rounded border border-ds-200 bg-paper px-2 py-2 text-xs text-ds-800 hover:border-info-500"
     >
       {label}
     </button>
@@ -530,8 +530,8 @@ function CaptionNudgeButton({ label, onClick }: { label: string; onClick: () => 
 function Readout({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-3">
-      <dt className="text-zinc-500">{label}</dt>
-      <dd className="truncate text-zinc-200">{value}</dd>
+      <dt className="text-ds-600">{label}</dt>
+      <dd className="truncate text-ds-800">{value}</dd>
     </div>
   );
 }

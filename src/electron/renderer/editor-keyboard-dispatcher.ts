@@ -1,3 +1,6 @@
+import { normalizeEditorShortcut, type EditorCommandId } from '../../lib/editor/command-registry';
+import type { EditorCustomShortcut } from '../../lib/editor/editor-settings';
+
 type MaybePromise = void | Promise<void>;
 
 export interface EditorKeyboardDispatcherContext {
@@ -69,6 +72,8 @@ export interface EditorKeyboardDispatcherContext {
   onDeleteMarkedRange: (ripple: boolean) => void;
   onClearMarks: () => void;
   onMarkSelectedClips: () => void;
+  customShortcuts?: EditorCustomShortcut[];
+  onRunCommand?: (commandId: EditorCommandId) => void;
 }
 
 export function dispatchEditorKeyboardShortcut(event: KeyboardEvent, context: EditorKeyboardDispatcherContext): boolean {
@@ -518,6 +523,13 @@ export function dispatchEditorKeyboardShortcut(event: KeyboardEvent, context: Ed
     return true;
   }
 
+  const customCommandId = resolveCustomShortcutCommand(event, context.customShortcuts);
+  if (customCommandId && context.onRunCommand) {
+    event.preventDefault();
+    context.onRunCommand(customCommandId);
+    return true;
+  }
+
   return false;
 }
 
@@ -528,4 +540,22 @@ export function isEditorTextInputTarget(target: EventTarget | null): boolean {
 
   const tagName = target.tagName.toLowerCase();
   return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target.isContentEditable;
+}
+
+function resolveCustomShortcutCommand(
+  event: KeyboardEvent,
+  customShortcuts: EditorCustomShortcut[] | undefined,
+): EditorCommandId | null {
+  if (!customShortcuts || customShortcuts.length === 0) {
+    return null;
+  }
+
+  const shortcut = normalizeEditorShortcut([
+    event.ctrlKey || event.metaKey ? 'ctrl' : '',
+    event.shiftKey ? 'shift' : '',
+    event.altKey ? 'alt' : '',
+    event.key,
+  ].filter(Boolean).join('+'));
+
+  return customShortcuts.find((item) => item.enabled && item.shortcut === shortcut)?.commandId ?? null;
 }

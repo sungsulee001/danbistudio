@@ -71,10 +71,10 @@ export function ComfyUIResultReviewPanel({
   const lineage = selectedItem.reviewReport.lineage;
 
   return (
-    <div className="rounded-md border border-violet-500/30 bg-violet-500/10 p-3">
+    <div className="rounded-md border border-accent2-500/30 bg-accent2-500/10 p-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-violet-100">AI Result Review</h2>
-        <span className="text-[11px] text-violet-200">{items.length} ready</span>
+        <h2 className="text-kicker font-heading font-semibold uppercase text-accent2-900">AI Result Review</h2>
+        <span className="text-meta text-accent2-800">{items.length} ready</span>
       </div>
 
       {items.length > 1 ? (
@@ -83,10 +83,10 @@ export function ComfyUIResultReviewPanel({
             <button
               key={item.result.automationJobId}
               type="button"
-              className={`shrink-0 rounded border px-2 py-1 text-[11px] ${
+              className={`shrink-0 rounded border px-2 py-1 text-meta ${
                 item.result.automationJobId === selectedItem.result.automationJobId
-                  ? 'border-violet-300 bg-violet-300/15 text-white'
-                  : 'border-zinc-700 bg-zinc-950 text-zinc-300 hover:border-violet-400'
+                  ? 'border-accent2-700 bg-accent2-700/15 text-ink'
+                  : 'border-ds-300 bg-paper text-ds-700 hover:border-accent2-600'
               }`}
               onClick={() => onSelect(item.result.automationJobId)}
             >
@@ -112,7 +112,7 @@ export function ComfyUIResultReviewPanel({
         />
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-zinc-300">
+      <div className="mt-3 grid grid-cols-2 gap-2 text-meta text-ds-700">
         <ReviewReadout label="Clip" value={selectedItem.sourceClip.name} />
         <ReviewReadout label="Time" value={formatTimecode(selectedItem.sourceClip.start + localTime, fps)} />
         <ReviewReadout label="Source" value={`${selectedItem.sourceClip.duration.toFixed(2)}s ${selectedItem.reviewReport.sourceResolution ?? 'source'}`} />
@@ -123,25 +123,25 @@ export function ComfyUIResultReviewPanel({
         <ReviewReadout label="Cache" value={`${selectedItem.reviewReport.hasProxy ? 'proxy' : 'no proxy'} / ${selectedItem.reviewReport.hasWaveform ? 'waveform' : 'no waveform'}`} />
       </div>
 
-      <div className="mt-3 rounded border border-violet-400/20 bg-zinc-950/70 p-2">
+      <div className="mt-3 rounded border border-accent2-600/20 bg-paper/70 p-2">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-violet-100">Prompt lineage</span>
-          <span className={`rounded px-2 py-0.5 text-[11px] ${comfyUIPromptLineageClass(lineage.versionLabel)}`}>
+          <span className="text-meta font-semibold uppercase tracking-wide text-accent2-900">Prompt lineage</span>
+          <span className={`rounded px-2 py-0.5 text-meta ${comfyUIPromptLineageClass(lineage.versionLabel)}`}>
             {formatComfyUIPromptLineageVersion(lineage.versionLabel)}
           </span>
         </div>
-        <div className="mt-2 space-y-1 text-[11px] text-zinc-300">
+        <div className="mt-2 space-y-1 text-meta text-ds-700">
           {lineage.changes.length > 0 ? (
             lineage.changes.map((change) => (
-              <div key={change.field} className="grid grid-cols-[88px_minmax(0,1fr)] gap-2 rounded bg-zinc-900/70 px-2 py-1">
-                <span className="text-zinc-500">{change.label}</span>
+              <div key={change.field} className="grid grid-cols-[88px_minmax(0,1fr)] gap-2 rounded bg-surface/70 px-2 py-1">
+                <span className="text-ds-600">{change.label}</span>
                 <span className="min-w-0 truncate" title={`${formatLineageValue(change.before)} -> ${formatLineageValue(change.after)}`}>
-                  {formatLineageValue(change.before)} <span className="text-violet-300">-&gt;</span> {formatLineageValue(change.after)}
+                  {formatLineageValue(change.before)} <span className="text-accent2-700">-&gt;</span> {formatLineageValue(change.after)}
                 </span>
               </div>
             ))
           ) : (
-            <div className="rounded bg-zinc-900/70 px-2 py-1 text-zinc-400">
+            <div className="rounded bg-surface/70 px-2 py-1 text-ds-700">
               {lineage.warnings[0] ?? 'Prompt, workflow, and seed match the source generation.'}
             </div>
           )}
@@ -149,7 +149,7 @@ export function ComfyUIResultReviewPanel({
       </div>
 
       {selectedItem.reviewReport.issues[0] || selectedItem.reviewReport.warnings[0] ? (
-        <div className="mt-3 rounded border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-100">
+        <div className="mt-3 rounded border border-warn-500/30 bg-warn-500/10 p-2 text-xs text-warn-900">
           {selectedItem.reviewReport.issues[0] ?? selectedItem.reviewReport.warnings[0]}
         </div>
       ) : null}
@@ -157,21 +157,21 @@ export function ComfyUIResultReviewPanel({
       <div className="mt-3 flex flex-wrap items-center justify-end gap-2 text-xs">
         <button
           type="button"
-          className="rounded border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-emerald-100 hover:border-emerald-300"
+          className="rounded border border-accent-500/40 bg-accent-500/10 px-3 py-1.5 text-accent-900 hover:border-accent-700"
           onClick={onImportAll}
         >
           Import all
         </button>
         <button
           type="button"
-          className="rounded border border-violet-400/50 bg-violet-400/10 px-3 py-1.5 text-violet-100 hover:border-violet-200"
+          className="rounded border border-accent2-600/50 bg-accent2-600/10 px-3 py-1.5 text-accent2-900 hover:border-accent2-800"
           onClick={onReplaceAll}
         >
           Replace originals
         </button>
         <button
           type="button"
-          className="rounded border border-cyan-400/50 bg-cyan-400/10 px-3 py-1.5 text-cyan-100 hover:border-cyan-200"
+          className="rounded border border-info-600/50 bg-info-600/10 px-3 py-1.5 text-info-900 hover:border-info-800"
           onClick={onApplyAllAsAiEffectPass}
         >
           Apply as AI FX
@@ -199,14 +199,14 @@ function formatComfyUIPromptLineageVersion(version: ComfyUIResultReviewReport['l
 function comfyUIPromptLineageClass(version: ComfyUIResultReviewReport['lineage']['versionLabel']): string {
   switch (version) {
     case 'same':
-      return 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-200';
+      return 'border border-accent-500/30 bg-accent-500/10 text-accent-800';
     case 'changed':
-      return 'border border-violet-400/30 bg-violet-400/10 text-violet-100';
+      return 'border border-accent2-600/30 bg-accent2-600/10 text-accent2-900';
     case 'missing-source':
     case 'missing-result':
-      return 'border border-amber-500/30 bg-amber-500/10 text-amber-100';
+      return 'border border-warn-500/30 bg-warn-500/10 text-warn-900';
     default:
-      return 'border border-zinc-700 bg-zinc-900 text-zinc-300';
+      return 'border border-ds-300 bg-surface text-ds-700';
   }
 }
 
@@ -248,7 +248,7 @@ function ReviewMediaPreview({
 
   if (!asset || previewState.status !== 'ready') {
     return (
-      <div className="relative flex min-h-40 items-center justify-center overflow-hidden rounded border border-zinc-800 bg-black p-4 text-center text-xs text-zinc-500">
+      <div className="relative flex min-h-40 items-center justify-center overflow-hidden rounded border border-ds-200 on-dark bg-monitor p-4 text-center text-xs text-ds-600">
         <ReviewPreviewBadge label={label} name={asset?.name ?? fallbackName ?? clip.name} time={localTime} />
         {previewState.message}
       </div>
@@ -262,7 +262,7 @@ function ReviewMediaPreview({
     ? <ReviewWaveform peaks={asset.mediaCache.waveformPeaks} />
     : null;
   const cacheBadge = (
-    <div className="pointer-events-none absolute bottom-2 right-2 rounded bg-black/75 px-2 py-1 text-[10px] text-zinc-300">
+    <div className="pointer-events-none absolute bottom-2 right-2 rounded on-dark bg-black/75 px-2 py-1 text-micro text-ds-700">
       {formatPreviewSourceMode(previewSource)}
       {previewSource.hasWaveform ? ' / waveform' : ''}
     </div>
@@ -271,7 +271,7 @@ function ReviewMediaPreview({
   const mediaKind = resolveRenderableAssetMediaKind(asset);
   if (mediaKind === 'image') {
     return (
-      <div className="relative flex min-h-40 items-center justify-center overflow-hidden rounded border border-zinc-800 bg-black">
+      <div className="relative flex min-h-40 items-center justify-center overflow-hidden rounded border border-ds-200 on-dark bg-monitor">
         <img src={source} alt={asset.name} className="max-h-48 max-w-full object-contain" />
         {overlay}
         {cacheBadge}
@@ -281,7 +281,7 @@ function ReviewMediaPreview({
 
   if (mediaKind === 'audio') {
     return (
-      <div className="relative flex min-h-40 flex-col items-center justify-center gap-3 overflow-hidden rounded border border-zinc-800 bg-black p-4">
+      <div className="relative flex min-h-40 flex-col items-center justify-center gap-3 overflow-hidden rounded border border-ds-200 on-dark bg-monitor p-4">
         {waveform ?? <ReviewWaveform peaks={undefined} seed={clip.id} />}
         <audio ref={audioRef} src={source} controls className="w-full" />
         {overlay}
@@ -291,7 +291,7 @@ function ReviewMediaPreview({
   }
 
   return (
-    <div className="relative flex min-h-40 items-center justify-center overflow-hidden rounded border border-zinc-800 bg-black">
+    <div className="relative flex min-h-40 items-center justify-center overflow-hidden rounded border border-ds-200 on-dark bg-monitor">
       <video
         ref={videoRef}
         src={source}
@@ -300,7 +300,7 @@ function ReviewMediaPreview({
         className="max-h-52 max-w-full object-contain"
       />
       {waveform ? (
-        <div className="absolute inset-x-3 bottom-3 h-10 rounded bg-black/70 p-1">
+        <div className="absolute inset-x-3 bottom-3 h-10 rounded on-dark bg-black/70 p-1">
           <ReviewWaveform peaks={asset.mediaCache?.waveformPeaks} compact />
         </div>
       ) : null}
@@ -320,7 +320,7 @@ function ReviewWaveform({ peaks, seed = 'review', compact = false }: { peaks?: n
       {values.map((value, index) => (
         <span
           key={index}
-          className="flex-1 rounded-sm bg-emerald-400/75"
+          className="flex-1 rounded-sm bg-accent-600/75"
           style={{ height: `${12 + Math.min(1, Math.max(0, value)) * 78}%` }}
         />
       ))}
@@ -330,20 +330,20 @@ function ReviewWaveform({ peaks, seed = 'review', compact = false }: { peaks?: n
 
 function ReviewPreviewBadge({ label, name, time }: { label: string; name: string; time: number }) {
   return (
-    <div className="pointer-events-none absolute left-2 top-2 max-w-[88%] rounded bg-black/75 px-2 py-1 text-[11px] text-zinc-200">
+    <div className="pointer-events-none absolute left-2 top-2 max-w-[88%] rounded on-dark bg-black/75 px-2 py-1 text-meta text-ds-800">
       <span className="font-semibold text-white">{label}</span>
-      <span className="mx-1 text-zinc-500">/</span>
+      <span className="mx-1 text-ds-600">/</span>
       <span>{name}</span>
-      <span className="ml-1 text-zinc-400">{time.toFixed(2)}s</span>
+      <span className="ml-1 text-ds-700">{time.toFixed(2)}s</span>
     </div>
   );
 }
 
 function ReviewReadout({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between border-b border-zinc-800 py-2 text-sm">
-      <span className="text-zinc-500">{label}</span>
-      <span className="text-zinc-100">{value}</span>
+    <div className="flex items-center justify-between border-b border-ds-200 py-2 text-sm">
+      <span className="text-ds-600">{label}</span>
+      <span className="text-ink">{value}</span>
     </div>
   );
 }

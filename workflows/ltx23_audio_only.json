@@ -1,0 +1,330 @@
+{
+ "1": {
+  "class_type": "DenoLTX23PresetLoader",
+  "inputs": {
+   "pipeline_mode": "GGUF Style",
+   "checkpoint_name": "ltx-2.3-22b-dev.safetensors",
+   "diffusion_model_name": "ltx-2.3-22b-dev_transformer_only_fp8_scaled.safetensors",
+   "gguf_unet_name": "LTX-2.3-22B-distilled-1.1-Q4_K_M.gguf",
+   "video_vae_name": "LTX23_video_vae_bf16.safetensors",
+   "audio_vae_name": "LTX23_audio_vae_bf16.safetensors",
+   "text_encoder_name": "gemma_3_12B_it_fp4_mixed.safetensors",
+   "text_projection_name": "ltx-2.3_text_projection_bf16.safetensors",
+   "clip_device": "default",
+   "weight_dtype": "default"
+  },
+  "_meta": {
+   "title": "LTX2.3 preset (model/clip/video_vae/audio_vae)"
+  }
+ },
+ "5": {
+  "class_type": "DenoLTXPromptGuide",
+  "inputs": {
+   "clip": [
+    "1",
+    1
+   ],
+   "positive_prompt": "A wooden mechanical arm creaks and swings up, then a beat of stillness, then a single deep bronze bell is struck once - a heavy resonant strike with a long shimmering decay that rings out and slowly fades inside a wooden hall at night. One strike only. Real recorded sound effect only. No music. No voices. No speech.",
+   "language": "Auto",
+   "frame_rate": 24,
+   "show_negative_prompt": true,
+   "negative_prompt": "speech, voice, talking, speaking, singing, narration, dialogue, human voice, vocals, chanting, whispering, music, melody, song, musical score, background music, soundtrack, instruments"
+  },
+  "_meta": {
+   "title": "OVERRIDE positive_prompt = sound description (negative is INERT at cfg=1.0)"
+  }
+ },
+ "2": {
+  "class_type": "DenoMultiImageLoader",
+  "inputs": {
+   "image_paths": "E:/ai_tool/ComfyUI/output/danbi/2026-07-29-jagyeongnu-night/cuts/CUT-50-r1_00001_.png",
+   "mode": "Keep Input Ratio",
+   "ratio_preset": "1:1",
+   "megapixels": 0.25,
+   "width": 1024,
+   "height": 1024,
+   "divisible_by": "32",
+   "interpolation": "bicubic",
+   "resize_method": "Center Crop (Fill)"
+  },
+  "_meta": {
+   "title": "OVERRIDE image_paths = absolute path to the cut image (scene conditioning)"
+  }
+ },
+ "3": {
+  "class_type": "LTXVPreprocess",
+  "inputs": {
+   "image": [
+    "2",
+    0
+   ],
+   "img_compression": 18
+  }
+ },
+ "4": {
+  "class_type": "EmptyLTXVLatentVideo",
+  "inputs": {
+   "width": [
+    "2",
+    1
+   ],
+   "height": [
+    "2",
+    2
+   ],
+   "length": 217,
+   "batch_size": 1
+  },
+  "_meta": {
+   "title": "OVERRIDE length = 1+8k frames = frames_for(seconds,fps)"
+  }
+ },
+ "7": {
+  "class_type": "DenoLTXSequencer",
+  "inputs": {
+   "positive": [
+    "5",
+    0
+   ],
+   "negative": [
+    "5",
+    1
+   ],
+   "vae": [
+    "1",
+    2
+   ],
+   "latent": [
+    "4",
+    0
+   ],
+   "multi_input": [
+    "3",
+    0
+   ],
+   "num_images": 1,
+   "insert_mode": "frames",
+   "frame_rate": 24,
+   "strength_sync": true,
+   "bypass": false,
+   "insert_frame_1": 0,
+   "strength_1": 1.0
+  },
+  "_meta": {
+   "title": "image guide inserted at frame 0; num_images must be >=1 or this is a passthrough"
+  }
+ },
+ "8": {
+  "class_type": "LTXVEmptyLatentAudio",
+  "inputs": {
+   "frames_number": 217,
+   "frame_rate": 24,
+   "batch_size": 1,
+   "audio_vae": [
+    "1",
+    3
+   ]
+  },
+  "_meta": {
+   "title": "OVERRIDE frames_number MUST equal node 4 length"
+  }
+ },
+ "9": {
+  "class_type": "LTXVConcatAVLatent",
+  "inputs": {
+   "video_latent": [
+    "7",
+    2
+   ],
+   "audio_latent": [
+    "8",
+    0
+   ]
+  }
+ },
+ "10": {
+  "class_type": "LTX2AudioLatentNormalizingSampling",
+  "inputs": {
+   "model": [
+    "1",
+    0
+   ],
+   "audio_normalization_factors": "1,1,1,1,1,1"
+  }
+ },
+ "11": {
+  "class_type": "CFGGuider",
+  "inputs": {
+   "model": [
+    "10",
+    0
+   ],
+   "positive": [
+    "7",
+    0
+   ],
+   "negative": [
+    "7",
+    1
+   ],
+   "cfg": 1.0
+  }
+ },
+ "12": {
+  "class_type": "RandomNoise",
+  "inputs": {
+   "noise_seed": 189
+  }
+ },
+ "13": {
+  "class_type": "KSamplerSelect",
+  "inputs": {
+   "sampler_name": "euler"
+  }
+ },
+ "14": {
+  "class_type": "ManualSigmas",
+  "inputs": {
+   "sigmas": "1.0, 0.99375, 0.9875, 0.98125, 0.975, 0.909375, 0.725"
+  }
+ },
+ "15": {
+  "class_type": "SamplerCustomAdvanced",
+  "inputs": {
+   "noise": [
+    "12",
+    0
+   ],
+   "guider": [
+    "11",
+    0
+   ],
+   "sampler": [
+    "13",
+    0
+   ],
+   "sigmas": [
+    "14",
+    0
+   ],
+   "latent_image": [
+    "9",
+    0
+   ]
+  },
+  "_meta": {
+   "title": "stage A: sigmas 1.0 -> 0.725"
+  }
+ },
+ "16": {
+  "class_type": "LTX2AudioLatentNormalizingSampling",
+  "inputs": {
+   "model": [
+    "1",
+    0
+   ],
+   "audio_normalization_factors": "1,1"
+  }
+ },
+ "17": {
+  "class_type": "CFGGuider",
+  "inputs": {
+   "model": [
+    "16",
+    0
+   ],
+   "positive": [
+    "7",
+    0
+   ],
+   "negative": [
+    "7",
+    1
+   ],
+   "cfg": 1.0
+  }
+ },
+ "18": {
+  "class_type": "RandomNoise",
+  "inputs": {
+   "noise_seed": 73
+  }
+ },
+ "19": {
+  "class_type": "ManualSigmas",
+  "inputs": {
+   "sigmas": "0.725, 0.421875, 0.0"
+  }
+ },
+ "20": {
+  "class_type": "SamplerCustomAdvanced",
+  "inputs": {
+   "noise": [
+    "18",
+    0
+   ],
+   "guider": [
+    "17",
+    0
+   ],
+   "sampler": [
+    "13",
+    0
+   ],
+   "sigmas": [
+    "19",
+    0
+   ],
+   "latent_image": [
+    "15",
+    1
+   ]
+  },
+  "_meta": {
+   "title": "stage B: sigmas 0.725 -> 0.0 (audio fully denoised)"
+  }
+ },
+ "21": {
+  "class_type": "LTXVSeparateAVLatent",
+  "inputs": {
+   "av_latent": [
+    "20",
+    1
+   ]
+  },
+  "_meta": {
+   "title": "video_latent (slot 0) intentionally UNCONSUMED -> video is never VAE-decoded"
+  }
+ },
+ "22": {
+  "class_type": "LTXVAudioVAEDecode",
+  "inputs": {
+   "samples": [
+    "21",
+    1
+   ],
+   "audio_vae": [
+    "1",
+    3
+   ]
+  }
+ },
+ "23": {
+  "class_type": "SaveAudioWithPath",
+  "inputs": {
+   "audio": [
+    "22",
+    0
+   ],
+   "folder_path": "E:/ai_tool/ComfyUI/output/danbi/2026-07-29-jagyeongnu-night",
+   "subfolder_name": "sfx",
+   "filename": "CUT-50-sfx",
+   "suffix": "",
+   "sample_rate": 44100,
+   "overwrite": true
+  },
+  "_meta": {
+   "title": "OVERRIDE filename = CUT-NN-sfx ; writes uncompressed WAV, 48kHz stereo"
+  }
+ }
+}

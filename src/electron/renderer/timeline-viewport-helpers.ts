@@ -119,13 +119,18 @@ export function resolveTimelineVisibleScrollLeft({
   viewportWidth,
   currentScrollLeft,
   pixelsPerSecond,
+  timelineStartOffsetPixels = 0,
 }: {
   playhead: number;
   viewportWidth: number;
   currentScrollLeft: number;
   pixelsPerSecond: number;
+  timelineStartOffsetPixels?: number;
 }): number {
-  return timelineScrollLeftForTime(playhead, {
+  const timelineStartOffset = Math.max(0, timelineStartOffsetPixels);
+  const offsetSeconds = pixelsPerSecond > 0 ? timelineStartOffset / pixelsPerSecond : 0;
+
+  return timelineScrollLeftForTime(playhead + offsetSeconds, {
     viewportWidthPixels: viewportWidth,
     currentScrollLeftPixels: currentScrollLeft,
     pixelsPerSecond,
@@ -138,22 +143,26 @@ export function resolveTimelineFitZoom({
   selectedClipIds,
   viewportWidth,
   mode,
+  timelineStartOffsetPixels = 0,
 }: {
   project: EditorProject;
   selectedClipIds: string[];
   viewportWidth: number;
   mode: 'timeline' | 'selection';
+  timelineStartOffsetPixels?: number;
 }): TimelineFitZoomState {
   const range = mode === 'selection' ? findClipSelectionRange(project, selectedClipIds) : undefined;
   const duration = range ? roundTime(range.end - range.start) : project.duration;
-  const nextPixelsPerSecond = fitTimelinePixelsPerSecond(duration, viewportWidth, {
+  const timelineStartOffset = Math.max(0, timelineStartOffsetPixels);
+  const contentViewportWidth = Math.max(0, viewportWidth - timelineStartOffset);
+  const nextPixelsPerSecond = fitTimelinePixelsPerSecond(duration, contentViewportWidth, {
     minPixelsPerSecond: 8,
     maxPixelsPerSecond: 52,
   });
 
   return {
     nextPixelsPerSecond,
-    nextScrollLeft: range ? Math.max(0, (range.start * nextPixelsPerSecond) - 12) : 0,
+    nextScrollLeft: range ? Math.max(0, timelineStartOffset + (range.start * nextPixelsPerSecond) - 12) : 0,
     status: range ? 'Timeline zoom fit to selection' : 'Timeline zoom fit',
   };
 }

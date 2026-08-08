@@ -8,6 +8,7 @@ export function NumberField({
   step,
   min,
   max,
+  testId,
   onChange,
 }: {
   label: string;
@@ -17,10 +18,11 @@ export function NumberField({
   step: number;
   min?: number;
   max?: number;
+  testId?: string;
   onChange: (value: number) => void;
 }) {
   return (
-    <label className="block text-xs text-zinc-500">
+    <label className="block text-xs text-ds-600">
       {label}
       <input
         type="number"
@@ -29,6 +31,7 @@ export function NumberField({
         min={min}
         max={max}
         step={step}
+        data-testid={testId}
         disabled={disabled}
         onChange={(event) => {
           const nextValue = Number(event.target.value);
@@ -36,8 +39,8 @@ export function NumberField({
             onChange(nextValue);
           }
         }}
-        className={`mt-1 w-full rounded-md border bg-zinc-950 px-2 py-2 text-sm text-zinc-100 outline-none placeholder:text-amber-300 focus:border-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 ${
-          mixed ? 'border-amber-500' : 'border-zinc-800'
+        className={`mt-1 w-full rounded-md border bg-paper px-2 py-2 text-sm text-ink outline-none placeholder:text-warn-700 focus:border-accent-500 disabled:cursor-not-allowed disabled:opacity-50 ${
+          mixed ? 'border-warn-500' : 'border-ds-200'
         }`}
       />
     </label>
@@ -48,23 +51,27 @@ export function ToggleButton({
   label,
   active,
   mixed = false,
+  testId,
   onClick,
 }: {
   label: string;
   active: boolean;
   mixed?: boolean;
+  testId?: string;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
+      data-testid={testId}
+      aria-pressed={active}
       onClick={onClick}
       className={`inline-flex min-h-9 items-center justify-center rounded-md border px-3 py-2 text-sm ${
         mixed
-          ? 'border-amber-500 bg-amber-500/10 text-amber-200'
+          ? 'border-warn-500 bg-warn-500/10 text-warn-800'
           : active
-          ? 'border-emerald-500 bg-emerald-500/10 text-emerald-200'
-          : 'border-zinc-700 bg-zinc-900 text-zinc-300 hover:border-emerald-500'
+          ? 'border-accent-500 bg-accent-500/10 text-accent-800'
+          : 'border-ds-300 bg-surface text-ds-700 hover:border-accent-500'
       }`}
     >
       {mixed ? `${label} Mixed` : label}
@@ -77,22 +84,31 @@ export function ToolButton({
   icon,
   onClick,
   disabled = false,
+  testId,
+  compact = false,
 }: {
   label: string;
   icon: ReactNode;
   onClick: () => void;
   disabled?: boolean;
+  testId?: string;
+  compact?: boolean;
 }) {
   return (
     <button
       type="button"
+      data-testid={testId}
+      aria-label={label}
       onClick={onClick}
       disabled={disabled}
-      className="inline-flex min-h-10 items-center gap-2 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 hover:border-emerald-500 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:border-zinc-800 disabled:text-zinc-600 disabled:hover:bg-zinc-900"
+      data-density={compact ? 'compact' : 'normal'}
+      className={`inline-flex items-center justify-center gap-2 rounded-md border border-ds-300 bg-surface text-sm text-ink hover:border-accent-500 hover:bg-ds-200 disabled:cursor-not-allowed disabled:border-ds-200 disabled:text-ds-400 disabled:hover:bg-surface ${
+        compact ? 'min-h-9 min-w-9 px-2 py-2' : 'min-h-10 px-3 py-2'
+      }`}
       title={label}
     >
       {icon}
-      <span>{label}</span>
+      <span className={compact ? 'sr-only' : undefined}>{label}</span>
     </button>
   );
 }

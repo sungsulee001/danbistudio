@@ -36,7 +36,7 @@ export function ProgramTextOverlays({
           >
             {layer.text ?? layer.clip.name}
             {layer.enabledEffects.length > 0 ? (
-              <div className="mt-1 text-xs font-medium uppercase tracking-wide text-emerald-200">
+              <div className="mt-1 text-xs font-medium uppercase tracking-wide text-accent-800">
                 {layer.enabledEffects.join(', ')}
               </div>
             ) : null}
@@ -53,12 +53,17 @@ export function ProgramCaptionOverlays({ stack }: { stack: ProgramPreviewStack }
   }
 
   return (
-    <div className="pointer-events-none absolute inset-0">
+    <div
+      className="pointer-events-none absolute inset-0"
+      data-testid="program-caption-overlay"
+      data-caption-count={stack.activeCaptions.length}
+    >
       {stack.activeCaptions.map((caption) => {
         const style = normalizeCaptionStyle(caption.style);
         return (
           <div
             key={caption.id}
+            data-testid={`program-caption-${caption.id}`}
             className="absolute max-w-[84%] rounded px-4 py-2 font-semibold"
             style={buildCaptionPreviewStyle(style)}
           >
@@ -83,7 +88,7 @@ export function ProgramEffectOverlay({ stack }: { stack: ProgramPreviewStack }) 
   return (
     <div className="pointer-events-none absolute bottom-3 left-3 max-w-[50%] space-y-1">
       {effectNames.slice(0, 4).map((effect) => (
-        <div key={effect} className="rounded bg-emerald-950/80 px-3 py-1 text-[11px] font-medium text-emerald-100">
+        <div key={effect} className="rounded bg-accent-100/80 px-3 py-1 text-meta font-medium text-accent-900">
           {effect}
         </div>
       ))}

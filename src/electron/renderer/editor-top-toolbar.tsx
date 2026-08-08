@@ -1,9 +1,173 @@
-import type { ChangeEvent, RefObject } from 'react';
+import { Children, type ChangeEvent, type ReactNode, type RefObject } from 'react';
 import Link from 'next/link';
 import { SUPPORTED_MEDIA_AND_CAPTION_FILE_ACCEPT, SUPPORTED_MEDIA_FILE_ACCEPT } from '../../lib/editor/media-file-support';
 import { ToggleButton, ToolButton } from './editor-form-controls';
+import { useMenuLanguage } from './use-menu-language';
 
 export type EditorPasteMode = 'insert' | 'overwrite';
+
+const editorToolbarText = {
+  en: {
+    nav: { editor: 'Editor', generate: 'Generate', library: 'Library', settings: 'Settings' },
+    groups: {
+      history: 'History',
+      ingest: 'Ingest',
+      edit: 'Edit',
+      source: 'Source',
+      marks: 'Marks',
+      timeline: 'Timeline',
+      output: 'Output',
+      state: 'State',
+      ai: 'AI',
+    },
+    commands: {
+      undo: 'Undo',
+      redo: 'Redo',
+      import: 'Import',
+      commands: 'Commands',
+      cut: 'Cut',
+      delete: 'Delete',
+      cutAll: 'Cut All',
+      trimIn: 'Trim In',
+      trimOut: 'Trim Out',
+      previousEdit: 'Prev Edit',
+      nextEdit: 'Next Edit',
+      rippleDelete: 'Ripple Del',
+      group: 'Group',
+      ungroup: 'Ungroup',
+      copy: 'Copy',
+      duplicate: 'Duplicate',
+      copyAttributes: 'Copy Attr',
+      paste: 'Paste',
+      pasteAttributes: 'Paste Attr',
+      pasteIn: 'Paste In',
+      append: 'Append',
+      matchSource: 'Match Src',
+      replaceSource: 'Replace Src',
+      selectHere: 'Select Here',
+      moveHere: 'Move Here',
+      pack: 'Pack',
+      selectLeft: 'Select Left',
+      selectRight: 'Select Right',
+      in: 'In',
+      out: 'Out',
+      goIn: 'Go In',
+      goOut: 'Go Out',
+      markSelection: 'Mark Sel',
+      clearInOut: 'Clear I/O',
+      selectRange: 'Select Range',
+      copyRange: 'Copy Range',
+      cutRange: 'Cut Range',
+      lift: 'Lift',
+      extract: 'Extract',
+      closeGap: 'Close Gap',
+      closeAllGaps: 'Close All Gaps',
+      insertGap: 'Insert Gap',
+      ripple: 'Ripple',
+      snap: 'Snap',
+      loop: 'Loop',
+      export: 'Export',
+      render: 'Render',
+      rendering: 'Rendering',
+      renderBlocked: 'Render blocked',
+      comfyBatch: 'Comfy Batch',
+      queueing: 'Queueing',
+      sttCaptions: 'STT Captions',
+      listening: 'Listening',
+    },
+    pasteMode: {
+      title: 'Paste mode',
+      insert: 'Insert mode',
+      overwrite: 'Overwrite mode',
+    },
+    state: {
+      selected: 'selected',
+      clips: 'clips',
+      attrs: 'attrs',
+      noAttrs: 'no attrs',
+    },
+  },
+  ko: {
+    nav: { editor: '편집', generate: '생성', library: '라이브러리', settings: '설정' },
+    groups: {
+      history: '기록',
+      ingest: '가져오기',
+      edit: '편집',
+      source: '소스',
+      marks: '마크',
+      timeline: '타임라인',
+      output: '출력',
+      state: '상태',
+      ai: 'AI',
+    },
+    commands: {
+      undo: '실행 취소',
+      redo: '다시 실행',
+      import: '가져오기',
+      commands: '명령',
+      cut: '자르기',
+      delete: '삭제',
+      cutAll: '전체 자르기',
+      trimIn: '앞 트림',
+      trimOut: '뒤 트림',
+      previousEdit: '이전 컷',
+      nextEdit: '다음 컷',
+      rippleDelete: '리플 삭제',
+      group: '그룹',
+      ungroup: '그룹 해제',
+      copy: '복사',
+      duplicate: '복제',
+      copyAttributes: '속성 복사',
+      paste: '붙여넣기',
+      pasteAttributes: '속성 붙여넣기',
+      pasteIn: '인 지점 붙여넣기',
+      append: '끝에 추가',
+      matchSource: '소스 매칭',
+      replaceSource: '소스로 교체',
+      selectHere: '현재 위치 선택',
+      moveHere: '현재 위치로 이동',
+      pack: '간격 정리',
+      selectLeft: '왼쪽 선택',
+      selectRight: '오른쪽 선택',
+      in: '인',
+      out: '아웃',
+      goIn: '인으로 이동',
+      goOut: '아웃으로 이동',
+      markSelection: '선택 마크',
+      clearInOut: '인/아웃 해제',
+      selectRange: '범위 선택',
+      copyRange: '범위 복사',
+      cutRange: '범위 자르기',
+      lift: '리프트',
+      extract: '추출',
+      closeGap: '간격 닫기',
+      closeAllGaps: '모든 간격 닫기',
+      insertGap: '간격 삽입',
+      ripple: '리플',
+      snap: '스냅',
+      loop: '반복',
+      export: '내보내기',
+      render: '렌더',
+      rendering: '렌더링 중',
+      renderBlocked: '렌더 차단',
+      comfyBatch: 'Comfy 배치',
+      queueing: '대기열 추가 중',
+      sttCaptions: 'STT 자막',
+      listening: '실행 중',
+    },
+    pasteMode: {
+      title: '붙여넣기 모드',
+      insert: '삽입 모드',
+      overwrite: '덮어쓰기 모드',
+    },
+    state: {
+      selected: '선택',
+      clips: '클립',
+      attrs: '속성',
+      noAttrs: '속성 없음',
+    },
+  },
+} as const;
 
 export function EditorTopToolbar({
   fileInputRef,
@@ -14,9 +178,14 @@ export function EditorTopToolbar({
   canUndo,
   canRedo,
   canPackSelection,
+  canSplitAtPlayhead,
+  canTrimSelectionToPlayhead,
   selectedClipCount,
   clipboardClipCount,
   hasAttributeClipboard,
+  hasInMark,
+  hasOutMark,
+  hasMarkedRange,
   historyCount,
   futureCount,
   saveStateLabel,
@@ -94,9 +263,14 @@ export function EditorTopToolbar({
   canUndo: boolean;
   canRedo: boolean;
   canPackSelection: boolean;
+  canSplitAtPlayhead: boolean;
+  canTrimSelectionToPlayhead: boolean;
   selectedClipCount: number;
   clipboardClipCount: number;
   hasAttributeClipboard: boolean;
+  hasInMark: boolean;
+  hasOutMark: boolean;
+  hasMarkedRange: boolean;
   historyCount: number;
   futureCount: number;
   saveStateLabel: string;
@@ -166,21 +340,38 @@ export function EditorTopToolbar({
   onQueueComfyUIBatch: () => void;
   onQueueSttCaptions: () => void;
 }) {
+  const language = useMenuLanguage();
+  const text = editorToolbarText[language];
+  const commands = text.commands;
+  const renderLabel = isRendering
+    ? commands.rendering
+    : renderBlockedByPreflight
+      ? commands.renderBlocked
+      : commands.render;
+
   return (
-    <header className="flex min-h-16 flex-wrap items-center justify-between gap-3 border-b border-zinc-800 bg-zinc-950 px-4 py-3">
-      <div className="flex items-center gap-4">
-        <Link href="/" className="text-sm font-semibold text-zinc-100">
+    <header className="relative z-50 grid min-h-[3.25rem] grid-cols-[auto_minmax(0,1fr)] items-center gap-2 border-b border-ds-200 bg-paper px-2 py-1.5">
+      <div className="flex min-w-0 shrink-0 items-center gap-3">
+        <Link href="/" className="shrink-0 text-sm font-semibold text-ink">
           Danbi Studio
         </Link>
-        <nav className="flex flex-wrap gap-1 text-sm text-zinc-300">
-          <Link className="rounded-md bg-zinc-800 px-3 py-2 text-white" href="/editor">Editor</Link>
-          <Link className="rounded-md px-3 py-2 hover:bg-zinc-900" href="/generate">Generate</Link>
-          <Link className="rounded-md px-3 py-2 hover:bg-zinc-900" href="/library">Library</Link>
-          <Link className="rounded-md px-3 py-2 hover:bg-zinc-900" href="/settings">Settings</Link>
+        <nav className="hidden min-w-0 gap-1 overflow-x-auto text-sm text-ds-700 lg:flex">
+          <Link className="shrink-0 rounded-md bg-ds-200 px-3 py-2 text-ink" href="/editor">{text.nav.editor}</Link>
+          <Link className="shrink-0 rounded-md px-3 py-2 hover:bg-surface" href="/generate">{text.nav.generate}</Link>
+          <Link className="shrink-0 rounded-md px-3 py-2 hover:bg-surface" href="/library">{text.nav.library}</Link>
+          <Link className="shrink-0 rounded-md px-3 py-2 hover:bg-surface" href="/settings">{text.nav.settings}</Link>
         </nav>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div
+        data-testid="editor-toolbar-command-rail"
+        data-selected-clip-count={selectedClipCount}
+        data-clipboard-clip-count={clipboardClipCount}
+        data-has-attribute-clipboard={hasAttributeClipboard ? 'true' : 'false'}
+        data-has-marked-range={hasMarkedRange ? 'true' : 'false'}
+        data-render-state={isRendering ? 'rendering' : renderBlockedByPreflight ? 'blocked' : 'ready'}
+        className="flex min-w-0 items-center gap-1.5 overflow-x-auto whitespace-nowrap pb-1 pt-1"
+      >
         <input
           ref={fileInputRef}
           data-testid="editor-media-file-input"
@@ -219,83 +410,175 @@ export function EditorTopToolbar({
           className="hidden"
           onChange={onBulkRelinkAssetFileChange}
         />
-        <ToolButton label="Undo" onClick={onUndo} icon={<UndoIcon />} disabled={!canUndo} />
-        <ToolButton label="Redo" onClick={onRedo} icon={<RedoIcon />} disabled={!canRedo} />
-        <ToolButton label="Import" onClick={onImportMedia} icon={<ImportIcon />} />
-        <ToolButton label="Commands" onClick={onOpenCommandPalette} icon={<CommandIcon />} />
-        <ToolButton label="Cut" onClick={onSplit} icon={<SplitIcon />} />
-        <ToolButton label="Cut All" onClick={onSplitAll} icon={<SplitIcon />} />
-        <ToolButton label="Trim In" onClick={onTrimIn} icon={<LeftIcon />} />
-        <ToolButton label="Trim Out" onClick={onTrimOut} icon={<RightIcon />} />
-        <ToolButton label="Prev Edit" onClick={onPreviousEdit} icon={<LeftIcon />} />
-        <ToolButton label="Next Edit" onClick={onNextEdit} icon={<RightIcon />} />
-        <ToolButton label="Delete" onClick={onDeleteSelection} icon={<TrashIcon />} />
-        <ToolButton label="Ripple Del" onClick={onRippleDeleteSelection} icon={<ExtractIcon />} />
-        <ToolButton label="Group" onClick={onGroupSelection} icon={<CopyIcon />} />
-        <ToolButton label="Ungroup" onClick={onUngroupSelection} icon={<CutIcon />} />
-        <ToolButton label="Copy" onClick={onCopySelection} icon={<CopyIcon />} />
-        <ToolButton label="Duplicate" onClick={onDuplicateSelection} icon={<CopyIcon />} />
-        <ToolButton label="Copy Attr" onClick={onCopyAttributes} icon={<CopyIcon />} />
-        <ToolButton label="Paste" onClick={onPaste} icon={<PasteIcon />} />
-        <ToolButton label="Paste Attr" onClick={onPasteAttributes} icon={<PasteIcon />} />
-        <ToolButton label="Paste In" onClick={onPasteAtIn} icon={<PasteIcon />} />
-        <ToolButton label="Append" onClick={onAppend} icon={<AppendIcon />} />
-        <ToolButton label="Match Src" onClick={onMatchFrame} icon={<MarkInIcon />} disabled={selectedClipCount === 0} />
-        <ToolButton label="Replace Src" onClick={onReplaceSelectedFromSource} icon={<ReplaceIcon />} disabled={selectedClipCount === 0} />
-        <ToolButton label="Select Here" onClick={onSelectAtPlayhead} icon={<MarkInIcon />} />
-        <ToolButton label="Move Here" onClick={onMoveSelectionToPlayhead} icon={<MarkOutIcon />} />
-        <ToolButton label="Pack" onClick={onPackSelection} icon={<CloseGapIcon />} disabled={!canPackSelection} />
-        <ToolButton label="Insert Gap" onClick={onInsertGap} icon={<AppendIcon />} />
-        <ToolButton label="Select Left" onClick={onSelectLeft} icon={<LeftIcon />} />
-        <ToolButton label="Select Right" onClick={onSelectRight} icon={<RightIcon />} />
-        <ToolButton label="In" onClick={onSetInMark} icon={<MarkInIcon />} />
-        <ToolButton label="Out" onClick={onSetOutMark} icon={<MarkOutIcon />} />
-        <ToolButton label="Go In" onClick={onGoToInMark} icon={<LeftIcon />} />
-        <ToolButton label="Go Out" onClick={onGoToOutMark} icon={<RightIcon />} />
-        <ToolButton label="Mark Sel" onClick={onMarkSelection} icon={<MarkOutIcon />} />
-        <ToolButton label="Clear I/O" onClick={onClearMarks} icon={<TrashIcon />} />
-        <ToolButton label="Select Range" onClick={onSelectMarkedRange} icon={<MarkInIcon />} />
-        <ToolButton label="Copy Range" onClick={onCopyMarkedRange} icon={<CopyIcon />} />
-        <ToolButton label="Cut Range" onClick={onCutMarkedRange} icon={<CutIcon />} />
-        <ToolButton label="Lift" onClick={onLiftMarkedRange} icon={<LiftIcon />} />
-        <ToolButton label="Extract" onClick={onExtractMarkedRange} icon={<ExtractIcon />} />
-        <ToolButton label="Close Gap" onClick={onCloseGap} icon={<CloseGapIcon />} />
-        <ToolButton label="Close All Gaps" onClick={onCloseAllGaps} icon={<CloseGapIcon />} />
-        <ToggleButton label="Ripple" active={rippleMode} onClick={onRippleModeChange} />
-        <ToggleButton label="Snap" active={snapEnabled} onClick={onSnapEnabledChange} />
-        <ToggleButton label="Loop" active={loopPlaybackEnabled} onClick={onToggleLoopPlayback} />
-        <select
-          value={editMode}
-          onChange={(event) => onEditModeChange(event.target.value as EditorPasteMode)}
-          className="min-h-10 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-sm text-zinc-100 outline-none hover:border-emerald-500"
-          title="Paste mode"
-        >
-          <option value="insert">Insert</option>
-          <option value="overwrite">Overwrite</option>
-        </select>
-        <ToolButton label="Export" onClick={onBuildExport} icon={<ExportIcon />} />
-        <ToolButton
-          label={isRendering ? 'Rendering' : renderBlockedByPreflight ? 'Render blocked' : 'Render'}
-          onClick={onQueueRender}
-          icon={<RenderIcon />}
-          disabled={isRendering || renderBlockedByPreflight}
-        />
-        <ToolButton label={isQueueingComfyUI ? 'Queueing' : 'Comfy Batch'} onClick={onQueueComfyUIBatch} icon={<BatchIcon />} />
-        <ToolButton label={isRunningStt ? 'Listening' : 'STT Captions'} onClick={onQueueSttCaptions} icon={<CaptionAiIcon />} />
-        <span className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-400">
-          {selectedClipCount} selected / {clipboardClipCount} clips / {hasAttributeClipboard ? 'attrs' : 'no attrs'}
-        </span>
-        <span className="rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-400">
-          H {historyCount} / R {futureCount}
-        </span>
-        <span className={`rounded-md border px-3 py-2 text-xs ${saveStateClassName}`}>
-          {saveStateLabel}
-        </span>
-        <span className="min-w-32 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-emerald-300">
-          {status}
-        </span>
+        <ToolbarGroup label="History" displayLabel={text.groups.history} testId="editor-toolbar-group-history" className="hidden">
+          <ToolButton compact testId="editor-toolbar-undo" label={commands.undo} onClick={onUndo} icon={<UndoIcon />} disabled={!canUndo} />
+          <ToolButton compact testId="editor-toolbar-redo" label={commands.redo} onClick={onRedo} icon={<RedoIcon />} disabled={!canRedo} />
+        </ToolbarGroup>
+        <ToolbarGroup label="Ingest" displayLabel={text.groups.ingest} testId="editor-toolbar-group-ingest">
+          <ToolButton testId="editor-toolbar-import" label={commands.import} onClick={onImportMedia} icon={<ImportIcon />} />
+          <ToolButton compact testId="editor-toolbar-commands" label={commands.commands} onClick={onOpenCommandPalette} icon={<CommandIcon />} />
+        </ToolbarGroup>
+        <ToolbarGroup label="Edit" displayLabel={text.groups.edit} testId="editor-toolbar-group-edit" className="hidden">
+          <ToolButton compact testId="editor-toolbar-cut" label={commands.cut} onClick={onSplit} icon={<SplitIcon />} disabled={!canSplitAtPlayhead} />
+          <ToolButton compact testId="editor-toolbar-delete" label={commands.delete} onClick={onDeleteSelection} icon={<TrashIcon />} disabled={selectedClipCount === 0} />
+          <ToolbarMenu label="Edit" displayLabel={text.groups.edit}>
+            <ToolButton label={commands.cutAll} onClick={onSplitAll} icon={<SplitIcon />} />
+            <ToolButton label={commands.trimIn} onClick={onTrimIn} icon={<LeftIcon />} disabled={!canTrimSelectionToPlayhead} />
+            <ToolButton label={commands.trimOut} onClick={onTrimOut} icon={<RightIcon />} disabled={!canTrimSelectionToPlayhead} />
+            <ToolButton label={commands.previousEdit} onClick={onPreviousEdit} icon={<LeftIcon />} />
+            <ToolButton label={commands.nextEdit} onClick={onNextEdit} icon={<RightIcon />} />
+            <ToolButton label={commands.rippleDelete} onClick={onRippleDeleteSelection} icon={<ExtractIcon />} disabled={selectedClipCount === 0} />
+            <ToolButton label={commands.group} onClick={onGroupSelection} icon={<CopyIcon />} disabled={selectedClipCount < 2} />
+            <ToolButton label={commands.ungroup} onClick={onUngroupSelection} icon={<CutIcon />} disabled={selectedClipCount === 0} />
+            <ToolButton label={commands.copy} onClick={onCopySelection} icon={<CopyIcon />} disabled={selectedClipCount === 0} />
+            <ToolButton label={commands.duplicate} onClick={onDuplicateSelection} icon={<CopyIcon />} disabled={selectedClipCount === 0} />
+            <ToolButton label={commands.copyAttributes} onClick={onCopyAttributes} icon={<CopyIcon />} disabled={selectedClipCount === 0} />
+            <ToolButton label={commands.paste} onClick={onPaste} icon={<PasteIcon />} disabled={clipboardClipCount === 0} />
+            <ToolButton label={commands.pasteAttributes} onClick={onPasteAttributes} icon={<PasteIcon />} disabled={selectedClipCount === 0 || !hasAttributeClipboard} />
+            <ToolButton label={commands.pasteIn} onClick={onPasteAtIn} icon={<PasteIcon />} disabled={clipboardClipCount === 0 || !hasInMark} />
+            <ToolButton label={commands.append} onClick={onAppend} icon={<AppendIcon />} disabled={clipboardClipCount === 0} />
+          </ToolbarMenu>
+          <ToolbarMenu label="Source" displayLabel={text.groups.source}>
+            <ToolButton label={commands.matchSource} onClick={onMatchFrame} icon={<MarkInIcon />} disabled={selectedClipCount === 0} />
+            <ToolButton label={commands.replaceSource} onClick={onReplaceSelectedFromSource} icon={<ReplaceIcon />} disabled={selectedClipCount === 0} />
+            <ToolButton label={commands.selectHere} onClick={onSelectAtPlayhead} icon={<MarkInIcon />} />
+            <ToolButton label={commands.moveHere} onClick={onMoveSelectionToPlayhead} icon={<MarkOutIcon />} disabled={selectedClipCount === 0} />
+            <ToolButton label={commands.pack} onClick={onPackSelection} icon={<CloseGapIcon />} disabled={!canPackSelection} />
+            <ToolButton label={commands.selectLeft} onClick={onSelectLeft} icon={<LeftIcon />} />
+            <ToolButton label={commands.selectRight} onClick={onSelectRight} icon={<RightIcon />} />
+          </ToolbarMenu>
+          <ToolbarMenu label="Marks" displayLabel={text.groups.marks}>
+            <ToolButton label={commands.in} onClick={onSetInMark} icon={<MarkInIcon />} />
+            <ToolButton label={commands.out} onClick={onSetOutMark} icon={<MarkOutIcon />} />
+            <ToolButton label={commands.goIn} onClick={onGoToInMark} icon={<LeftIcon />} disabled={!hasInMark} />
+            <ToolButton label={commands.goOut} onClick={onGoToOutMark} icon={<RightIcon />} disabled={!hasOutMark} />
+            <ToolButton label={commands.markSelection} onClick={onMarkSelection} icon={<MarkOutIcon />} disabled={selectedClipCount === 0} />
+            <ToolButton label={commands.clearInOut} onClick={onClearMarks} icon={<TrashIcon />} disabled={!hasInMark && !hasOutMark} />
+            <ToolButton label={commands.selectRange} onClick={onSelectMarkedRange} icon={<MarkInIcon />} disabled={!hasMarkedRange} />
+            <ToolButton label={commands.copyRange} onClick={onCopyMarkedRange} icon={<CopyIcon />} disabled={!hasMarkedRange} />
+            <ToolButton label={commands.cutRange} onClick={onCutMarkedRange} icon={<CutIcon />} disabled={!hasMarkedRange} />
+            <ToolButton label={commands.lift} onClick={onLiftMarkedRange} icon={<LiftIcon />} disabled={!hasMarkedRange} />
+            <ToolButton label={commands.extract} onClick={onExtractMarkedRange} icon={<ExtractIcon />} disabled={!hasMarkedRange} />
+            <ToolButton label={commands.closeGap} onClick={onCloseGap} icon={<CloseGapIcon />} />
+            <ToolButton label={commands.closeAllGaps} onClick={onCloseAllGaps} icon={<CloseGapIcon />} />
+          </ToolbarMenu>
+        </ToolbarGroup>
+        <ToolbarGroup label="Timeline" displayLabel={text.groups.timeline} testId="editor-toolbar-group-timeline" className="hidden">
+          <ToolbarMenu label="Timeline" displayLabel={text.groups.timeline}>
+            <ToolButton label={commands.insertGap} onClick={onInsertGap} icon={<AppendIcon />} />
+            <ToggleButton testId="editor-toolbar-ripple-toggle" label={commands.ripple} active={rippleMode} onClick={onRippleModeChange} />
+            <ToggleButton testId="editor-toolbar-snap-toggle" label={commands.snap} active={snapEnabled} onClick={onSnapEnabledChange} />
+            <ToggleButton testId="editor-toolbar-loop-toggle" label={commands.loop} active={loopPlaybackEnabled} onClick={onToggleLoopPlayback} />
+            <select
+              value={editMode}
+              onChange={(event) => onEditModeChange(event.target.value as EditorPasteMode)}
+              className="min-h-10 w-full rounded-md border border-ds-300 bg-surface px-2 text-sm text-ink outline-none hover:border-accent-500"
+              title={text.pasteMode.title}
+            >
+              <option value="insert">{text.pasteMode.insert}</option>
+              <option value="overwrite">{text.pasteMode.overwrite}</option>
+            </select>
+          </ToolbarMenu>
+        </ToolbarGroup>
+        <ToolbarGroup label="Output" displayLabel={text.groups.output} testId="editor-toolbar-group-output">
+          <ToolButton testId="editor-toolbar-export" label={commands.export} onClick={onBuildExport} icon={<ExportIcon />} />
+          <ToolButton
+            compact
+            testId="editor-toolbar-render"
+            label={renderLabel}
+            onClick={onQueueRender}
+            icon={<RenderIcon />}
+            disabled={isRendering || renderBlockedByPreflight}
+          />
+          <ToolbarMenu label="AI" displayLabel={text.groups.ai}>
+            <ToolButton label={isQueueingComfyUI ? commands.queueing : commands.comfyBatch} onClick={onQueueComfyUIBatch} icon={<BatchIcon />} />
+            <ToolButton label={isRunningStt ? commands.listening : commands.sttCaptions} onClick={onQueueSttCaptions} icon={<CaptionAiIcon />} />
+          </ToolbarMenu>
+        </ToolbarGroup>
+        <ToolbarGroup label="State" displayLabel={text.groups.state} testId="editor-toolbar-group-state">
+          <span
+            data-testid="editor-toolbar-selection-summary"
+            className="max-w-48 shrink-0 truncate rounded-md border border-ds-200 bg-paper px-3 py-2 text-xs text-ds-700"
+          >
+            {selectedClipCount} {text.state.selected} / {clipboardClipCount} {text.state.clips} / {hasAttributeClipboard ? text.state.attrs : text.state.noAttrs}
+          </span>
+          <span
+            data-testid="editor-toolbar-history-summary"
+            className="hidden shrink-0 rounded-md border border-ds-200 bg-paper px-3 py-2 text-xs text-ds-700 ed:inline-flex"
+          >
+            H {historyCount} / R {futureCount}
+          </span>
+          <span className={`max-w-36 shrink-0 truncate rounded-md border px-3 py-2 text-xs ${saveStateClassName}`}>
+            {saveStateLabel}
+          </span>
+          <span
+            data-testid="editor-status"
+            className="min-w-32 max-w-80 shrink-0 truncate rounded-md border border-ds-200 bg-paper px-3 py-2 text-xs text-accent-700"
+            title={status}
+          >
+            {status}
+          </span>
+        </ToolbarGroup>
       </div>
     </header>
+  );
+}
+
+
+function ToolbarGroup({
+  label,
+  displayLabel = label,
+  testId,
+  className = '',
+  children,
+}: {
+  label: string;
+  displayLabel?: string;
+  testId: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      data-testid={testId}
+      data-toolbar-group-label={label}
+      data-toolbar-command-count={Children.count(children)}
+      aria-label={`${displayLabel} toolbar group`}
+      className={`${className} shrink-0 items-center gap-1 rounded-md border border-ds-200 bg-surface/70 p-0.5 [&>button]:shrink-0 [&>details]:shrink-0 [&>select]:shrink-0 [&>span]:shrink-0 ${className.includes('hidden') ? '' : 'flex'}`}
+    >
+      <span className="sr-only">{displayLabel}</span>
+      {children}
+    </section>
+  );
+}
+
+function ToolbarMenu({
+  label,
+  displayLabel = label,
+  children,
+}: {
+  label: string;
+  displayLabel?: string;
+  children: ReactNode;
+}) {
+  const testId = `editor-toolbar-menu-${label.toLowerCase().replace(/\s+/g, '-')}`;
+  const commandCount = Children.count(children);
+
+  return (
+    <details data-testid={testId} data-menu-command-count={commandCount} className="relative shrink-0">
+      <summary data-testid={`${testId}-summary`} className="inline-flex min-h-9 cursor-pointer list-none items-center gap-1.5 rounded-md border border-ds-300 bg-surface px-2 py-1.5 text-xs text-ink hover:border-accent-500 hover:bg-ds-200">
+        {displayLabel}
+        <span
+          data-testid={`${testId}-count`}
+          className="rounded bg-paper px-1.5 py-0.5 text-micro font-semibold text-ds-700"
+        >
+          {commandCount}
+        </span>
+      </summary>
+      <div data-testid={`${testId}-content`} className="absolute left-0 top-11 z-50 grid w-56 gap-1 rounded-md border border-ds-300 bg-paper p-2 shadow-2xl [&>button]:w-full [&>button]:justify-start">
+        {children}
+      </div>
+    </details>
   );
 }
 

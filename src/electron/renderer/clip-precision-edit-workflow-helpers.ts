@@ -77,11 +77,13 @@ export function resolveInspectorClipStartChangeResult({
   clipId,
   value,
   snapEnabled,
+  includeLinked = true,
 }: {
   project: EditorProject;
   clipId: string;
   value: number;
   snapEnabled: boolean;
+  includeLinked?: boolean;
 }): InspectorClipStartChangeResult {
   const currentClip = findClip(project, clipId);
   if (!currentClip) {
@@ -91,7 +93,10 @@ export function resolveInspectorClipStartChangeResult({
   const targetStart = snapEnabled
     ? snapTimeToEditPoints(project, value, { excludeClipId: currentClip.id })
     : value;
-  const targetClipIds = expandClipIdsWithLinkedAndGroupedClips(project, [currentClip.id]);
+  const targetClipIds = expandClipIdsWithLinkedAndGroupedClips(project, [currentClip.id], {
+    includeLinked,
+    includeGrouped: true,
+  });
   const appliedDelta = clampClipMoveDelta(project, targetClipIds, targetStart - currentClip.start);
 
   return {
@@ -122,18 +127,22 @@ export function resolveInspectorClipDurationChangeResult({
   clipId,
   value,
   rippleMode,
+  includeLinked = true,
 }: {
   project: EditorProject;
   clipId: string;
   value: number;
   rippleMode: boolean;
+  includeLinked?: boolean;
 }): InspectorClipDurationChangeResult {
   const currentClip = findClip(project, clipId);
   if (!currentClip) {
     throw new Error('Clip not found.');
   }
 
-  const targetClipIds = expandClipIdsWithLinkedClips(project, [currentClip.id]);
+  const targetClipIds = includeLinked
+    ? expandClipIdsWithLinkedClips(project, [currentClip.id])
+    : [currentClip.id];
   const requestedEnd = roundTime(currentClip.start + Math.max(0.25, value));
   const trimOptions = { ripple: rippleMode, preventOverlap: !rippleMode };
   const nextEnd = trimOptions.preventOverlap

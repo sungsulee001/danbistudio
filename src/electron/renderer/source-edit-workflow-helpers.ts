@@ -17,6 +17,14 @@ export interface SourcePatchSettings {
   sourceAudioPatchEnabled: boolean;
 }
 
+export function resolveDirectMediaInsertPatchSettings(settings: SourcePatchSettings): SourcePatchSettings {
+  return {
+    ...settings,
+    sourcePrimaryPatchEnabled: true,
+    sourceAudioPatchEnabled: true,
+  };
+}
+
 export interface SourceMarkedRange {
   start: number;
   end: number;

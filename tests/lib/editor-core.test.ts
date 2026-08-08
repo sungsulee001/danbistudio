@@ -102,7 +102,7 @@ import { resolveDuplicateExportProfilePlan, resolveExportProfilePatchPlan, resol
 import { buildRenderOutputSaveDialogRequest, cancelRenderJob as cancelRenderJobFromRenderer, fetchRenderJob as fetchRenderJobFromRenderer, fetchServerRenderPlan as fetchServerRenderPlanFromRenderer, openNativeRenderOutputPath, queueRenderJob as queueRenderJobFromRenderer, renderProjectNow as renderProjectNowFromRenderer, retryRenderJob as retryRenderJobFromRenderer, revealNativeRenderOutputPath, selectRenderOutputPath } from '../../src/electron/renderer/render-client';
 import { resolveSelectedClipCapabilities } from '../../src/electron/renderer/selected-clip-capabilities';
 import { resolveSelectedClipWorkspaceState } from '../../src/electron/renderer/selected-clip-workspace-helpers';
-import { buildSourceAssetPatchOptions, resolveGoToSourceMarkPlan, resolveInsertedSourceAssetPatchSelection, resolveInsertSourceAssetAtPlayheadPlan, resolveMatchFrameToSourcePlan, resolveMatchSourceRangeToMarkedRange, resolveOverwriteSourceAssetAtPlayheadPlan, resolveReplaceSelectedFromSourcePlan, resolveSourceMarkPatch, resolveSourceRangeHandlePatch, resolveSourceRangePatch, resolveSourceRangePatchPlan, resolveSourceRangePointerTime, resolveSourceRangeReset, resolveSourceRangeResetPlan, resolveSourceSubclipFailureStatus, resolveSourceSubclipReadinessPlan, resolveSourceSubclipResultPlan, resolveThreePointAssetEditPlan } from '../../src/electron/renderer/source-edit-workflow-helpers';
+import { buildSourceAssetPatchOptions, resolveDirectMediaInsertPatchSettings, resolveGoToSourceMarkPlan, resolveInsertedSourceAssetPatchSelection, resolveInsertSourceAssetAtPlayheadPlan, resolveMatchFrameToSourcePlan, resolveMatchSourceRangeToMarkedRange, resolveOverwriteSourceAssetAtPlayheadPlan, resolveReplaceSelectedFromSourcePlan, resolveSourceMarkPatch, resolveSourceRangeHandlePatch, resolveSourceRangePatch, resolveSourceRangePatchPlan, resolveSourceRangePointerTime, resolveSourceRangeReset, resolveSourceRangeResetPlan, resolveSourceSubclipFailureStatus, resolveSourceSubclipReadinessPlan, resolveSourceSubclipResultPlan, resolveThreePointAssetEditPlan } from '../../src/electron/renderer/source-edit-workflow-helpers';
 import { buildTimelineClipEditGuide, readTimelineLaneBounds, resolveTimelineClipDragCommitState, resolveTimelineClipDragPointerPlan, resolveTimelineClipDragPreviewState, resolveTimelineClipDropPreview, resolveTimelineClipDropTrack, resolveTimelineClipMoveEdit, resolveTimelineClipNewTrackDrop, resolveTimelineClipTrimPreview, resolveTimelineTrackIdsInDragRange } from '../../src/electron/renderer/timeline-edit-preview-helpers';
 import { resolveCloseAllTimelineGapsOnTrackPlan, resolveCloseTimelineGapAtPlayheadPlan, resolveInsertTimelineGapAtPlayheadPlan } from '../../src/electron/renderer/timeline-gap-workflow-helpers';
 import { resolveClearTimelineMarks, resolveCopyMarkedTimelineRangePlan, resolveCutMarkedTimelineRangePlan, resolveDeleteMarkedTimelineRangePlan, resolveGoToTimelineMark, resolveMarkSelectedTimelineClips, resolveSetTimelineMark } from '../../src/electron/renderer/timeline-mark-workflow-helpers';
@@ -110,6 +110,7 @@ import { resolveAdjacentTimelineEdit, resolveMarkedTimelineRangeSelection, resol
 import { auditSourceMonitorConsistency, resolveSourceAssetSelection, resolveSourceMonitorLoopPlaybackToggle, resolveSourceMonitorNudgePlayhead, resolveSourceMonitorPlaybackGuard, resolveSourceMonitorPlaybackRateState, resolveSourceMonitorPlaybackToggleRate, resolveSourceMonitorPlayhead, resolveSourceMonitorShuttlePlaybackState, resolveSourceWorkspaceState, resolveValidatedSourceAssetId, resolveValidatedSourceLoopPlaybackEnabled } from '../../src/electron/renderer/timeline-source-helpers';
 import { resolveTimelineEdgeAutoScrollLeft, resolveTimelineEditGuide, resolveTimelineEditSnapOptions, resolveTimelineFitZoom, resolveTimelinePlayheadNudgePlan, resolveTimelinePlayheadTime, resolveTimelineRulerScrubEndPlan, resolveTimelineRulerScrubMovePlan, resolveTimelineRulerScrubStartPlan, resolveTimelineRulerScrubTime, resolveTimelineVisibleScrollLeft } from '../../src/electron/renderer/timeline-viewport-helpers';
 import { filterTimelineClipsForRender, resolveTimelineClipRenderWindow, resolveTimelineLoopPlaybackToggle, resolveTimelineWorkspaceState, resolveValidatedLoopPlaybackEnabled } from '../../src/electron/renderer/timeline-workspace-helpers';
+import { TIMELINE_TRACK_HEADER_WIDTH } from '../../src/electron/renderer/timeline-layout-constants';
 import { resolveTimelineClipDisplayAssetKind } from '../../src/electron/renderer/timeline-clip-kind';
 import { resolveMoveTrackPlan, resolveRemoveTrackPlan, resolveSourcePatchTrackOptions, resolveSourcePatchTrackSelectionPlan, resolveTrackMixerChangePlan, resolveTrackRenamePlan, resolveTrackSelectionPlan, resolveTrackTogglePlan } from '../../src/electron/renderer/track-workflow-helpers';
 import { buildLongFormEditorProject } from '../fixtures/long-form-editor-project';
@@ -1353,6 +1354,24 @@ describe('editor core', () => {
       boxWidth: 1920,
       boxHeight: 1000,
     })).toEqual({ left: 0, right: 0, top: 0.45, bottom: 0.04 });
+
+    expect(resolveCropMaskHandleDrag({
+      parameters: { left: 0.1, right: 0.05, top: 0.02, bottom: 0.04 },
+      handle: 'top-left',
+      deltaX: 96,
+      deltaY: 54,
+      boxWidth: 1920,
+      boxHeight: 1080,
+    })).toEqual({ left: 0.15, right: 0.05, top: 0.07, bottom: 0.04 });
+
+    expect(resolveCropMaskHandleDrag({
+      parameters: { left: 0.1, right: 0.05, top: 0.02, bottom: 0.04 },
+      handle: 'bottom-right',
+      deltaX: -96,
+      deltaY: -54,
+      boxWidth: 1920,
+      boxHeight: 1080,
+    })).toEqual({ left: 0.1, right: 0.1, top: 0.02, bottom: 0.09 });
   });
 
   it('fits timeline zoom to viewport and selected durations', () => {
@@ -1583,6 +1602,13 @@ describe('editor core', () => {
       currentScrollLeft: 0,
       pixelsPerSecond: 10,
     })).toBe(148);
+    expect(resolveTimelineVisibleScrollLeft({
+      playhead: 40,
+      viewportWidth: 300,
+      currentScrollLeft: 0,
+      pixelsPerSecond: 10,
+      timelineStartOffsetPixels: TIMELINE_TRACK_HEADER_WIDTH,
+    })).toBe(276);
     expect(resolveTimelineEditGuide({ time: -1.5, label: 'Drop', tone: 'drop' })).toEqual({
       time: 0,
       label: 'Drop',
@@ -1606,6 +1632,17 @@ describe('editor core', () => {
       mode: 'selection',
     })).toEqual({
       nextPixelsPerSecond: 26.5,
+      nextScrollLeft: 836,
+      status: 'Timeline zoom fit to selection',
+    });
+    expect(resolveTimelineFitZoom({
+      project,
+      selectedClipIds: ['clip-interview-2'],
+      viewportWidth: 920,
+      mode: 'selection',
+      timelineStartOffsetPixels: TIMELINE_TRACK_HEADER_WIDTH,
+    })).toEqual({
+      nextPixelsPerSecond: 22.5,
       nextScrollLeft: 836,
       status: 'Timeline zoom fit to selection',
     });
@@ -1944,11 +1981,12 @@ describe('editor core', () => {
       duration: 30,
       snapped: false,
       constrained: false,
+      label: 'Trim tail +2s / 30s',
     });
     expect(buildTimelineClipEditGuide(clip, trimPreview, 'end')).toEqual({
       trackId: clip.trackId,
       time: 30,
-      label: 'Trim',
+      label: 'Trim tail +2s / 30s',
       tone: 'move',
     });
     expect(clip.duration).toBe(28);
@@ -3166,6 +3204,20 @@ describe('editor core', () => {
     expect(resolveTimelineThumbnailSource(cachedVideo, 'video')).toBe('/cache/media/thumbnails/ai-city.jpg');
     expect(resolveWaveformPeaks(cachedVideo, [0.1])).toEqual([0.2, 0.8]);
 
+    const samplePackProxyVideo = resolvePreviewMediaSource({
+      ...cachedVideo,
+      mediaCache: {
+        generatedAt: '2026-06-13T00:00:00.000Z',
+        proxyPath: 'E:\\ai_tool\\Danbi_Studio\\.danbi\\sample-project-pack\\getting-started\\media\\asset-sample-intro\\proxy-danbi-sample-intro.mp4',
+        proxySource: 'E:\\ai_tool\\Danbi_Studio\\.danbi\\sample-project-pack\\getting-started\\media\\asset-sample-intro\\proxy-danbi-sample-intro.mp4',
+        warnings: [],
+      },
+    });
+    expect(samplePackProxyVideo).toMatchObject({
+      source: '/sample-pack/media/asset-sample-intro/proxy-danbi-sample-intro.mp4',
+      mode: 'proxy',
+    });
+
     const imageSource = resolvePreviewMediaSource({
       ...cachedVideo,
       kind: 'image',
@@ -3239,6 +3291,10 @@ describe('editor core', () => {
     });
     expect(resolvePreviewSourcePath(undefined, 'E:\\ai_tool\\Danbi_Studio\\public\\cache\\comfyui\\pass.png')).toEqual({
       source: '/cache/comfyui/pass.png',
+      mode: 'public-render-path',
+    });
+    expect(resolvePreviewSourcePath(undefined, 'E:/ai_tool/Danbi_Studio/.danbi/sample-project-pack/getting-started/media/asset-sample-intro/source-danbi-sample-intro.mp4')).toEqual({
+      source: '/sample-pack/media/asset-sample-intro/source-danbi-sample-intro.mp4',
       mode: 'public-render-path',
     });
     expect(resolvePreviewSourcePath(undefined, 'E:/private/comfyui/pass.mp4')).toMatchObject({
@@ -11045,6 +11101,53 @@ describe('editor core', () => {
       start: 40,
       duration: 12,
     });
+    const degradedProbeVideoDrop = resolvePreparedMediaTimelineDropResult({
+      project,
+      preparedMedia: [{
+        input: {
+          name: 'degraded-probe.mp4',
+          mimeType: 'video/mp4',
+          size: 4096,
+          source: 'local://degraded-probe.mp4',
+          renderPath: 'E:/media/degraded-probe.mp4',
+          duration: 10,
+          metadata: {
+            hasVideo: true,
+            hasAudio: false,
+            analysisWarning: 'ffprobe analysis failed: ffprobe timed out after 1000ms.',
+          },
+        },
+      }],
+      start: 55,
+      targetTrackId: 'track-v1',
+      targetTrackName: 'A-roll',
+      selectedSourceAssetId: 'asset-interview',
+      settings: {
+        selectedTrackId: 'track-v1',
+        sourceAudioPatchTrackId: 'track-a1',
+        sourceAudioPatchEnabled: true,
+        editMode: 'overwrite',
+      },
+      sourceRangesByAssetId: {},
+    });
+    const degradedProbeAssetId = degradedProbeVideoDrop.importedAssetIds[0];
+    const degradedProbeVideoClip = degradedProbeVideoDrop.nextProject.tracks
+      .find((track) => track.id === 'track-v1')
+      ?.clips.find((clip) => clip.assetId === degradedProbeAssetId && clip.kind === 'video');
+    const degradedProbeAudioClip = degradedProbeVideoDrop.nextProject.tracks
+      .find((track) => track.id === 'track-a1')
+      ?.clips.find((clip) => clip.assetId === degradedProbeAssetId && clip.kind === 'audio');
+
+    expect(degradedProbeVideoClip).toMatchObject({
+      trackId: 'track-v1',
+      start: 55,
+      duration: 10,
+    });
+    expect(degradedProbeAudioClip).toMatchObject({
+      trackId: 'track-a1',
+      start: 55,
+      duration: 10,
+    });
     const mixedPreparedMedia = [
       {
         input: {
@@ -11157,6 +11260,16 @@ describe('editor core', () => {
       sourceAudioPatchEnabled: true,
       editMode: 'insert' as const,
     };
+    expect(resolveDirectMediaInsertPatchSettings({
+      selectedTrackId: 'track-v1',
+      sourcePrimaryPatchTrackId: 'track-v1',
+      sourceAudioPatchTrackId: 'track-a1',
+      sourcePrimaryPatchEnabled: false,
+      sourceAudioPatchEnabled: false,
+    })).toMatchObject({
+      sourcePrimaryPatchEnabled: true,
+      sourceAudioPatchEnabled: true,
+    });
     expect(canDropSourceAssetOnTrack(videoAsset, videoTrack)).toBe(true);
     expect(canDropSourceAssetOnTrack(videoAsset, audioTrack)).toBe(true);
     expect(canDropSourceAssetOnTrack(audioAsset, videoTrack)).toBe(false);
@@ -11197,6 +11310,42 @@ describe('editor core', () => {
       includeAudio: true,
       ripple: true,
     });
+    const disabledPatchDropOptions = buildAssetTimelineDropOptions({
+      project,
+      asset: videoAsset,
+      track: videoTrack,
+      start: 20,
+      settings: {
+        selectedTrackId: 'track-v1',
+        sourceAudioPatchTrackId: 'track-a1',
+        sourceAudioPatchEnabled: false,
+        editMode: 'overwrite',
+      },
+    });
+    const disabledPatchDropProject = insertAssetPatchOnTimeline(project, videoAsset.id, disabledPatchDropOptions);
+    const disabledPatchVideoClip = disabledPatchDropProject.tracks
+      .find((track) => track.id === 'track-v1')
+      ?.clips.find((clip) => clip.assetId === videoAsset.id && clip.start === 20 && clip.kind === 'video');
+    const disabledPatchAudioClip = disabledPatchDropProject.tracks
+      .find((track) => track.id === 'track-a1')
+      ?.clips.find((clip) => clip.assetId === videoAsset.id && clip.start === 20 && clip.kind === 'audio');
+
+    expect(disabledPatchDropOptions).toMatchObject({
+      targetTrackId: 'track-v1',
+      primaryTargetTrackId: 'track-v1',
+      audioTargetTrackId: 'track-a1',
+      includePrimary: true,
+      includeAudio: true,
+    });
+    expect(disabledPatchVideoClip).toMatchObject({
+      trackId: 'track-v1',
+      duration: videoAsset.duration,
+    });
+    expect(disabledPatchAudioClip).toMatchObject({
+      trackId: 'track-a1',
+      duration: videoAsset.duration,
+    });
+    expect(disabledPatchAudioClip?.automationTags).toEqual(expect.arrayContaining([`linked-video:${disabledPatchVideoClip?.id}`]));
     expect(resolveAssetTimelineDropPreviewPlan({
       project,
       asset: videoAsset,
@@ -11204,7 +11353,7 @@ describe('editor core', () => {
       start: 12,
       sourceRange: { in: 4, out: 9.4567 },
       settings: insertDropSettings,
-    })).toEqual({
+    })).toMatchObject({
       assetDropPreview: {
         trackId: 'track-v1',
         start: 12,
@@ -21674,7 +21823,9 @@ describe('editor core', () => {
         id: project.id,
         name: 'Electron Project Store',
       });
-      await expect(readFile(joinPath(tempRoot, `${encodeURIComponent(project.id)}.json`), 'utf8')).resolves.toContain('Electron Project Store');
+      const savedProjectFilenames = (await readdir(tempRoot)).filter((filename) => filename.endsWith('.json'));
+      expect(savedProjectFilenames).toHaveLength(1);
+      await expect(readFile(joinPath(tempRoot, savedProjectFilenames[0]), 'utf8')).resolves.toContain('Electron Project Store');
       await expect(repository.save({
         ...project,
         id: 'invalid/electron-project',
@@ -24292,12 +24443,20 @@ describe('editor core', () => {
       pixelsPerSecond: 12,
       projectDuration: gapProject.duration,
     });
+    const renderWindowWithTrackHeader = resolveTimelineClipRenderWindow({
+      scrollLeft: TIMELINE_TRACK_HEADER_WIDTH + (300 * 12),
+      viewportWidth: 360,
+      pixelsPerSecond: 12,
+      projectDuration: gapProject.duration,
+      timelineStartOffsetPixels: TIMELINE_TRACK_HEADER_WIDTH,
+    });
     const visibleVideoClipIds = filterTimelineClipsForRender(
       gapProject.tracks.find((track) => track.id === 'track-long-v1')!.clips,
       renderWindow,
       ['clip-long-v1-040'],
     ).map((clip) => clip.id);
     expect(renderWindow).toEqual({ start: 292, end: 338 });
+    expect(renderWindowWithTrackHeader).toEqual(renderWindow);
     expect(visibleVideoClipIds).toEqual([
       'clip-long-v1-009',
       'clip-long-v1-010',

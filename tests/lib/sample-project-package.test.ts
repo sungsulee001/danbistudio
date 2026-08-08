@@ -32,6 +32,18 @@ describe('sample project package server helpers', () => {
       join(root, '.danbi', 'sample-project-pack', 'getting-started'),
       join(root, 'release', 'electron', 'win-unpacked', 'resources', 'samples', 'getting-started'),
     ]));
+
+    const envCandidates = resolveSampleProjectPackageCandidates({
+      cwd: root,
+      env: {
+        DANBI_ELECTRON_RESOURCES_PATH: join(root, 'env-resources'),
+        DANBI_ELECTRON_APP_PATH: join(root, 'env-app'),
+      },
+    });
+    expect(envCandidates).toEqual(expect.arrayContaining([
+      join(root, 'env-resources', 'samples', 'getting-started'),
+      join(root, 'env-app', 'samples', 'getting-started'),
+    ]));
   });
 
   it('finds and imports the first valid sample project package', async () => {

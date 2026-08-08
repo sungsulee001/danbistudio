@@ -1,39 +1,322 @@
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=Noto+Serif+KR:wght@400;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background-start-rgb: 20, 20, 30;
-  --background-end-rgb: 10, 10, 20;
-  --foreground-rgb: 230, 230, 240;
+/* ---------------------------------------------------------------------------
+   Broadsheet — Danbi Studio design tokens
+   ---------------------------------------------------------------------------
+   Source: "동영상 편집기 프로토타입" / broadsheet design system, 편집 화면 2a 패널.
+   Newsprint set for the web: Source Serif 4 on paper, with the process inks —
+   cyan (accent) and magenta (accent-2) — used small and deliberately, like spot
+   color. Radius 2px, spacing density 1.25x. The serif is the chrome; no
+   sans-serif is introduced for UI.
 
-  --primary-rgb: 79, 70, 229;
-  --secondary-rgb: 30, 30, 45;
-  --border-rgb: 45, 45, 65;
+   Roles carry a 100–900 ramp. The ramp is perceptual, not literal: step 100 is
+   the faintest tint against the ground and 900 the strongest ink, in BOTH
+   themes. In dark mode the hex values invert in lightness but the semantics do
+   not, so `text-ds-600` reads at the same relative weight either way. Take a
+   ramp step; never hard-code a hex.
+
+   Values are stored as space-separated RGB triplets so Tailwind's alpha
+   modifier works (`bg-accent/10`, `border-accent-500/40`). The plain `--ds-*`
+   vars further down resolve those triplets for use in raw CSS.
+
+   SEMANTIC EXTENSION — info / warn / danger are ours, not Broadsheet's. The
+   system ships two accents, but an editor has to tell 프록시 from 소스 from
+   오류 at a glance, so three further press inks are derived on the same
+   lightness scale. Chrome and body copy still only ever take neutrals + cyan;
+   these three are reserved for state.
+   --------------------------------------------------------------------------- */
+
+/* The dark ramp is also what `.on-dark` asserts locally. Anything painted over
+   picture — the monitors, their scrims, the mode rail — stays dark in BOTH
+   themes, so its children have to keep resolving against a dark ground. A
+   nested element re-declaring these shadows what it inherits from :root, which
+   is why the light override below (scoped to <html>) never reaches inside. */
+:root,
+.on-dark {
+  /* --- ground ------------------------------------------------------------ */
+  --ds-bg-rgb: 26 25 24;
+  --ds-surface-rgb: 35 33 32;
+  --ds-text-rgb: 236 232 228;
+
+  /* --- neutral ramp ------------------------------------------------------ */
+  --ds-neutral-100-rgb: 38 36 35;
+  --ds-neutral-200-rgb: 48 45 44;
+  --ds-neutral-300-rgb: 62 58 56;
+  --ds-neutral-400-rgb: 82 78 75;
+  --ds-neutral-500-rgb: 109 103 99;
+  --ds-neutral-600-rgb: 152 146 141;
+  --ds-neutral-700-rgb: 182 175 170;
+  --ds-neutral-800-rgb: 211 205 200;
+  --ds-neutral-900-rgb: 236 232 228;
+
+  /* --- accent · cyan (interactive, active, ok) --------------------------- */
+  --ds-accent-rgb: 53 168 203;
+  --ds-accent-100-rgb: 18 51 61;
+  --ds-accent-200-rgb: 23 65 78;
+  --ds-accent-300-rgb: 30 87 104;
+  --ds-accent-400-rgb: 38 128 155;
+  --ds-accent-500-rgb: 53 168 203;
+  --ds-accent-600-rgb: 90 188 216;
+  --ds-accent-700-rgb: 126 202 222;
+  --ds-accent-800-rgb: 168 220 234;
+  --ds-accent-900-rgb: 211 238 245;
+
+  /* --- accent-2 · magenta (the rarer second spot — AI / ComfyUI) --------- */
+  --ds-accent2-rgb: 232 85 143;
+  --ds-accent2-100-rgb: 58 18 36;
+  --ds-accent2-200-rgb: 77 24 48;
+  --ds-accent2-300-rgb: 103 33 63;
+  --ds-accent2-400-rgb: 143 44 85;
+  --ds-accent2-500-rgb: 194 68 124;
+  --ds-accent2-600-rgb: 232 85 143;
+  --ds-accent2-700-rgb: 240 127 171;
+  --ds-accent2-800-rgb: 244 169 199;
+  --ds-accent2-900-rgb: 251 214 227;
+
+  /* --- info · press blue ------------------------------------------------- */
+  --ds-info-rgb: 111 159 224;
+  --ds-info-100-rgb: 22 34 58;
+  --ds-info-200-rgb: 29 45 76;
+  --ds-info-300-rgb: 39 61 102;
+  --ds-info-400-rgb: 53 83 140;
+  --ds-info-500-rgb: 74 113 180;
+  --ds-info-600-rgb: 111 159 224;
+  --ds-info-700-rgb: 147 185 234;
+  --ds-info-800-rgb: 185 210 242;
+  --ds-info-900-rgb: 221 233 249;
+
+  /* --- warn · process yellow (the system's third press ink) -------------- */
+  --ds-warn-rgb: 224 176 46;
+  --ds-warn-100-rgb: 50 40 6;
+  --ds-warn-200-rgb: 67 53 10;
+  --ds-warn-300-rgb: 92 72 16;
+  --ds-warn-400-rgb: 125 99 26;
+  --ds-warn-500-rgb: 166 132 38;
+  --ds-warn-600-rgb: 224 176 46;
+  --ds-warn-700-rgb: 237 196 79;
+  --ds-warn-800-rgb: 245 218 142;
+  --ds-warn-900-rgb: 251 236 198;
+
+  /* --- danger · press red ------------------------------------------------ */
+  --ds-danger-rgb: 217 97 74;
+  --ds-danger-100-rgb: 58 22 17;
+  --ds-danger-200-rgb: 77 29 22;
+  --ds-danger-300-rgb: 104 40 29;
+  --ds-danger-400-rgb: 140 55 41;
+  --ds-danger-500-rgb: 181 74 55;
+  --ds-danger-600-rgb: 217 97 74;
+  --ds-danger-700-rgb: 234 135 112;
+  --ds-danger-800-rgb: 244 179 162;
+  --ds-danger-900-rgb: 250 216 206;
+
+  --ds-divider: rgb(var(--ds-text-rgb) / 0.14);
+  --ds-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --ds-shadow-md: 0 3px 10px rgb(0 0 0 / 0.45);
+  --ds-shadow-lg: 0 12px 32px rgb(0 0 0 / 0.55);
+}
+
+/* ---------------------------------------------------------------------------
+   Light — the system's own ground. Same ramp semantics, print values.
+   Scoped to <html>, so `.on-dark` subtrees keep the dark ramp.
+   --------------------------------------------------------------------------- */
+:root[data-theme='light'] {
+  --ds-bg-rgb: 243 242 242;
+  --ds-surface-rgb: 234 233 233;
+  --ds-text-rgb: 32 30 29;
+
+  --ds-neutral-100-rgb: 248 244 244;
+  --ds-neutral-200-rgb: 234 231 231;
+  --ds-neutral-300-rgb: 215 211 211;
+  --ds-neutral-400-rgb: 186 182 182;
+  --ds-neutral-500-rgb: 155 151 151;
+  --ds-neutral-600-rgb: 125 121 121;
+  --ds-neutral-700-rgb: 96 93 93;
+  --ds-neutral-800-rgb: 68 65 65;
+  --ds-neutral-900-rgb: 45 43 43;
+
+  --ds-accent-rgb: 0 136 176;
+  --ds-accent-100-rgb: 233 248 255;
+  --ds-accent-200-rgb: 203 238 255;
+  --ds-accent-300-rgb: 153 224 255;
+  --ds-accent-400-rgb: 98 197 238;
+  --ds-accent-500-rgb: 56 166 207;
+  --ds-accent-600-rgb: 17 134 172;
+  --ds-accent-700-rgb: 0 103 134;
+  --ds-accent-800-rgb: 0 73 97;
+  --ds-accent-900-rgb: 10 48 62;
+
+  --ds-accent2-rgb: 214 0 108;
+  --ds-accent2-100-rgb: 255 241 244;
+  --ds-accent2-200-rgb: 255 222 230;
+  --ds-accent2-300-rgb: 255 192 208;
+  --ds-accent2-400-rgb: 255 144 177;
+  --ds-accent2-500-rgb: 255 69 142;
+  --ds-accent2-600-rgb: 216 32 113;
+  --ds-accent2-700-rgb: 170 11 86;
+  --ds-accent2-800-rgb: 121 14 61;
+  --ds-accent2-900-rgb: 75 21 40;
+
+  --ds-info-rgb: 47 95 168;
+  --ds-info-100-rgb: 237 243 252;
+  --ds-info-200-rgb: 214 228 247;
+  --ds-info-300-rgb: 176 202 238;
+  --ds-info-400-rgb: 126 167 221;
+  --ds-info-500-rgb: 81 131 198;
+  --ds-info-600-rgb: 47 95 168;
+  --ds-info-700-rgb: 35 71 128;
+  --ds-info-800-rgb: 26 51 91;
+  --ds-info-900-rgb: 20 34 57;
+
+  --ds-warn-rgb: 176 135 0;
+  --ds-warn-100-rgb: 253 246 224;
+  --ds-warn-200-rgb: 249 233 179;
+  --ds-warn-300-rgb: 242 213 116;
+  --ds-warn-400-rgb: 232 191 53;
+  --ds-warn-500-rgb: 217 168 0;
+  --ds-warn-600-rgb: 176 135 0;
+  --ds-warn-700-rgb: 138 106 0;
+  --ds-warn-800-rgb: 97 75 0;
+  --ds-warn-900-rgb: 61 47 0;
+
+  --ds-danger-rgb: 194 58 36;
+  --ds-danger-100-rgb: 253 238 234;
+  --ds-danger-200-rgb: 251 215 207;
+  --ds-danger-300-rgb: 246 179 164;
+  --ds-danger-400-rgb: 238 134 113;
+  --ds-danger-500-rgb: 224 87 64;
+  --ds-danger-600-rgb: 194 58 36;
+  --ds-danger-700-rgb: 154 42 24;
+  --ds-danger-800-rgb: 110 30 17;
+  --ds-danger-900-rgb: 69 22 14;
+
+  --ds-divider: rgb(var(--ds-text-rgb) / 0.16);
+
+  /* Still an ink slab on paper — one step off pure black so it sits in the
+     neutral ramp rather than punching a hole in the sheet. */
+  --ds-rail-rgb: 45 43 43;
+
+  --ds-shadow-sm: 0 1px 2px rgb(45 43 43 / 0.14);
+  --ds-shadow-md: 0 3px 10px rgb(45 43 43 / 0.16);
+  --ds-shadow-lg: 0 12px 32px rgb(45 43 43 / 0.22);
+
+  --background-start-rgb: 243, 242, 242;
+  --background-end-rgb: 243, 242, 242;
+  --foreground-rgb: 32, 30, 29;
+  --primary-rgb: 0, 136, 176;
+  --secondary-rgb: 234, 233, 233;
+  --border-rgb: 215, 211, 211;
+}
+
+/* Theme-independent tokens. */
+:root {
+  /* --- monitors ----------------------------------------------------------
+     The program and source monitors stay the darkest surfaces on screen so
+     picture brightness can be judged against them. Fixed in both themes — in
+     light mode they become the only dark faces, which is the point. */
+  --ds-monitor-rgb: 24 23 22;
+  --ds-monitor-source-rgb: 26 25 24;
+
+  /* --- rail --------------------------------------------------------------
+     The mode rail is a dark ink slab in both themes — on paper it reads as the
+     one solid block of ink on the page, which is how the prototype anchors the
+     left edge. `--ds-rail-rgb` lightens slightly under the light theme. */
+  /* --- ink on a bright fill ----------------------------------------------
+     Timeline clips carry fixed hues from CLIP_LABEL_COLORS, so they are the
+     same brightness in both themes and their label has to be too. A theme
+     token here would flip to near-white on light and vanish. */
+  --ds-on-bright-rgb: 32 30 29;
+
+  /* --- resolved colors, for plain CSS ------------------------------------ */
+  --ds-bg: rgb(var(--ds-bg-rgb));
+  --ds-surface: rgb(var(--ds-surface-rgb));
+  --ds-text: rgb(var(--ds-text-rgb));
+  --ds-accent: rgb(var(--ds-accent-rgb));
+  --ds-accent2: rgb(var(--ds-accent2-rgb));
+  --ds-neutral-300: rgb(var(--ds-neutral-300-rgb));
+  --ds-neutral-400: rgb(var(--ds-neutral-400-rgb));
+  --ds-accent-300: rgb(var(--ds-accent-300-rgb));
+
+  /* --- type -------------------------------------------------------------- */
+  --ds-font-heading: 'Source Serif 4', 'Noto Serif KR', 'Apple SD Gothic Neo', system-ui, serif;
+  --ds-font-body: 'Source Serif 4', 'Noto Serif KR', 'Apple SD Gothic Neo', system-ui, serif;
+  --ds-font-heading-weight: 600;
+
+  /* --- space (density 1.25x) --------------------------------------------- */
+  --ds-space-1: 5px;
+  --ds-space-2: 10px;
+  --ds-space-3: 15px;
+  --ds-space-4: 20px;
+  --ds-space-6: 30px;
+  --ds-space-8: 40px;
+
+  /* --- radius ------------------------------------------------------------ */
+  --ds-radius-sm: 1px;
+  --ds-radius-md: 2px;
+  --ds-radius-lg: 4px;
+
+  /* --- legacy aliases ----------------------------------------------------
+     The pre-existing tailwind.config colors (primary/secondary/border/
+     background/foreground) resolve through these. Retuned to Broadsheet so any
+     remaining consumer lands in the system rather than on the old indigo. */
+  --background-start-rgb: 26, 25, 24;
+  --background-end-rgb: 26, 25, 24;
+  --foreground-rgb: 236, 232, 228;
+  --primary-rgb: 53, 168, 203;
+  --secondary-rgb: 35, 33, 32;
+  --border-rgb: 48, 45, 44;
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  color: var(--ds-text);
+  background: var(--ds-bg);
+  font-family: var(--ds-font-body);
+  /* The sheet's base measure — Broadsheet sets the page at 15px/1.55 and lets
+     size and whitespace do the organising. */
+  font-size: 15px;
+  line-height: 1.55;
   min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--ds-font-heading);
+  font-weight: var(--ds-font-heading-weight);
+}
+
+/* Interaction states are themed, never browser defaults. */
+:focus-visible {
+  outline: 2px solid var(--ds-accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--ds-accent-300);
+  color: var(--ds-text);
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
+
+  /* Timecodes, frame counts, dB — figures line up in columns. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
 }
 
-/* Custom scrollbar */
 @layer components {
   .custom-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: rgba(79, 70, 229, 0.6) transparent;
+    scrollbar-color: var(--ds-neutral-400) transparent;
   }
 
   .custom-scrollbar::-webkit-scrollbar {
@@ -42,19 +325,20 @@ body {
   }
 
   .custom-scrollbar::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 5px;
+    background: transparent;
     margin: 2px;
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: linear-gradient(135deg, rgba(79, 70, 229, 0.8), rgba(99, 102, 241, 0.8));
-    border-radius: 5px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    transition: all 0.2s ease;
+    background: var(--ds-neutral-300);
+    border-radius: var(--ds-radius-md);
+    border: 2px solid transparent;
+    background-clip: content-box;
+    transition: background 0.2s ease;
   }
 
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(135deg, rgba(99, 102, 241, 0.9), rgba(129, 140, 248, 0.9));
+    background: var(--ds-neutral-400);
+    background-clip: content-box;
   }
 }

@@ -22,8 +22,8 @@ export function ProjectOverviewPanel({
   return (
     <>
       <div>
-        <p className="text-xs uppercase tracking-[0.24em] text-emerald-400">Project</p>
-        <h1 className="mt-1 truncate text-lg font-semibold text-zinc-100">{name}</h1>
+        <p className="text-xs uppercase tracking-[0.24em] text-accent-600">Project</p>
+        <h1 className="mt-1 truncate text-lg font-semibold text-ink">{name}</h1>
       </div>
       <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
         <ProjectMetric label="FPS" value={fps.toString()} />
@@ -42,9 +42,9 @@ export function ProjectSettingsPanel({
   onChange: (patch: ProjectSettingsPatch) => void;
 }) {
   return (
-    <div className="mt-6 rounded-md border border-zinc-800 bg-zinc-900 p-3">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Project Settings</h2>
-      <label className="mt-3 block text-xs text-zinc-400">
+    <div className="mt-6 rounded-md border border-ds-200 bg-surface p-3">
+      <h2 className="text-kicker font-heading font-semibold uppercase text-ds-600">Project Settings</h2>
+      <label className="mt-3 block text-xs text-ds-700">
         Name
         <input
           key={`${project.id}-${project.name}`}
@@ -55,7 +55,7 @@ export function ProjectSettingsPanel({
               event.currentTarget.blur();
             }
           }}
-          className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-sm text-zinc-100 outline-none focus:border-emerald-500"
+          className="mt-1 w-full rounded-md border border-ds-200 bg-paper px-2 py-2 text-sm text-ink outline-none focus:border-accent-500"
         />
       </label>
       <div className="mt-3 grid grid-cols-2 gap-2">
@@ -95,10 +95,10 @@ export function EditorApiTokenPanel() {
   };
 
   return (
-    <div className="mt-6 rounded-md border border-zinc-800 bg-zinc-900 p-3">
+    <div className="mt-6 rounded-md border border-ds-200 bg-surface p-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">API Token</h2>
-        <span className={`rounded border px-2 py-0.5 text-[11px] ${hasToken ? 'border-emerald-800 text-emerald-300' : 'border-zinc-800 text-zinc-500'}`}>
+        <h2 className="text-kicker font-heading font-semibold uppercase text-ds-600">API Token</h2>
+        <span className={`rounded border px-2 py-0.5 text-meta ${hasToken ? 'border-accent-200 text-accent-700' : 'border-ds-200 text-ds-600'}`}>
           {hasToken ? 'Saved' : 'Unset'}
         </span>
       </div>
@@ -107,14 +107,14 @@ export function EditorApiTokenPanel() {
         value={tokenInput}
         onChange={(event) => setTokenInput(event.currentTarget.value)}
         placeholder={hasToken ? 'Replace token' : 'Token'}
-        className="mt-3 w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-emerald-500"
+        className="mt-3 w-full rounded-md border border-ds-200 bg-paper px-2 py-2 text-sm text-ink outline-none placeholder:text-ds-400 focus:border-accent-500"
       />
       <div className="mt-3 grid grid-cols-2 gap-2">
         <button
           type="button"
           onClick={handleSave}
           disabled={tokenInput.trim().length === 0}
-          className="rounded border border-emerald-800 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100 hover:border-emerald-400 disabled:cursor-not-allowed disabled:border-zinc-800 disabled:bg-zinc-950 disabled:text-zinc-600"
+          className="rounded border border-accent-200 bg-accent-500/10 px-3 py-2 text-xs text-accent-900 hover:border-accent-600 disabled:cursor-not-allowed disabled:border-ds-200 disabled:bg-paper disabled:text-ds-400"
         >
           Save
         </button>
@@ -122,7 +122,7 @@ export function EditorApiTokenPanel() {
           type="button"
           onClick={handleClear}
           disabled={!hasToken}
-          className="rounded border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 hover:border-rose-500 disabled:cursor-not-allowed disabled:text-zinc-600"
+          className="rounded border border-ds-200 bg-paper px-3 py-2 text-xs text-ds-700 hover:border-danger-500 disabled:cursor-not-allowed disabled:text-ds-400"
         >
           Clear
         </button>
@@ -232,8 +232,8 @@ export function SavedProjectsPanel({
   return (
     <div className="mt-6">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Projects</h2>
-        <button className="text-xs text-emerald-300 hover:text-emerald-200" onClick={onRefresh}>
+        <h2 className="text-kicker font-heading font-semibold uppercase text-ds-600">Projects</h2>
+        <button className="text-xs text-accent-700 hover:text-accent-800" onClick={onRefresh}>
           Refresh
         </button>
       </div>
@@ -246,40 +246,40 @@ export function SavedProjectsPanel({
             setPendingDeleteProjectId(null);
           }}
           placeholder="Search projects"
-          className="mt-3 w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-sky-500"
+          className="mt-3 w-full rounded-md border border-ds-200 bg-paper px-3 py-2 text-xs text-ink outline-none placeholder:text-ds-400 focus:border-info-500"
         />
       ) : null}
       <div className="mt-3 space-y-2">
         {projects.length === 0 ? (
-          <div className="rounded-md border border-zinc-800 bg-zinc-900 p-3 text-xs text-zinc-500">
+          <div className="rounded-md border border-ds-200 bg-surface p-3 text-xs text-ds-600">
             No saved projects
           </div>
         ) : visibleProjects.length === 0 ? (
-          <div className="rounded-md border border-zinc-800 bg-zinc-900 p-3 text-xs text-zinc-500">
+          <div className="rounded-md border border-ds-200 bg-surface p-3 text-xs text-ds-600">
             No matching projects
           </div>
         ) : visibleProjects.map((item) => (
           <div
             key={item.id}
-            className="grid grid-cols-[minmax(0,1fr)_auto] items-stretch rounded-md border border-zinc-800 bg-zinc-900 hover:border-emerald-500"
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-stretch rounded-md border border-ds-200 bg-surface hover:border-accent-500"
           >
             <button
               type="button"
               onClick={() => handleLoadProject(item.id)}
               className="min-w-0 p-3 text-left"
             >
-              <span className="block truncate text-sm font-medium text-zinc-100">{item.name}</span>
-              <span className="mt-1 block truncate text-xs text-zinc-500">
+              <span className="block truncate text-sm font-medium text-ink">{item.name}</span>
+              <span className="mt-1 block truncate text-xs text-ds-600">
                 {item.clipCount} clips / {item.duration}s / {formatProjectUpdatedAt(item.updatedAt)}
               </span>
             </button>
             <button
               type="button"
               onClick={() => handleDeleteProject(item.id)}
-              className={`border-l border-zinc-800 px-3 text-xs ${
+              className={`border-l border-ds-200 px-3 text-xs ${
                 pendingDeleteProjectId === item.id
-                  ? 'bg-rose-500/10 text-rose-200 hover:bg-rose-500/20'
-                  : 'text-zinc-400 hover:bg-rose-500/10 hover:text-rose-200'
+                  ? 'bg-danger-500/10 text-danger-800 hover:bg-danger-500/20'
+                  : 'text-ds-700 hover:bg-danger-500/10 hover:text-danger-800'
               }`}
             >
               {pendingDeleteProjectId === item.id ? 'Confirm' : 'Delete'}
@@ -290,7 +290,7 @@ export function SavedProjectsPanel({
           <button
             type="button"
             onClick={() => setShowAllProjects((current) => !current)}
-            className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-300 hover:border-sky-500"
+            className="w-full rounded-md border border-ds-200 bg-paper px-3 py-2 text-xs text-ds-700 hover:border-info-500"
           >
             {showAllProjects ? 'Show recent projects' : `Show ${hiddenProjectCount} more`}
           </button>
@@ -300,14 +300,14 @@ export function SavedProjectsPanel({
         <button
           type="button"
           onClick={onCreateProject}
-          className="rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-200 hover:border-emerald-500"
+          className="rounded border border-ds-200 bg-surface px-3 py-2 text-xs text-ds-800 hover:border-accent-500"
         >
           New project
         </button>
         <button
           type="button"
           onClick={onSaveCopy}
-          className="rounded border border-emerald-800 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100 hover:border-emerald-400"
+          className="rounded border border-accent-200 bg-accent-500/10 px-3 py-2 text-xs text-accent-900 hover:border-accent-600"
         >
           Save copy
         </button>
@@ -316,7 +316,7 @@ export function SavedProjectsPanel({
             type="button"
             onClick={onOpenSampleProject}
             disabled={!sampleProjectAvailable}
-            className="col-span-2 rounded border border-emerald-700 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100 hover:border-emerald-400 disabled:cursor-not-allowed disabled:border-zinc-800 disabled:bg-zinc-900 disabled:text-zinc-600"
+            className="col-span-2 rounded border border-accent-300 bg-accent-500/10 px-3 py-2 text-xs text-accent-900 hover:border-accent-600 disabled:cursor-not-allowed disabled:border-ds-200 disabled:bg-surface disabled:text-ds-400"
           >
             Open sample
           </button>
@@ -324,21 +324,21 @@ export function SavedProjectsPanel({
         <button
           type="button"
           onClick={onExportPackage}
-          className="rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-200 hover:border-emerald-500"
+          className="rounded border border-ds-200 bg-surface px-3 py-2 text-xs text-ds-800 hover:border-accent-500"
         >
           Export package
         </button>
         <button
           type="button"
           onClick={onImportPackage}
-          className="rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-200 hover:border-sky-500"
+          className="rounded border border-ds-200 bg-surface px-3 py-2 text-xs text-ds-800 hover:border-info-500"
         >
           Import package
         </button>
         <button
           type="button"
           onClick={handleSyncCloudFolder}
-          className={`${cloudSyncConflictPending && (onForceSyncCloudFolder || onImportCloudSyncProject) ? '' : 'col-span-2'} rounded border border-violet-800 bg-violet-500/10 px-3 py-2 text-xs text-violet-100 hover:border-violet-400`}
+          className={`${cloudSyncConflictPending && (onForceSyncCloudFolder || onImportCloudSyncProject) ? '' : 'col-span-2'} rounded border border-accent2-200 bg-accent2-500/10 px-3 py-2 text-xs text-accent2-900 hover:border-accent2-600`}
         >
           Sync folder
         </button>
@@ -346,7 +346,7 @@ export function SavedProjectsPanel({
           <button
             type="button"
             onClick={handleImportCloudSyncProject}
-            className="rounded border border-sky-700 bg-sky-500/10 px-3 py-2 text-xs text-sky-100 hover:border-sky-400"
+            className="rounded border border-info-300 bg-info-500/10 px-3 py-2 text-xs text-info-900 hover:border-info-600"
           >
             Import synced
           </button>
@@ -357,8 +357,8 @@ export function SavedProjectsPanel({
             onClick={handleForceSyncCloudFolder}
             className={`col-span-2 rounded border px-3 py-2 text-xs ${
               pendingForceSyncConfirmation
-                ? 'border-rose-600 bg-rose-500/10 text-rose-100 hover:border-rose-400'
-                : 'border-amber-700 bg-amber-500/10 text-amber-100 hover:border-amber-400'
+                ? 'border-danger-400 bg-danger-500/10 text-danger-900 hover:border-danger-600'
+                : 'border-warn-300 bg-warn-500/10 text-warn-900 hover:border-warn-600'
             }`}
           >
             {pendingForceSyncConfirmation ? 'Confirm force' : 'Force sync'}
@@ -377,10 +377,10 @@ export function CreatorTemplatesPanel({
   const templates = listCreatorTemplatePresets();
 
   return (
-    <div className="mt-6 rounded-md border border-zinc-800 bg-zinc-900 p-3">
+    <div className="mt-6 rounded-md border border-ds-200 bg-surface p-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Templates</h2>
-        <span className="text-xs text-sky-300">{templates.length} free</span>
+        <h2 className="text-kicker font-heading font-semibold uppercase text-ds-600">Templates</h2>
+        <span className="text-xs text-info-700">{templates.length} free</span>
       </div>
       <div className="mt-3 space-y-2">
         {templates.map((template) => (
@@ -389,13 +389,13 @@ export function CreatorTemplatesPanel({
             type="button"
             title={template.description}
             onClick={() => onApplyTemplate(template.id)}
-            className="w-full rounded-md border border-zinc-800 bg-zinc-950 p-3 text-left hover:border-emerald-500 focus:border-emerald-500 focus:outline-none"
+            className="w-full rounded-md border border-ds-200 bg-paper p-3 text-left hover:border-accent-500 focus:border-accent-500 focus:outline-none"
           >
             <span className="flex items-center justify-between gap-3">
-              <span className="truncate text-sm font-medium text-zinc-100">{template.label}</span>
-              <span className="shrink-0 rounded border border-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400">{template.duration}s</span>
+              <span className="truncate text-sm font-medium text-ink">{template.label}</span>
+              <span className="shrink-0 rounded border border-ds-200 px-2 py-0.5 text-meta text-ds-700">{template.duration}s</span>
             </span>
-            <span className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-zinc-500">
+            <span className="mt-2 grid grid-cols-3 gap-2 text-meta text-ds-600">
               <span>{template.titleItems.length} titles</span>
               <span>{template.captionItems.length} captions</span>
               <span>{template.markerItems.length} markers</span>
@@ -425,40 +425,40 @@ export function AutosavePanel({
   onDeleteAutosave: (projectId: string) => void;
 }) {
   return (
-    <div className="mt-6 rounded-md border border-zinc-800 bg-zinc-900 p-3">
+    <div className="mt-6 rounded-md border border-ds-200 bg-surface p-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Autosave</h2>
-        <button className="text-xs text-emerald-300 hover:text-emerald-200" onClick={onSaveNow}>
+        <h2 className="text-kicker font-heading font-semibold uppercase text-ds-600">Autosave</h2>
+        <button className="text-xs text-accent-700 hover:text-accent-800" onClick={onSaveNow}>
           Save now
         </button>
       </div>
-      <div className="mt-2 flex items-center justify-between gap-2 text-[11px]">
-        <span className="truncate text-zinc-500">{autosaveStatus}</span>
+      <div className="mt-2 flex items-center justify-between gap-2 text-meta">
+        <span className="truncate text-ds-600">{autosaveStatus}</span>
         <span className={`shrink-0 rounded border px-2 py-1 ${saveStateClassName}`}>
           {saveStateLabel}
         </span>
       </div>
       <div className="mt-3 space-y-2">
         {autosaves.length === 0 ? (
-          <div className="rounded border border-zinc-800 bg-zinc-950 p-2 text-xs text-zinc-500">
+          <div className="rounded border border-ds-200 bg-paper p-2 text-xs text-ds-600">
             No autosaves
           </div>
         ) : autosaves.slice(0, 3).map((item) => (
-          <div key={item.projectId} className="rounded border border-zinc-800 bg-zinc-950 p-2">
+          <div key={item.projectId} className="rounded border border-ds-200 bg-paper p-2">
             <button
               type="button"
               onClick={() => onRestoreAutosave(item.projectId)}
               className="block w-full text-left"
             >
-              <span className="block truncate text-sm font-medium text-zinc-100">{item.name}</span>
-              <span className="mt-1 block text-[11px] text-zinc-500">
+              <span className="block truncate text-sm font-medium text-ink">{item.name}</span>
+              <span className="mt-1 block text-meta text-ds-600">
                 {item.clipCount} clips / {formatClockTime(item.savedAt)}
               </span>
             </button>
             <button
               type="button"
               onClick={() => onDeleteAutosave(item.projectId)}
-              className="mt-2 text-[11px] text-rose-300 hover:text-rose-200"
+              className="mt-2 text-meta text-danger-700 hover:text-danger-800"
             >
               Delete autosave
             </button>
@@ -490,23 +490,23 @@ export function ProjectRecoveryPanel({
   const hiddenWarningCount = Math.max(0, recoveryIndex.warnings.length - warnings.length);
 
   return (
-    <div data-testid="project-recovery-panel" className="mt-6 rounded-md border border-zinc-800 bg-zinc-900 p-3">
+    <div data-testid="project-recovery-panel" className="mt-6 rounded-md border border-ds-200 bg-surface p-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Recovery</h2>
-        <span className="shrink-0 rounded border border-zinc-800 px-2 py-0.5 text-[11px] text-zinc-400">
+        <h2 className="text-kicker font-heading font-semibold uppercase text-ds-600">Recovery</h2>
+        <span className="shrink-0 rounded border border-ds-200 px-2 py-0.5 text-meta text-ds-700">
           {recoveryIndex.candidates.length} candidates
         </span>
       </div>
-      <p className="mt-2 line-clamp-2 text-[11px] text-zinc-500">{recoveryStatus}</p>
+      <p className="mt-2 line-clamp-2 text-meta text-ds-600">{recoveryStatus}</p>
       {warnings.length > 0 ? (
         <div className="mt-3 space-y-1">
           {warnings.map((warning) => (
-            <div key={warning} className="rounded border border-amber-900/70 bg-amber-950/30 px-2 py-1 text-[11px] text-amber-200">
+            <div key={warning} className="rounded border border-warn-100/70 bg-warn-100/30 px-2 py-1 text-meta text-warn-800">
               {warning}
             </div>
           ))}
           {hiddenWarningCount > 0 ? (
-            <div className="text-[11px] text-zinc-500">
+            <div className="text-meta text-ds-600">
               +{hiddenWarningCount} more warning{hiddenWarningCount === 1 ? '' : 's'}
             </div>
           ) : null}
@@ -514,7 +514,7 @@ export function ProjectRecoveryPanel({
       ) : null}
       <div className="mt-3 space-y-2">
         {candidates.length === 0 ? (
-          <div className="rounded border border-zinc-800 bg-zinc-950 p-2 text-xs text-zinc-500">
+          <div className="rounded border border-ds-200 bg-paper p-2 text-xs text-ds-600">
             No recovery snapshots
           </div>
         ) : candidates.map((candidate) => (
@@ -529,7 +529,7 @@ export function ProjectRecoveryPanel({
           />
         ))}
         {hiddenCandidateCount > 0 ? (
-          <div className="text-[11px] text-zinc-500">
+          <div className="text-meta text-ds-600">
             +{hiddenCandidateCount} more candidate{hiddenCandidateCount === 1 ? '' : 's'}
           </div>
         ) : null}
@@ -564,35 +564,35 @@ function ProjectRecoveryCandidateRow({
   return (
     <div
       data-testid={`project-recovery-candidate-${candidate.source}-${candidate.projectId}`}
-      className={`rounded border p-2 ${recommended ? 'border-emerald-700 bg-emerald-950/30' : 'border-zinc-800 bg-zinc-950'}`}
+      className={`rounded border p-2 ${recommended ? 'border-accent-300 bg-accent-100/30' : 'border-ds-200 bg-paper'}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <span className="block truncate text-sm font-medium text-zinc-100">{candidate.name}</span>
-          <span className="mt-1 block text-[11px] text-zinc-500">
+          <span className="block truncate text-sm font-medium text-ink">{candidate.name}</span>
+          <span className="mt-1 block text-meta text-ds-600">
             {candidate.clipCount} clips / {candidate.duration}s / {formatClockTime(candidate.savedAt)}
           </span>
           {candidate.reason ? (
-            <span className="mt-1 block truncate text-[11px] text-zinc-600">{candidate.reason}</span>
+            <span className="mt-1 block truncate text-meta text-ds-400">{candidate.reason}</span>
           ) : null}
         </div>
-        <span className={`shrink-0 rounded border px-2 py-0.5 text-[11px] ${recoverySourceBadgeClassName(candidate.source)}`}>
+        <span className={`shrink-0 rounded border px-2 py-0.5 text-meta ${recoverySourceBadgeClassName(candidate.source)}`}>
           {recoverySourceLabel(candidate.source)}
         </span>
       </div>
       <div className="mt-2 flex items-center justify-between gap-2">
         {candidate.warningCount > 0 ? (
-          <span className="text-[11px] text-amber-300">
+          <span className="text-meta text-warn-700">
             {candidate.warningCount} warning{candidate.warningCount === 1 ? '' : 's'}
           </span>
         ) : (
-          <span className="text-[11px] text-zinc-600">Clean snapshot</span>
+          <span className="text-meta text-ds-400">Clean snapshot</span>
         )}
         <button
           type="button"
           onClick={action.onClick}
           disabled={!action.onClick}
-          className="shrink-0 rounded border border-emerald-800 bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-100 hover:border-emerald-400 disabled:cursor-not-allowed disabled:border-zinc-800 disabled:bg-zinc-900 disabled:text-zinc-600"
+          className="shrink-0 rounded border border-accent-200 bg-accent-500/10 px-2 py-1 text-meta text-accent-900 hover:border-accent-600 disabled:cursor-not-allowed disabled:border-ds-200 disabled:bg-surface disabled:text-ds-400"
         >
           {action.label}
         </button>
@@ -642,21 +642,21 @@ function recoverySourceLabel(source: ProjectRecoveryCandidate['source']): string
 function recoverySourceBadgeClassName(source: ProjectRecoveryCandidate['source']): string {
   switch (source) {
     case 'autosave':
-      return 'border-sky-800 text-sky-200';
+      return 'border-info-200 text-info-800';
     case 'database':
-      return 'border-zinc-700 text-zinc-300';
+      return 'border-ds-300 text-ds-700';
     case 'local-fallback':
-      return 'border-amber-800 text-amber-200';
+      return 'border-warn-200 text-warn-800';
     case 'package-import':
-      return 'border-violet-800 text-violet-200';
+      return 'border-accent2-200 text-accent2-800';
   }
 }
 
 function ProjectMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border border-zinc-800 bg-zinc-900 p-2">
-      <div className="text-zinc-500">{label}</div>
-      <div className="mt-1 font-semibold text-zinc-100">{value}</div>
+    <div className="rounded-md border border-ds-200 bg-surface p-2">
+      <div className="text-ds-600">{label}</div>
+      <div className="mt-1 font-semibold text-ink">{value}</div>
     </div>
   );
 }

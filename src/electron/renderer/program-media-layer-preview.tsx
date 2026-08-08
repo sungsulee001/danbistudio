@@ -60,6 +60,9 @@ export function ProgramMediaLayerPreview({
   const previewSource = resolvePreviewMediaSource(asset);
   const mediaKind = resolveRenderableAssetMediaKind(asset);
   const mediaSource = previewSource.source;
+  const missingPreviewReason = previewSource.mode === 'none'
+    ? 'Preview source unavailable'
+    : 'Missing preview source';
   const clipActive = playhead >= clip.start && playhead <= clip.start + clip.duration;
   const effectivePlaybackRate = Math.max(0.25, Math.min(4, playbackRate * getClipPlaybackSpeed(clip, playhead - clip.start)));
   const freezeFrameActive = typeof clip.freezeFrameTime === 'number' && Number.isFinite(clip.freezeFrameTime);
@@ -173,7 +176,12 @@ export function ProgramMediaLayerPreview({
             }}
           />
         ) : (
-          <span className="text-xs text-zinc-500">Missing preview source</span>
+          <MissingMediaPreviewPlaceholder
+            asset={asset}
+            clip={clip}
+            reason={missingPreviewReason}
+            style={mediaPreviewStyle}
+          />
         )}
         <AiModelPassPreviewOverlays layers={modelPassPreviewLayers} clipTime={playhead - clip.start} />
       </div>
@@ -203,14 +211,56 @@ export function ProgramMediaLayerPreview({
           ref={videoRef}
           src={mediaSource}
           className="max-h-full max-w-full object-contain"
+          data-testid={`program-media-video-${clip.id}`}
+          data-program-asset-id={asset.id}
+          data-program-clip-id={clip.id}
           muted
           playsInline
           style={mediaPreviewStyle}
         />
       ) : (
-        <span className="text-xs text-zinc-500">Missing preview source</span>
+        <MissingMediaPreviewPlaceholder
+          asset={asset}
+          clip={clip}
+          reason={missingPreviewReason}
+          style={mediaPreviewStyle}
+        />
       )}
       <AiModelPassPreviewOverlays layers={modelPassPreviewLayers} clipTime={playhead - clip.start} />
+    </div>
+  );
+}
+
+function MissingMediaPreviewPlaceholder({
+  asset,
+  clip,
+  reason,
+  style,
+}: {
+  asset: EditorAsset;
+  clip: TimelineClip;
+  reason: string;
+  style?: CSSProperties;
+}) {
+  return (
+    <div
+      className="relative flex h-full w-full items-center justify-center overflow-hidden border border-ds-300 bg-paper text-ds-700"
+      data-testid={`program-missing-media-placeholder-${clip.id}`}
+      style={style}
+    >
+      <div
+        className="absolute inset-0 opacity-35"
+        style={{
+          backgroundImage: 'linear-gradient(45deg, rgba(14,165,233,0.26) 25%, transparent 25%), linear-gradient(-45deg, rgba(16,185,129,0.22) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, rgba(14,165,233,0.22) 75%), linear-gradient(-45deg, transparent 75%, rgba(16,185,129,0.18) 75%)',
+          backgroundPosition: '0 0, 0 12px, 12px -12px, -12px 0',
+          backgroundSize: '24px 24px',
+        }}
+      />
+      <div className="relative max-w-[78%] rounded border border-ds-300 on-dark bg-black/75 px-4 py-3 text-center shadow-lg">
+        <div className="text-sm font-semibold text-ink">{asset.name || clip.name}</div>
+        <div className="mt-1 text-meta uppercase tracking-wide text-info-700">{asset.kind} placeholder</div>
+        <div className="mt-2 text-xs text-ds-700">{reason}</div>
+      </div>
     </div>
   );
 }
@@ -291,7 +341,7 @@ function AiModelPassPreviewOverlay({
       data-ai-model-pass-source-mode={layer.sourceMode}
     >
       {!layer.source ? (
-        <div className="rounded border border-amber-500/40 bg-black/80 px-3 py-2 text-center text-[11px] text-amber-100">
+        <div className="rounded border border-warn-500/40 on-dark bg-black/80 px-3 py-2 text-center text-meta text-warn-900">
           {layer.unavailableReason ?? 'AI model pass preview source is unavailable.'}
         </div>
       ) : layer.kind === 'image' ? (
@@ -336,7 +386,7 @@ export function ProgramPrivacyRegionOverlays({ clip, localTime }: { clip: Timeli
         return (
           <div
             key={effect.id}
-            className="absolute rounded-sm border border-amber-300/85 bg-amber-300/15 shadow-[0_0_0_1px_rgba(0,0,0,0.55)] backdrop-blur-[2px]"
+            className="absolute rounded-sm border border-warn-700/85 bg-warn-700/15 shadow-[0_0_0_1px_rgba(0,0,0,0.55)] backdrop-blur-[2px]"
             style={{
               left: `${left}%`,
               right: `${right}%`,

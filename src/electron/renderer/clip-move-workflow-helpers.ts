@@ -50,12 +50,14 @@ export function resolveMoveSelectedClipsPlan({
   selectedClips,
   deltaSeconds,
   snapEnabled,
+  includeLinked = true,
 }: {
   project: EditorProject;
   selectedClip?: TimelineClip | null;
   selectedClips: TimelineClip[];
   deltaSeconds: number;
   snapEnabled: boolean;
+  includeLinked?: boolean;
 }): ClipMoveCommandPlan {
   if (selectedClips.length === 0) {
     return { canCommit: false, status: 'Select a clip first' };
@@ -66,7 +68,7 @@ export function resolveMoveSelectedClipsPlan({
   const snappedStart = snapEnabled
     ? snapTimeToEditPoints(project, nextStart, { threshold: 0.18, excludeClipId: anchorClip.id })
     : nextStart;
-  const targetClipIds = expandSelectedClipIds(project, selectedClips);
+  const targetClipIds = expandSelectedClipIds(project, selectedClips, includeLinked);
   const appliedDelta = clampClipMoveDelta(project, targetClipIds, snappedStart - anchorClip.start);
 
   return {
@@ -119,10 +121,12 @@ export function resolveMoveSelectionToPlayheadPlan({
   project,
   selectedClips,
   playhead,
+  includeLinked = true,
 }: {
   project: EditorProject;
   selectedClips: TimelineClip[];
   playhead: number;
+  includeLinked?: boolean;
 }): ClipMoveCommandPlan {
   if (selectedClips.length === 0) {
     return { canCommit: false, status: 'Select a clip first' };
@@ -131,7 +135,7 @@ export function resolveMoveSelectionToPlayheadPlan({
   return {
     canCommit: true,
     commitLabel: selectedClips.length > 1 ? 'Clips moved to playhead' : 'Clip moved to playhead',
-    targetClipIds: expandSelectedClipIds(project, selectedClips),
+    targetClipIds: expandSelectedClipIds(project, selectedClips, includeLinked),
     nextPlayhead: playhead,
   };
 }
@@ -164,8 +168,11 @@ export function resolveMoveSelectedClipsToTrackPlan({
   };
 }
 
-function expandSelectedClipIds(project: EditorProject, selectedClips: TimelineClip[]): string[] {
-  return expandClipIdsWithLinkedAndGroupedClips(project, selectedClips.map((clip) => clip.id));
+function expandSelectedClipIds(project: EditorProject, selectedClips: TimelineClip[], includeLinked = true): string[] {
+  return expandClipIdsWithLinkedAndGroupedClips(project, selectedClips.map((clip) => clip.id), {
+    includeLinked,
+    includeGrouped: true,
+  });
 }
 
 function clampNumber(value: number, min: number, max: number): number {

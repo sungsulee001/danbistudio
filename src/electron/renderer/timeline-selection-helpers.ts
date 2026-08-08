@@ -99,14 +99,18 @@ export function resolveTimelineClipSelection({
   clip,
   shouldSeek,
   mode,
+  includeLinked = true,
 }: {
   project: EditorProject;
   currentSelectedClipIds: string[];
   clip: TimelineClip;
   shouldSeek: boolean;
   mode: ClipSelectionMode;
+  includeLinked?: boolean;
 }): TimelineClipSelectionResult {
-  const selectionIds = getGroupedClipIds(project, clip.id);
+  const selectionIds = includeLinked
+    ? getGroupedClipIds(project, clip.id)
+    : expandClipIdsWithLinkedAndGroupedClips(project, [clip.id], { includeLinked: false, includeGrouped: true });
 
   return {
     selectedClipId: clip.id,
@@ -121,11 +125,13 @@ export function resolveTimelineClipClickSelection({
   currentSelectedClipIds,
   clip,
   modifiers,
+  includeLinked = true,
 }: {
   project: EditorProject;
   currentSelectedClipIds: string[];
   clip: TimelineClip;
   modifiers: TimelineClipClickModifiers;
+  includeLinked?: boolean;
 }): TimelineClipSelectionResult {
   if (modifiers.metaKey || modifiers.ctrlKey) {
     return resolveTimelineClipSelection({
@@ -134,6 +140,7 @@ export function resolveTimelineClipClickSelection({
       clip,
       shouldSeek: false,
       mode: 'toggle',
+      includeLinked,
     });
   }
 
@@ -144,6 +151,7 @@ export function resolveTimelineClipClickSelection({
       clip,
       shouldSeek: false,
       mode: 'add',
+      includeLinked,
     });
   }
 
@@ -161,6 +169,7 @@ export function resolveTimelineClipClickSelection({
     clip,
     shouldSeek: true,
     mode: 'replace',
+    includeLinked,
   });
 }
 

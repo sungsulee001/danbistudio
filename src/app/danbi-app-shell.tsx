@@ -1,5 +1,14 @@
+'use client';
+
 import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import {
+  readStoredMenuLanguage,
+  setStoredMenuLanguage,
+  subscribeMenuLanguage,
+  type DanbiMenuLanguage,
+} from '@/lib/editor/menu-language';
 
 export type DanbiAppView =
   | 'hub'
@@ -10,11 +19,14 @@ export type DanbiAppView =
   | 'extensions'
   | 'settings';
 
+export type ShellStatusItem = StatusPillProps;
+
 interface DanbiAppShellProps {
   activeView: DanbiAppView;
   title: string;
   subtitle?: string;
   actions?: ReactNode;
+  statusItems?: ShellStatusItem[];
   children: ReactNode;
 }
 
@@ -33,44 +45,153 @@ interface StatusPillProps {
 
 const navigationItems: Array<{
   id: DanbiAppView;
-  label: string;
+  icon: string;
   href: string;
-  badge?: string;
 }> = [
-  { id: 'hub', label: 'Hub', href: '/' },
-  { id: 'editor', label: 'Editor', href: '/editor' },
-  { id: 'ai', label: 'AI Studio', href: '/ai-studio' },
-  { id: 'automation', label: 'Automation', href: '/automation' },
-  { id: 'render', label: 'Render', href: '/render-queue' },
-  { id: 'extensions', label: 'Extensions', href: '/extensions' },
-  { id: 'settings', label: 'Settings', href: '/settings' },
+  { id: 'hub', icon: 'H', href: '/' },
+  { id: 'editor', icon: 'E', href: '/editor' },
+  { id: 'ai', icon: 'AI', href: '/ai-studio' },
+  { id: 'automation', icon: 'A', href: '/automation' },
+  { id: 'render', icon: 'R', href: '/render-queue' },
+  { id: 'extensions', icon: 'P', href: '/extensions' },
+  { id: 'settings', icon: 'S', href: '/settings' },
 ];
 
-const defaultStatusItems = [
-  { label: 'FFmpeg', value: 'Local', tone: 'good' as const },
-  { label: 'Storage', value: 'userData', tone: 'good' as const },
-  { label: 'ComfyUI', value: 'Check', tone: 'pending' as const },
-  { label: 'Workers', value: 'Idle', tone: 'neutral' as const },
-  { label: 'External QA', value: 'Pending', tone: 'pending' as const },
-];
+const shellText = {
+  en: {
+    languageLabel: 'Menu language',
+    menus: ['File', 'Edit', 'Clip', 'Timeline', 'AI', 'Automation', 'Render', 'View', 'Help'],
+    workspaces: {
+      hub: 'Home',
+      editor: 'Edit',
+      ai: 'AI Studio',
+      automation: 'Automation',
+      render: 'Render',
+      extensions: 'Plugins',
+      settings: 'Settings',
+    },
+    status: {
+      ffmpeg: 'FFmpeg',
+      storage: 'Storage',
+      comfyui: 'ComfyUI',
+      workers: 'Workers',
+      qa: 'External QA',
+      local: 'Local',
+      userData: 'userData',
+      check: 'Check',
+      idle: 'Idle',
+      pending: 'Pending',
+    },
+  },
+  ko: {
+    languageLabel: '메뉴 언어',
+    menus: ['파일', '편집', '클립', '타임라인', 'AI', '자동화', '렌더', '보기', '도움말'],
+    workspaces: {
+      hub: '홈',
+      editor: '편집',
+      ai: 'AI 스튜디오',
+      automation: '자동화',
+      render: '렌더',
+      extensions: '플러그인',
+      settings: '설정',
+    },
+    status: {
+      ffmpeg: 'FFmpeg',
+      storage: '저장소',
+      comfyui: 'ComfyUI',
+      workers: '워커',
+      qa: '외부 QA',
+      local: '로컬',
+      userData: 'userData',
+      check: '확인',
+      idle: '대기',
+      pending: '대기',
+    },
+  },
+} satisfies Record<DanbiMenuLanguage, {
+  languageLabel: string;
+  menus: string[];
+  workspaces: Record<DanbiAppView, string>;
+  status: Record<string, string>;
+}>;
 
 export function DanbiAppShell({
   activeView,
   title,
   subtitle,
   actions,
+  statusItems: statusItemsProp,
   children,
 }: DanbiAppShellProps) {
+  const [language, setLanguage] = useState<DanbiMenuLanguage>('en');
+
+  useEffect(() => {
+    setLanguage(readStoredMenuLanguage());
+    return subscribeMenuLanguage(setLanguage);
+  }, []);
+
+  const text = shellText[language];
+  const defaultStatusItems = useMemo(() => [
+    { label: text.status.ffmpeg, value: text.status.local, tone: 'good' as const },
+    { label: text.status.storage, value: text.status.userData, tone: 'good' as const },
+    { label: text.status.comfyui, value: text.status.check, tone: 'pending' as const },
+    { label: text.status.workers, value: text.status.idle, tone: 'neutral' as const },
+    { label: text.status.qa, value: text.status.pending, tone: 'pending' as const },
+  ], [text]);
+  const statusItems = statusItemsProp ?? defaultStatusItems;
+
+  const handleLanguageChange = (nextLanguage: DanbiMenuLanguage) => {
+    setLanguage(nextLanguage);
+    setStoredMenuLanguage(nextLanguage);
+  };
+
   return (
-    <main className="min-h-screen bg-zinc-950 text-zinc-100">
-      <div className="grid min-h-screen grid-cols-[88px_minmax(0,1fr)] grid-rows-[64px_minmax(0,1fr)_40px]">
-        <aside className="row-span-3 border-r border-zinc-800 bg-zinc-950/95">
-          <div className="flex h-16 items-center justify-center border-b border-zinc-800">
-            <span className="grid h-9 w-9 place-items-center rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-sm font-semibold text-emerald-200">
-              DB
-            </span>
+    <main className="min-h-screen bg-neutral-950 text-neutral-100">
+      <div className="grid min-h-screen grid-cols-[64px_minmax(0,1fr)] grid-rows-[42px_54px_minmax(0,1fr)_36px]">
+        <header className="col-span-2 flex min-w-0 items-center justify-between border-b border-neutral-800 bg-neutral-950 px-3">
+          <div className="flex min-w-0 items-center gap-4">
+            <Link href="/" className="flex h-8 items-center gap-2 rounded border border-neutral-800 px-2 text-sm font-semibold text-neutral-100">
+              <span className="grid h-5 w-5 place-items-center rounded bg-emerald-500 text-[10px] text-neutral-950">DB</span>
+              <span>Danbi Studio</span>
+            </Link>
+            <nav className="hidden min-w-0 items-center gap-1 lg:flex" aria-label="Application menu">
+              {text.menus.map((menu) => (
+                <button
+                  key={menu}
+                  type="button"
+                  className="h-8 rounded px-2 text-sm text-neutral-300 hover:bg-neutral-900 hover:text-neutral-50"
+                >
+                  {menu}
+                </button>
+              ))}
+            </nav>
           </div>
-          <nav className="flex flex-col gap-1 p-2" aria-label="Danbi workspaces">
+
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="hidden text-xs text-neutral-500 sm:inline">{text.languageLabel}</span>
+            <div className="flex rounded border border-neutral-800 bg-neutral-950 p-0.5">
+              {(['en', 'ko'] as const).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => handleLanguageChange(item)}
+                  className={[
+                    'h-7 rounded px-2 text-xs font-medium',
+                    language === item
+                      ? 'bg-emerald-500 text-neutral-950'
+                      : 'text-neutral-400 hover:bg-neutral-900 hover:text-neutral-100',
+                  ].join(' ')}
+                  aria-pressed={language === item}
+                >
+                  {item === 'en' ? 'ENG' : 'KOR'}
+                </button>
+              ))}
+            </div>
+          </div>
+        </header>
+
+        <aside className="row-span-2 border-r border-neutral-800 bg-neutral-950">
+          <nav className="flex flex-col items-center gap-2 p-2" aria-label="Tool rail">
             {navigationItems.map((item) => {
               const active = item.id === activeView;
               return (
@@ -78,41 +199,56 @@ export function DanbiAppShell({
                   key={item.id}
                   href={item.href}
                   className={[
-                    'flex h-14 flex-col items-center justify-center rounded-lg border text-[11px] font-medium transition',
+                    'grid h-10 w-10 place-items-center rounded-lg border text-xs font-semibold transition',
                     active
-                      ? 'border-emerald-400/50 bg-emerald-400/10 text-emerald-100'
-                      : 'border-transparent text-zinc-400 hover:border-zinc-700 hover:bg-zinc-900 hover:text-zinc-100',
+                      ? 'border-emerald-400/60 bg-emerald-400/15 text-emerald-100'
+                      : 'border-transparent text-neutral-500 hover:border-neutral-700 hover:bg-neutral-900 hover:text-neutral-100',
                   ].join(' ')}
+                  aria-label={text.workspaces[item.id]}
+                  title={text.workspaces[item.id]}
                 >
-                  <span>{item.label}</span>
-                  {item.badge ? (
-                    <span className="mt-1 rounded border border-amber-400/40 px-1 text-[10px] text-amber-200">
-                      {item.badge}
-                    </span>
-                  ) : null}
+                  {item.icon}
                 </Link>
               );
             })}
           </nav>
         </aside>
 
-        <header className="flex min-w-0 items-center justify-between gap-4 border-b border-zinc-800 bg-zinc-950/95 px-6">
-          <div className="min-w-0">
-            <p className="text-xs font-medium uppercase text-emerald-300">Danbi Studio</p>
-            <h1 className="truncate text-lg font-semibold text-zinc-50">{title}</h1>
-          </div>
-          {subtitle ? (
-            <p className="hidden max-w-xl truncate text-sm text-zinc-400 lg:block">{subtitle}</p>
-          ) : null}
+        <section className="flex min-w-0 items-center justify-between gap-4 border-b border-neutral-800 bg-neutral-950 px-4">
+          <nav className="flex min-w-0 items-center gap-1 overflow-x-auto custom-scrollbar" aria-label="Workspace tabs">
+            {navigationItems.map((item) => {
+              const active = item.id === activeView;
+              return (
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  className={[
+                    'inline-flex h-9 shrink-0 items-center rounded-t-lg border border-b-0 px-3 text-sm font-medium transition',
+                    active
+                      ? 'border-neutral-700 bg-neutral-900 text-neutral-50'
+                      : 'border-transparent text-neutral-400 hover:bg-neutral-900 hover:text-neutral-100',
+                  ].join(' ')}
+                >
+                  {text.workspaces[item.id]}
+                </Link>
+              );
+            })}
+          </nav>
           {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
-        </header>
+        </section>
 
-        <section className="min-w-0 overflow-auto bg-zinc-950 p-6 custom-scrollbar">
+        <section className="min-w-0 overflow-auto bg-neutral-950 p-4 custom-scrollbar">
+          <div className="mb-4 flex min-w-0 items-end justify-between gap-4 border-b border-neutral-900 pb-3">
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-semibold text-neutral-50">{title}</h1>
+              {subtitle ? <p className="mt-1 text-sm text-neutral-500">{subtitle}</p> : null}
+            </div>
+          </div>
           {children}
         </section>
 
-        <footer className="flex min-w-0 items-center gap-2 border-t border-zinc-800 bg-zinc-950/95 px-4">
-          {defaultStatusItems.map((item) => (
+        <footer className="col-span-2 flex min-w-0 items-center gap-2 overflow-x-auto border-t border-neutral-800 bg-neutral-950 px-3 custom-scrollbar">
+          {statusItems.map((item) => (
             <StatusPill key={`${item.label}-${item.value}`} {...item} />
           ))}
         </footer>
@@ -128,11 +264,11 @@ export function WorkspacePanel({
   action,
 }: WorkspacePanelProps) {
   return (
-    <section className="rounded-lg border border-zinc-800 bg-zinc-900/60">
-      <div className="flex items-center justify-between gap-4 border-b border-zinc-800 px-4 py-3">
+    <section className="rounded border border-neutral-800 bg-neutral-900/40">
+      <div className="flex items-center justify-between gap-4 border-b border-neutral-800 bg-neutral-900/70 px-4 py-3">
         <div>
-          {eyebrow ? <p className="text-xs font-medium uppercase text-zinc-500">{eyebrow}</p> : null}
-          <h2 className="text-sm font-semibold text-zinc-100">{title}</h2>
+          {eyebrow ? <p className="text-xs font-medium uppercase text-neutral-500">{eyebrow}</p> : null}
+          <h2 className="text-sm font-semibold text-neutral-100">{title}</h2>
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}
       </div>
@@ -147,15 +283,15 @@ export function StatusPill({
   tone = 'neutral',
 }: StatusPillProps) {
   const toneClass = {
-    neutral: 'border-zinc-700 text-zinc-300',
+    neutral: 'border-neutral-700 text-neutral-300',
     good: 'border-emerald-500/40 text-emerald-200',
     warn: 'border-amber-400/40 text-amber-200',
     pending: 'border-cyan-400/40 text-cyan-200',
   }[tone];
 
   return (
-    <span className={`inline-flex h-7 items-center gap-2 rounded border px-2 text-xs ${toneClass}`}>
-      {label ? <span className="text-zinc-500">{label}</span> : null}
+    <span className={`inline-flex h-7 shrink-0 items-center gap-2 rounded border px-2 text-xs ${toneClass}`}>
+      {label ? <span className="text-neutral-500">{label}</span> : null}
       <span className="font-medium">{value}</span>
     </span>
   );
@@ -171,8 +307,8 @@ export function AppLink({
   variant?: 'primary' | 'secondary';
 }) {
   const className = variant === 'primary'
-    ? 'inline-flex h-9 items-center rounded-lg border border-emerald-400/50 bg-emerald-400/10 px-3 text-sm font-medium text-emerald-100 hover:bg-emerald-400/20'
-    : 'inline-flex h-9 items-center rounded-lg border border-zinc-700 px-3 text-sm font-medium text-zinc-200 hover:bg-zinc-800';
+    ? 'inline-flex h-9 items-center rounded border border-emerald-400/50 bg-emerald-400/10 px-3 text-sm font-medium text-emerald-100 hover:bg-emerald-400/20'
+    : 'inline-flex h-9 items-center rounded border border-neutral-700 px-3 text-sm font-medium text-neutral-200 hover:bg-neutral-900';
 
   return (
     <Link href={href} className={className}>
@@ -184,13 +320,13 @@ export function AppLink({
 export function DataList({
   items,
 }: {
-  items: Array<{ label: string; value: string; tone?: 'neutral' | 'good' | 'warn' | 'pending' }>;
+  items: ShellStatusItem[];
 }) {
   return (
-    <dl className="divide-y divide-zinc-800">
+    <dl className="divide-y divide-neutral-800">
       {items.map((item) => (
         <div key={`${item.label}-${item.value}`} className="flex items-center justify-between gap-4 py-2">
-          <dt className="text-sm text-zinc-400">{item.label}</dt>
+          <dt className="text-sm text-neutral-400">{item.label}</dt>
           <dd>
             <StatusPill label="" value={item.value} tone={item.tone ?? 'neutral'} />
           </dd>

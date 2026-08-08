@@ -40,10 +40,10 @@ export function ExportWorkspacePanel({
   renderStatus: ComponentProps<typeof RenderStatusPanel>;
 }) {
   return (
-    <div className="mt-6 rounded-md border border-zinc-800 bg-zinc-900 p-3">
+    <div className="mt-6 rounded-md border border-ds-200 bg-surface p-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Export Plan</h2>
-        <span className="text-xs text-sky-300">{renderInputCount} inputs</span>
+        <h2 className="text-kicker font-heading font-semibold uppercase text-ds-600">Export Plan</h2>
+        <span className="text-xs text-info-700">{renderInputCount} inputs</span>
       </div>
       <div className="mt-3 space-y-2">
         <ExportSettingsPanel {...exportSettings} />

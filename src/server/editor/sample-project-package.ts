@@ -28,13 +28,15 @@ export function resolveSampleProjectPackageCandidates(
 ): string[] {
   const env = options.env ?? process.env;
   const cwd = options.cwd ?? process.cwd();
+  const resourcesPath = options.resourcesPath ?? env.DANBI_ELECTRON_RESOURCES_PATH;
+  const appPath = options.appPath ?? env.DANBI_ELECTRON_APP_PATH;
 
   return uniquePaths([
     normalizeSampleProjectPackageCandidate(env.DANBI_SAMPLE_PROJECT_PACKAGE),
-    options.resourcesPath ? join(options.resourcesPath, 'samples', 'getting-started') : undefined,
-    options.resourcesPath ? join(options.resourcesPath, '..', 'samples', 'getting-started') : undefined,
-    options.appPath ? join(options.appPath, 'samples', 'getting-started') : undefined,
-    options.appPath ? join(options.appPath, '..', 'samples', 'getting-started') : undefined,
+    resourcesPath ? join(resourcesPath, 'samples', 'getting-started') : undefined,
+    resourcesPath ? join(resourcesPath, '..', 'samples', 'getting-started') : undefined,
+    appPath ? join(appPath, 'samples', 'getting-started') : undefined,
+    appPath ? join(appPath, '..', 'samples', 'getting-started') : undefined,
     join(cwd, '.danbi', 'electron-release', 'samples', 'getting-started'),
     join(cwd, '.danbi', 'sample-project-pack', 'getting-started'),
     join(cwd, 'release', 'electron', 'win-unpacked', 'resources', 'samples', 'getting-started'),

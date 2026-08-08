@@ -6,15 +6,15 @@ export function JobHistoryPanel({ summary }: { summary: JobHistorySummary }) {
   }
 
   return (
-    <div className="rounded-md border border-zinc-800 bg-zinc-950 p-3">
+    <div className="rounded-md border border-ds-200 bg-paper p-3">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <div className="text-xs font-medium text-zinc-300">Job History</div>
-          <div className="mt-1 text-[11px] text-zinc-500">
+          <div className="text-xs font-medium text-ds-700">Job History</div>
+          <div className="mt-1 text-meta text-ds-600">
             {summary.totalCount} tracked / {summary.activeCount} active / {summary.failedCount} failed
           </div>
         </div>
-        <span className={summary.failedCount > 0 ? 'text-xs text-rose-300' : 'text-xs text-emerald-300'}>
+        <span className={summary.failedCount > 0 ? 'text-xs text-danger-700' : 'text-xs text-accent-700'}>
           {summary.failedCount > 0
             ? `${summary.failedCount} needs attention`
             : summary.activeCount > 0
@@ -28,7 +28,7 @@ export function JobHistoryPanel({ summary }: { summary: JobHistorySummary }) {
         ))}
       </div>
       {summary.items.length < summary.totalCount ? (
-        <div className="mt-2 text-[11px] text-zinc-600">
+        <div className="mt-2 text-meta text-ds-400">
           Showing {summary.items.length} of {summary.totalCount} jobs
         </div>
       ) : null}
@@ -38,28 +38,28 @@ export function JobHistoryPanel({ summary }: { summary: JobHistorySummary }) {
 
 function JobHistoryRow({ item }: { item: JobHistoryItem }) {
   return (
-    <div className="rounded border border-zinc-800 bg-zinc-900/70 p-2">
+    <div className="rounded border border-ds-200 bg-surface/70 p-2">
       <div className="flex items-center justify-between gap-3 text-xs">
         <div className="min-w-0">
-          <div className="truncate text-zinc-200">{item.label}</div>
-          <div className="mt-1 truncate text-[11px] text-zinc-500">{formatKind(item.kind)} / {item.detail}</div>
+          <div className="truncate text-ds-800">{item.label}</div>
+          <div className="mt-1 truncate text-meta text-ds-600">{formatKind(item.kind)} / {item.detail}</div>
         </div>
         <span className={`shrink-0 ${statusClassName(item.status)}`}>{item.status}</span>
       </div>
       <div className="mt-2 flex items-center gap-2">
-        <div className="h-1.5 flex-1 overflow-hidden rounded bg-zinc-800">
+        <div className="h-1.5 flex-1 overflow-hidden rounded bg-ds-200">
           <div className={`h-full transition-all ${progressClassName(item.status)}`} style={{ width: `${item.progress}%` }} />
         </div>
-        <span className="w-9 text-right text-[11px] text-zinc-500">{item.progress}%</span>
+        <span className="w-9 text-right text-meta text-ds-600">{item.progress}%</span>
       </div>
       {item.problem ? (
-        <div className="mt-2 space-y-1 text-[11px]">
-          <div className="truncate text-amber-200">{item.problem}</div>
+        <div className="mt-2 space-y-1 text-meta">
+          <div className="truncate text-warn-800">{item.problem}</div>
           {item.action || item.retryable !== undefined ? (
-            <div className="flex flex-wrap items-center gap-2 text-zinc-500">
+            <div className="flex flex-wrap items-center gap-2 text-ds-600">
               {item.action ? <span>{item.action}</span> : null}
               {item.retryable !== undefined ? (
-                <span className={item.retryable ? 'text-sky-300' : 'text-rose-300'}>
+                <span className={item.retryable ? 'text-info-700' : 'text-danger-700'}>
                   {item.retryable ? 'Retryable' : 'Fix first'}
                 </span>
               ) : null}
@@ -87,29 +87,29 @@ function formatKind(kind: JobHistoryItem['kind']): string {
 function statusClassName(status: JobHistoryItem['status']): string {
   switch (status) {
     case 'running':
-      return 'text-emerald-300';
+      return 'text-accent-700';
     case 'queued':
-      return 'text-sky-300';
+      return 'text-info-700';
     case 'completed':
-      return 'text-zinc-300';
+      return 'text-ds-700';
     case 'failed':
-      return 'text-rose-300';
+      return 'text-danger-700';
     case 'cancelled':
-      return 'text-amber-300';
+      return 'text-warn-700';
   }
 }
 
 function progressClassName(status: JobHistoryItem['status']): string {
   switch (status) {
     case 'running':
-      return 'bg-emerald-400';
+      return 'bg-accent-600';
     case 'queued':
-      return 'bg-sky-400';
+      return 'bg-info-600';
     case 'completed':
-      return 'bg-zinc-500';
+      return 'bg-ds-500';
     case 'failed':
-      return 'bg-rose-400';
+      return 'bg-danger-600';
     case 'cancelled':
-      return 'bg-amber-400';
+      return 'bg-warn-600';
   }
 }

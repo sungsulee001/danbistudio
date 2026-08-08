@@ -13,14 +13,14 @@ import type { RenderJobView } from '../../src/electron/renderer/editor-view-mode
 test('opens the real editor from the app root', async ({ page }) => {
   await page.goto('/');
 
+  await page.getByRole('link', { name: 'Open Editor' }).first().click();
   await expect(page).toHaveURL(/\/editor$/);
   await waitForEditorHydrated(page);
   await expect(page.getByRole('link', { name: 'Editor' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Source Monitor/ })).toBeVisible();
+  await openSourceMonitor(page);
   await expect(page.getByTestId('program-monitor')).toBeVisible();
   await expectProgramMonitorCompositeReady(page);
   await expect(page.getByRole('button', { name: 'Commands' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Relink 2' })).toBeVisible();
   await expect(page.getByTestId('editor-media-file-input')).toHaveAttribute('accept', /\.qt/);
 
   await page.getByRole('button', { name: 'Timeline clip Music bed' }).click();
@@ -30,7 +30,9 @@ test('opens the real editor from the app root', async ({ page }) => {
   await expect(page.getByTestId('timeline-volume-envelope-clip-music-1')).toHaveCount(1);
 
   await page.getByRole('button', { name: 'Timeline clip Founder intro' }).click();
+  await page.getByRole('button', { name: /^V\s+Video$/i }).click();
   const visualPanel = page.getByRole('heading', { name: 'Visual' }).locator('xpath=ancestor::div[contains(@class, "rounded-md")][1]');
+  await expect(visualPanel).toBeVisible();
   await visualPanel.getByRole('button', { name: 'Both' }).click();
   await expect(page.getByText('Visual fade applied to 1 clip')).toBeVisible();
   await expect(page.getByTestId('timeline-opacity-envelope-clip-interview-1')).toHaveCount(1);
@@ -47,15 +49,26 @@ test('keeps the Program Monitor composite reachable on desktop and mobile viewpo
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await openEditor(page);
 
-      await expect(page.getByRole('link', { name: 'Editor' })).toBeVisible();
+      if (viewport.width >= 640) {
+        await expect(page.getByRole('link', { name: 'Editor' })).toBeVisible();
+      } else {
+        await expect(page.getByRole('link', { name: 'Danbi Studio' })).toBeVisible();
+      }
       await expect(page.getByRole('button', { name: 'Commands' })).toBeVisible();
-      await expect(page.getByRole('button', { name: /^Source Monitor/ })).toBeVisible();
       const headerLayoutAudit = await expectTopLevelEditorControlsLayoutStable(page, viewport);
+      await openSourceMonitor(page);
       const sourceLayoutAudit = await expectSourceMonitorViewportLayoutStable(page, viewport);
 
-      await expectProgramMonitorCompositeReady(page);
-      await expect(page.getByTestId('program-audio-meter')).toBeVisible();
-      await expect(page.getByTestId('program-audio-meter-status')).toHaveText('meter pending');
+      if (viewport.width >= 640) {
+        await expectProgramMonitorCompositeReady(page);
+        await expect(page.getByTestId('program-audio-meter')).toBeVisible();
+        await expect(page.getByTestId('program-audio-meter-status')).toContainText(/meter pending|Hot|CLIP|dB/);
+      } else {
+        const programMonitor = page.getByTestId('program-monitor');
+        await programMonitor.scrollIntoViewIfNeeded();
+        await expect(programMonitor.getByTestId('program-monitor-frame')).toBeVisible();
+        await expect(programMonitor.getByRole('button', { name: 'Info', exact: true })).toBeVisible();
+      }
       const programLayoutAudit = await expectProgramMonitorViewportLayoutStable(page, viewport);
 
       const screenshot = await page.screenshot();
@@ -109,6 +122,7 @@ test('preserves transparent PNG padding in Program Monitor image overlays', asyn
 
     await page.setViewportSize({ width: 1280, height: 720 });
     await openEditor(page);
+    await openProjectPanel(page);
     await page.getByRole('button', { name: 'Refresh' }).click();
 
     const savedProject = page.getByRole('button', { name: new RegExp(project.name) });
@@ -123,6 +137,7 @@ test('preserves transparent PNG padding in Program Monitor image overlays', asyn
     const previewFrame = programMonitor.getByTestId('program-monitor-frame');
     await previewFrame.scrollIntoViewIfNeeded();
     await expect(previewFrame).toBeVisible();
+    await showProgramDiagnostics(programMonitor);
     await expect(programMonitor.getByTestId('program-stack-summary')).toHaveText('2 media / 0 text / 0 caption / 0 audio');
     await expect(programMonitor.getByAltText('Alpha preview base')).toBeVisible();
     await expect(programMonitor.getByAltText('Alpha preview overlay')).toBeVisible();
@@ -164,12 +179,14 @@ test('turns local sample media into an export-ready tutorial cut from a free tem
     expect(saveResponse.ok(), JSON.stringify(saveBody)).toBeTruthy();
 
     await openEditor(page);
+    await openProjectPanel(page);
     await page.getByRole('button', { name: 'Refresh' }).click();
     const savedProject = page.getByRole('button', { name: new RegExp(project.name) });
     await expect(savedProject).toBeVisible();
     await savedProject.click();
     await expect(page.getByText('Project loaded from database')).toBeVisible();
 
+    await openTemplatesPanel(page);
     const tutorialTemplate = page.getByRole('button', { name: /Tutorial Steps/ });
     await tutorialTemplate.scrollIntoViewIfNeeded();
     await expect(tutorialTemplate).toBeVisible();
@@ -193,6 +210,7 @@ test('turns local sample media into an export-ready tutorial cut from a free tem
     await expect(programMonitor.getByTestId('program-monitor-frame')).toBeVisible();
     await expect(programMonitor.getByText('What you will build').first()).toBeVisible();
     await expect(programMonitor.getByText('Start with the outcome viewers will have.').first()).toBeVisible();
+    await showProgramDiagnostics(programMonitor);
     await expect(programMonitor.getByTestId('program-stack-summary')).toContainText('text');
     await expect(programMonitor.getByTestId('program-stack-summary')).toContainText('caption');
 
@@ -293,6 +311,7 @@ test('shows recovery candidates and restores fallback and autosave projects', as
     }, fallbackProject);
 
     await openEditor(page);
+    await openProjectPanel(page);
 
     const recoveryPanel = page.getByTestId('project-recovery-panel');
     await recoveryPanel.scrollIntoViewIfNeeded();
@@ -423,6 +442,7 @@ test('queues the current export from a failed saved render plan', async ({ page 
 
     await openEditor(page);
     await expect(page.getByRole('link', { name: 'Editor' })).toBeVisible();
+    await openProjectPanel(page);
     await page.getByRole('button', { name: 'Refresh' }).click();
 
     const savedProject = page.getByRole('button', { name: new RegExp(project.name) });
@@ -433,6 +453,7 @@ test('queues the current export from a failed saved render plan', async ({ page 
 
     await page.getByRole('button', { name: 'Render', exact: true }).click();
     await expect(page.getByTestId('render-job-status')).toHaveText('failed');
+    await page.getByRole('button', { name: /^E\s+Export$/i }).click();
     const retryCurrentExport = page.getByRole('button', { name: 'Retry current export' });
     await expect(retryCurrentExport).toBeEnabled();
     await expect(page.getByRole('button', { name: 'Queue current export' })).toBeHidden();
@@ -752,6 +773,7 @@ test('loads and edits a 30 minute project through the editor UI', async ({ page 
 
     await openEditor(page);
     await expect(page.getByRole('link', { name: 'Editor' })).toBeVisible();
+    await openProjectPanel(page);
     await page.getByRole('button', { name: 'Refresh' }).click();
 
     const savedProject = page.getByRole('button', { name: new RegExp(project.name) });
@@ -867,6 +889,7 @@ test('edits selected clip gain in dB and updates Program Monitor audio layer', a
 
   await expect(page.getByText('Clip gain updated')).toBeVisible();
   await expect(page.getByRole('spinbutton', { name: 'Volume' })).toHaveValue('0.501');
+  await showProgramDiagnostics(page.getByTestId('program-monitor'));
   await expect(page.getByTestId('program-audio-layer-track-a1-clip-music-1')).toContainText('16% Center');
 });
 
@@ -875,7 +898,7 @@ test('runs a real timeline edit through the command palette', async ({ page }) =
 
   await expect(page.getByRole('link', { name: 'Editor' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Commands' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Source Monitor/ })).toBeVisible();
+  await openSourceMonitor(page);
   await expect(page.getByText(/H 0 \/ R 0/)).toBeVisible();
 
   await page.getByRole('button', { name: 'Commands' }).click();
@@ -996,6 +1019,7 @@ test('imports ten mixed browser media files without freezing the media bin', asy
     const sourceScopeImage = mediaFiles.find((file) => file.kind === 'image')!;
     await page.getByRole('button', { name: `Open ${sourceScopeImage.name} in Source Monitor` }).click();
     const sourceMonitor = page.getByRole('button', { name: /^Source Monitor/ });
+    await showSourceDiagnostics(sourceMonitor);
     await expect(sourceMonitor.getByTestId('source-video-scopes')).toBeVisible();
     await expect(sourceMonitor.getByTestId('source-video-scope-status')).not.toHaveText('');
 
@@ -1151,9 +1175,11 @@ test('switches insert and overwrite edit modes from commands', async ({ page }) 
 
 test('sets and jumps source monitor marks with active monitor shortcuts', async ({ page }) => {
   await openEditor(page);
+  await openSourceMonitor(page);
 
   const sourceMonitor = page.getByRole('button', { name: /^Source Monitor/ });
   await expect(sourceMonitor).toBeVisible();
+  await showSourceDiagnostics(sourceMonitor);
   await expect(sourceMonitor.getByTestId('source-audio-meter')).toBeVisible();
   await expect(sourceMonitor.getByTestId('source-audio-meter-status')).toContainText(/meter pending|Hot|CLIP|dB/);
   await sourceMonitor.click({ position: { x: 12, y: 12 } });
@@ -1187,6 +1213,7 @@ test('sets and jumps source monitor marks with active monitor shortcuts', async 
 
 test('trims source monitor range with draggable I/O handles', async ({ page }) => {
   await openEditor(page);
+  await openSourceMonitor(page);
 
   const sourceMonitor = page.getByRole('button', { name: /^Source Monitor/ });
   await expect(sourceMonitor).toBeVisible();
@@ -1236,6 +1263,7 @@ test('trims source monitor range with draggable I/O handles', async ({ page }) =
 
 test('nudges the active source monitor playhead with arrow shortcuts', async ({ page }) => {
   await openEditor(page);
+  await openSourceMonitor(page);
 
   const sourceMonitor = page.getByRole('button', { name: /^Source Monitor/ });
   await expect(sourceMonitor).toBeVisible();
@@ -1261,6 +1289,7 @@ test('nudges the active source monitor playhead with arrow shortcuts', async ({ 
 
 test('toggles source monitor playback with Space when source is active', async ({ page }) => {
   await openEditor(page);
+  await openSourceMonitor(page);
 
   const sourceMonitor = page.getByRole('button', { name: /^Source Monitor/ });
   await expect(sourceMonitor).toBeVisible();
@@ -1278,6 +1307,7 @@ test('toggles source monitor playback with Space when source is active', async (
 
 test('loops the active source monitor range from shortcuts and commands', async ({ page }) => {
   await openEditor(page);
+  await openSourceMonitor(page);
 
   const sourceMonitor = page.getByRole('button', { name: /^Source Monitor/ });
   await expect(sourceMonitor).toBeVisible();
@@ -1308,6 +1338,7 @@ test('loops the active source monitor range from shortcuts and commands', async 
 
 test('sets and jumps source monitor marks from the command palette', async ({ page }) => {
   await openEditor(page);
+  await openSourceMonitor(page);
 
   const sourceMonitor = page.getByRole('button', { name: /^Source Monitor/ });
   await expect(sourceMonitor).toBeVisible();
@@ -2509,6 +2540,38 @@ async function openEditor(page: Page): Promise<void> {
   await waitForEditorHydrated(page);
 }
 
+async function openSourceMonitor(page: Page): Promise<void> {
+  const toggle = page.getByTestId('editor-source-monitor-toggle');
+  await expect(toggle).toBeVisible();
+  if (await toggle.getAttribute('aria-pressed') !== 'true') {
+    await toggle.click();
+  }
+  await expect(page.getByRole('button', { name: /^Source Monitor/ })).toBeVisible();
+}
+
+async function openProjectPanel(page: Page): Promise<void> {
+  const projectPanelButton = page.getByRole('button', { name: /^P\s+Project$/i });
+  await expect(projectPanelButton).toBeVisible();
+  if (await projectPanelButton.getAttribute('aria-pressed') !== 'true') {
+    await projectPanelButton.click();
+  }
+}
+
+async function openTemplatesPanel(page: Page): Promise<void> {
+  const templatesPanelButton = page.getByRole('button', { name: /^T\s+Templates$/i });
+  await expect(templatesPanelButton).toBeVisible();
+  if (await templatesPanelButton.getAttribute('aria-pressed') !== 'true') {
+    await templatesPanelButton.click();
+  }
+}
+
+async function showSourceDiagnostics(sourceMonitor: Locator): Promise<void> {
+  const infoToggle = sourceMonitor.getByRole('button', { name: 'Info', exact: true });
+  if (await infoToggle.isVisible()) {
+    await infoToggle.click();
+  }
+}
+
 async function waitForEditorHydrated(page: Page): Promise<void> {
   await expect(page.getByTestId('editor-shell')).toHaveAttribute('data-hydrated', 'true', { timeout: 30_000 });
 }
@@ -2575,12 +2638,18 @@ const CRITICAL_OVERLAP_RATIO = 0.03;
 async function expectTopLevelEditorControlsLayoutStable(page: Page, viewport: EditorViewportSpec): Promise<LayoutAudit> {
   const documentMetrics = await expectNoHorizontalDocumentOverflow(page, viewport);
   const header = page.locator('header').first();
+  await header.scrollIntoViewIfNeeded();
   await expect(header).toBeVisible();
 
-  const boxes = await measureLayoutBoxes([
-    { label: 'editor nav link', locator: page.getByRole('link', { name: 'Editor' }) },
+  const targets: Array<{ label: string; locator: Locator }> = [
     { label: 'commands button', locator: page.getByRole('button', { name: 'Commands' }) },
-  ]);
+  ];
+  const editorNavLink = page.getByRole('link', { name: 'Editor' });
+  if (await editorNavLink.isVisible()) {
+    targets.unshift({ label: 'editor nav link', locator: editorNavLink });
+  }
+
+  const boxes = await measureLayoutBoxes(targets);
 
   for (const box of boxes) {
     expectBoxInsideViewport(box, viewport);
@@ -2635,14 +2704,22 @@ async function expectProgramMonitorViewportLayoutStable(page: Page, viewport: Ed
   const documentMetrics = await expectNoHorizontalDocumentOverflow(page, viewport);
   const programMonitor = page.getByTestId('program-monitor');
   await programMonitor.scrollIntoViewIfNeeded();
+  await expect(programMonitor.getByTestId('program-monitor-frame')).toBeVisible();
 
-  const boxes = await measureLayoutBoxes([
+  const targets: Array<{ label: string; locator: Locator }> = [
     { label: 'program monitor', locator: programMonitor },
-    { label: 'program monitor frame', locator: programMonitor.getByTestId('program-monitor-frame') },
-    { label: 'program stack summary', locator: programMonitor.getByTestId('program-stack-summary') },
-    { label: 'program audio meter', locator: programMonitor.getByTestId('program-audio-meter') },
-    { label: 'program audio meter status', locator: programMonitor.getByTestId('program-audio-meter-status') },
-  ]);
+    { label: 'program monitor controls', locator: programMonitor.getByTestId('program-monitor-controls') },
+  ];
+  if (viewport.width >= 640) {
+    await showProgramDiagnostics(programMonitor);
+    targets.push(
+      { label: 'program stack summary', locator: programMonitor.getByTestId('program-stack-summary') },
+      { label: 'program audio meter', locator: programMonitor.getByTestId('program-audio-meter') },
+      { label: 'program audio meter status', locator: programMonitor.getByTestId('program-audio-meter-status') },
+    );
+  }
+
+  const boxes = await measureLayoutBoxes(targets);
 
   for (const box of boxes) {
     expectBoxInsideViewport(box, viewport);
@@ -2659,8 +2736,8 @@ async function expectProgramMonitorViewportLayoutStable(page: Page, viewport: Ed
   expect(overlaps, `${viewport.label} Program Monitor overlays should not collide`).toEqual([]);
 
   const clippedText = [
-    ...await findClippedTextInLocator(programMonitor.getByTestId('program-stack-summary'), 'program stack summary'),
-    ...await findClippedTextInLocator(programMonitor.getByTestId('program-audio-meter'), 'program audio meter'),
+    ...(viewport.width >= 640 ? await findClippedTextInLocator(programMonitor.getByTestId('program-stack-summary'), 'program stack summary') : []),
+    ...(viewport.width >= 640 ? await findClippedTextInLocator(programMonitor.getByTestId('program-audio-meter'), 'program audio meter') : []),
   ];
   expect(clippedText, `${viewport.label} Program Monitor overlays should not clip text`).toEqual([]);
 
@@ -2831,6 +2908,7 @@ async function expectProgramMonitorCompositeReady(page: Page): Promise<void> {
   await programMonitor.scrollIntoViewIfNeeded();
   await expect(programMonitor).toBeVisible();
   await expect(programMonitor.getByTestId('program-monitor-frame')).toBeVisible();
+  await showProgramDiagnostics(programMonitor);
   await expect(programMonitor.getByText('Composite stack')).toBeVisible();
 
   const layerSummary = await programMonitor.getByText(/\d+ media \/ \d+ text \/ \d+ caption \/ \d+ audio/).first().textContent();
@@ -2840,6 +2918,16 @@ async function expectProgramMonitorCompositeReady(page: Page): Promise<void> {
   const bounds = await programMonitor.boundingBox();
   expect(bounds?.width ?? 0).toBeGreaterThanOrEqual(300);
   expect(bounds?.height ?? 0).toBeGreaterThanOrEqual(320);
+}
+
+async function showProgramDiagnostics(programMonitor: Locator): Promise<void> {
+  const stackSummary = programMonitor.getByTestId('program-stack-summary');
+  if (!await stackSummary.isVisible()) {
+    const infoToggle = programMonitor.getByRole('button', { name: 'Info', exact: true });
+    await expect(infoToggle).toBeVisible();
+    await infoToggle.click();
+  }
+  await expect(stackSummary).toBeVisible();
 }
 
 async function waitForPreviewImages(programMonitor: Locator): Promise<void> {

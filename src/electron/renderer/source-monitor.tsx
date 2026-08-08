@@ -13,11 +13,13 @@ import {
   readAssetSourceOffset,
 } from '../../lib/editor/subclip';
 import type { EditorAsset } from '../../lib/editor/types';
+import type { DanbiMenuLanguage } from '../../lib/editor/menu-language';
 import type { VideoScopeSample } from '../../lib/editor/video-scopes';
 import { resolveSourceRangePointerTime, type SourceRangeHandle } from './source-edit-workflow-helpers';
 import type { SourceRange } from './editor-view-model';
 import { ProgramAudioMeterOverlay, ProgramVideoScopesOverlay } from './program-monitor-overlays';
 import { readMediaPreviewVideoScopeSample } from './video-scope-sampling';
+import { useMenuLanguage } from './use-menu-language';
 
 export type SourceMonitorPreviewStatus = 'ready' | 'missing-asset' | 'missing-preview';
 
@@ -27,6 +29,95 @@ export interface SourceMonitorPreviewState {
   previewSource: PreviewMediaSource;
   message?: string;
 }
+
+const sourceMonitorText: Record<DanbiMenuLanguage, {
+  audio: string;
+  clear: string;
+  close: string;
+  closeAria: string;
+  dragIn: string;
+  dragOut: string;
+  end: string;
+  goIn: string;
+  goOut: string;
+  hideInfo: string;
+  info: string;
+  insert: string;
+  loop: string;
+  missingPreview: string;
+  noRange: string;
+  noSourceSelected: string;
+  overwrite: string;
+  selectAsset: string;
+  setIn: string;
+  setOut: string;
+  source: string;
+  sourceAudio: string;
+  sourceMonitor: string;
+  sourceScopes: string;
+  start: string;
+  stopped: string;
+  tools: string;
+}> = {
+  en: {
+    audio: 'audio',
+    clear: 'Clear',
+    close: 'Close',
+    closeAria: 'Close source monitor',
+    dragIn: 'Drag source In point',
+    dragOut: 'Drag source Out point',
+    end: 'End',
+    goIn: 'Go In',
+    goOut: 'Go Out',
+    hideInfo: 'Hide info',
+    info: 'Info',
+    insert: 'Insert',
+    loop: 'Loop',
+    missingPreview: 'Missing preview source',
+    noRange: 'no range',
+    noSourceSelected: 'No source selected',
+    overwrite: 'Overwrite',
+    selectAsset: 'Select an asset as source',
+    setIn: 'Set In',
+    setOut: 'Set Out',
+    source: 'Source',
+    sourceAudio: 'Source Audio',
+    sourceMonitor: 'Source Monitor',
+    sourceScopes: 'Source Scopes',
+    start: 'Start',
+    stopped: 'stopped',
+    tools: 'Tools',
+  },
+  ko: {
+    audio: '오디오',
+    clear: '해제',
+    close: '닫기',
+    closeAria: '소스 모니터 닫기',
+    dragIn: '소스 인 지점 드래그',
+    dragOut: '소스 아웃 지점 드래그',
+    end: '끝',
+    goIn: '인으로 이동',
+    goOut: '아웃으로 이동',
+    hideInfo: '정보 숨기기',
+    info: '정보',
+    insert: '삽입',
+    loop: '반복',
+    missingPreview: '프리뷰 소스 없음',
+    noRange: '범위 없음',
+    noSourceSelected: '선택된 소스 없음',
+    overwrite: '덮어쓰기',
+    selectAsset: '소스로 사용할 에셋을 선택하세요',
+    setIn: '인 설정',
+    setOut: '아웃 설정',
+    source: '소스',
+    sourceAudio: '소스 오디오',
+    sourceMonitor: '소스 모니터',
+    sourceScopes: '소스 스코프',
+    start: '시작',
+    stopped: '정지',
+    tools: '도구',
+  },
+};
 
 export function resolveSourceMonitorPreviewState(asset?: EditorAsset): SourceMonitorPreviewState {
   const previewSource = resolvePreviewMediaSource(asset);
@@ -78,6 +169,8 @@ export interface SourceMonitorProps {
   onRangeHandleDrag: (handle: SourceRangeHandle, time: number) => void;
   onInsert: () => void;
   onOverwrite: () => void;
+  compact?: boolean;
+  onClose?: () => void;
 }
 
 export function SourceMonitor({
@@ -103,14 +196,36 @@ export function SourceMonitor({
   onRangeHandleDrag,
   onInsert,
   onOverwrite,
+  compact = false,
+  onClose,
 }: SourceMonitorProps) {
+  const language = useMenuLanguage();
+  const text = sourceMonitorText[language];
   const duration = asset?.duration ?? 0;
   const rangeRailRef = useRef<HTMLDivElement>(null);
+  const [sourceToolsExpanded, setSourceToolsExpanded] = useState(!compact);
+  const showSourceTools = !compact || sourceToolsExpanded;
   const rangeStartPercent = duration > 0 && range ? (range.in / duration) * 100 : 0;
   const rangeWidthPercent = duration > 0 && range ? ((range.out - range.in) / duration) * 100 : 0;
   const handlePlayheadInput = (event: ChangeEvent<HTMLInputElement>) => {
     onPlayheadChange(Number(event.target.value));
   };
+  const updateRangeHandleFromClientX = useCallback((handle: SourceRangeHandle, clientX: number) => {
+    if (!asset || !rangeRailRef.current) {
+      return;
+    }
+
+    onActivate();
+    const rect = rangeRailRef.current.getBoundingClientRect();
+    onRangeHandleDrag(handle, resolveSourceRangePointerTime({
+      clientX,
+      railLeft: rect.left,
+      railWidth: rect.width,
+      duration,
+      fps,
+    }));
+  }, [asset, duration, fps, onActivate, onRangeHandleDrag]);
+
   const handleRangeHandlePointer = (handle: SourceRangeHandle, event: PointerEvent<HTMLButtonElement>) => {
     if (!asset || !rangeRailRef.current) {
       return;
@@ -118,23 +233,36 @@ export function SourceMonitor({
 
     event.preventDefault();
     event.stopPropagation();
-    onActivate();
     event.currentTarget.setPointerCapture(event.pointerId);
+    updateRangeHandleFromClientX(handle, event.clientX);
 
-    const rect = rangeRailRef.current.getBoundingClientRect();
-    onRangeHandleDrag(handle, resolveSourceRangePointerTime({
-      clientX: event.clientX,
-      railLeft: rect.left,
-      railWidth: rect.width,
-      duration,
-      fps,
-    }));
+    const target = event.currentTarget;
+    const pointerId = event.pointerId;
+    const handlePointerMove = (moveEvent: globalThis.PointerEvent) => {
+      moveEvent.preventDefault();
+      updateRangeHandleFromClientX(handle, moveEvent.clientX);
+    };
+    const handlePointerUp = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      if (target.hasPointerCapture(pointerId)) {
+        target.releasePointerCapture(pointerId);
+      }
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp, { once: true });
   };
 
   return (
     <div
       role="button"
       tabIndex={0}
+      data-testid="source-monitor"
+      data-active={active ? 'true' : 'false'}
+      data-source-asset-id={asset?.id ?? ''}
+      data-compact={compact ? 'true' : 'false'}
+      data-tools-expanded={showSourceTools ? 'true' : 'false'}
       onClick={onActivate}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -142,21 +270,55 @@ export function SourceMonitor({
           onActivate();
         }
       }}
-      className={`min-h-[320px] overflow-hidden rounded-md border bg-zinc-950 text-left ${
-        active ? 'border-emerald-500' : 'border-zinc-800'
+      className={`overflow-hidden rounded-md border bg-paper text-left ${compact ? 'min-h-0' : 'min-h-[260px]'} ${
+        active ? 'border-accent-500' : 'border-ds-200'
       }`}
     >
-      <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-3 py-2">
+      <div className="flex items-center justify-between gap-3 border-b border-ds-200 px-3 py-2">
         <div className="min-w-0">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">Source Monitor</div>
-          <div className="truncate text-sm font-medium text-zinc-100">{asset?.name ?? 'No source selected'}</div>
+          <div className="text-meta font-semibold uppercase tracking-wide text-accent-700">{text.sourceMonitor}</div>
+          <div data-testid="source-monitor-asset-name" className="truncate text-sm font-medium text-ink">{asset?.name ?? text.noSourceSelected}</div>
         </div>
-        <span className="shrink-0 rounded bg-zinc-900 px-2 py-1 text-[11px] text-zinc-400">
-          {formatPlaybackRate(playbackRate)}
-        </span>
+        <div className="flex shrink-0 items-center gap-1">
+          <span className="rounded bg-surface px-2 py-1 text-meta text-ds-700">
+            {formatPlaybackRate(playbackRate, language)}
+          </span>
+          {compact ? (
+            <button
+              type="button"
+              data-testid="source-monitor-tools-toggle"
+              aria-pressed={showSourceTools}
+              className={`rounded border px-2 py-1 text-meta font-medium ${
+                showSourceTools
+                  ? 'border-accent-500/60 bg-accent-500/10 text-accent-900'
+                  : 'border-ds-200 text-ds-700 hover:border-ds-400 hover:text-ink'
+              }`}
+              onClick={(event) => {
+                event.stopPropagation();
+                setSourceToolsExpanded((current) => !current);
+              }}
+            >
+              {text.tools}
+            </button>
+          ) : null}
+          {onClose ? (
+            <button
+              type="button"
+              data-testid="source-monitor-close"
+              aria-label={text.closeAria}
+              className="rounded border border-ds-200 px-2 py-1 text-meta font-medium text-ds-700 hover:border-ds-400 hover:text-ink"
+              onClick={(event) => {
+                event.stopPropagation();
+                onClose();
+              }}
+            >
+              {text.close}
+            </button>
+          ) : null}
+        </div>
       </div>
 
-      <div className="min-h-[220px] bg-black">
+      <div className={`${compact ? 'min-h-[118px]' : 'min-h-[140px]'} on-dark bg-monitor`}>
         {asset ? (
           <SourceAssetPreview
             asset={asset}
@@ -164,27 +326,28 @@ export function SourceMonitor({
             playbackRate={playbackRate}
             range={range}
             audioPeaksByAssetId={audioPeaksByAssetId}
+            language={language}
           />
         ) : (
-          <div className="flex min-h-[220px] items-center justify-center text-sm text-zinc-500">
-            Select an asset as source
+          <div className={`flex ${compact ? 'min-h-[118px]' : 'min-h-[140px]'} items-center justify-center text-sm text-ds-600`}>
+            {text.selectAsset}
           </div>
         )}
       </div>
 
-      <div className="space-y-3 p-3">
+      <div className={`${compact ? 'space-y-2 p-2' : 'space-y-3 p-3'}`}>
         <div className="relative pt-4">
-          <div ref={rangeRailRef} data-testid="source-range-rail" className="absolute left-0 right-0 top-0 h-3 rounded bg-zinc-900">
-            <span className="absolute left-0 right-0 top-1 h-1 rounded bg-zinc-800" />
+          <div ref={rangeRailRef} data-testid="source-range-rail" className="absolute left-0 right-0 top-0 h-3 rounded bg-surface">
+            <span className="absolute left-0 right-0 top-1 h-1 rounded bg-ds-200" />
             {range && duration > 0 ? (
               <>
                 <span
-                  className="absolute top-1 h-1 rounded bg-emerald-400"
+                  className="absolute top-1 h-1 rounded bg-accent-600"
                   style={{ left: `${rangeStartPercent}%`, width: `${Math.max(1, rangeWidthPercent)}%` }}
                 />
                 <SourceRangeHandleButton
                   label="I"
-                  ariaLabel="Drag source In point"
+                  ariaLabel={text.dragIn}
                   percent={rangeStartPercent}
                   disabled={!asset}
                   onPointerDown={(event) => handleRangeHandlePointer('in', event)}
@@ -196,7 +359,7 @@ export function SourceMonitor({
                 />
                 <SourceRangeHandleButton
                   label="O"
-                  ariaLabel="Drag source Out point"
+                  ariaLabel={text.dragOut}
                   percent={rangeStartPercent + rangeWidthPercent}
                   disabled={!asset}
                   onPointerDown={(event) => handleRangeHandlePointer('out', event)}
@@ -221,39 +384,41 @@ export function SourceMonitor({
             className="w-full"
           />
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-400">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ds-700">
           <span className="tabular-nums">{formatTimecode(playhead, fps)} / {formatTimecode(duration, fps)}</span>
           <span className="tabular-nums">
             I {range ? formatTimecode(range.in, fps) : '--:--'} / O {range ? formatTimecode(range.out, fps) : '--:--'}
           </span>
         </div>
-        <div className="grid grid-cols-3 gap-2 md:grid-cols-4 2xl:grid-cols-6">
-          <button className="rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 hover:border-emerald-500" onClick={(event) => { event.stopPropagation(); onPlaybackRateChange(stepShuttleRate(playbackRate, 'reverse')); }}>J</button>
-          <button className="rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 hover:border-emerald-500" onClick={(event) => { event.stopPropagation(); onPlaybackRateChange(0); }}>K</button>
-          <button className="rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 hover:border-emerald-500" onClick={(event) => { event.stopPropagation(); onPlaybackRateChange(stepShuttleRate(playbackRate, 'forward')); }}>L</button>
-          <button className="rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 hover:border-sky-500" onClick={(event) => { event.stopPropagation(); onGoToStart(); }}>Start</button>
-          <button className="rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 hover:border-sky-500" onClick={(event) => { event.stopPropagation(); onGoToEnd(); }}>End</button>
+        {showSourceTools ? (
+        <div className="grid grid-cols-2 gap-2 2xl:grid-cols-3">
+          <button className="rounded border border-ds-200 bg-surface px-2 py-1 text-xs text-ds-800 hover:border-accent-500" onClick={(event) => { event.stopPropagation(); onPlaybackRateChange(stepShuttleRate(playbackRate, 'reverse')); }}>J</button>
+          <button className="rounded border border-ds-200 bg-surface px-2 py-1 text-xs text-ds-800 hover:border-accent-500" onClick={(event) => { event.stopPropagation(); onPlaybackRateChange(0); }}>K</button>
+          <button className="rounded border border-ds-200 bg-surface px-2 py-1 text-xs text-ds-800 hover:border-accent-500" onClick={(event) => { event.stopPropagation(); onPlaybackRateChange(stepShuttleRate(playbackRate, 'forward')); }}>L</button>
+          <button className="rounded border border-ds-200 bg-surface px-2 py-1 text-xs text-ds-800 hover:border-info-500" onClick={(event) => { event.stopPropagation(); onGoToStart(); }}>{text.start}</button>
+          <button className="rounded border border-ds-200 bg-surface px-2 py-1 text-xs text-ds-800 hover:border-info-500" onClick={(event) => { event.stopPropagation(); onGoToEnd(); }}>{text.end}</button>
           <button
-            className={`rounded border px-2 py-1 text-xs hover:border-emerald-500 ${
+            className={`rounded border px-2 py-1 text-xs hover:border-accent-500 ${
               loopPlaybackEnabled
-                ? 'border-emerald-500 bg-emerald-950/60 text-emerald-100'
-                : 'border-zinc-800 bg-zinc-900 text-zinc-200'
+                ? 'border-accent-500 bg-accent-100/60 text-accent-900'
+                : 'border-ds-200 bg-surface text-ds-800'
             }`}
             onClick={(event) => {
               event.stopPropagation();
               onToggleLoopPlayback();
             }}
           >
-            Loop
+            {text.loop}
           </button>
-          <button className="rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 hover:border-sky-500" onClick={(event) => { event.stopPropagation(); onGoToIn(); }}>Go In</button>
-          <button className="rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 hover:border-sky-500" onClick={(event) => { event.stopPropagation(); onGoToOut(); }}>Go Out</button>
-          <button className="rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 hover:border-emerald-500" onClick={(event) => { event.stopPropagation(); onSetIn(); }}>Set In</button>
-          <button className="rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 hover:border-emerald-500" onClick={(event) => { event.stopPropagation(); onSetOut(); }}>Set Out</button>
-          <button className="rounded border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 hover:border-amber-500" onClick={(event) => { event.stopPropagation(); onClearMarks(); }}>Clear</button>
-          <button className="rounded border border-emerald-800 bg-emerald-950/40 px-2 py-1 text-xs text-emerald-200 hover:border-emerald-400" onClick={(event) => { event.stopPropagation(); onInsert(); }}>Insert</button>
-          <button className="rounded border border-sky-800 bg-sky-950/40 px-2 py-1 text-xs text-sky-200 hover:border-sky-400" onClick={(event) => { event.stopPropagation(); onOverwrite(); }}>Overwrite</button>
+          <button className="rounded border border-ds-200 bg-surface px-2 py-1 text-xs text-ds-800 hover:border-info-500" onClick={(event) => { event.stopPropagation(); onGoToIn(); }}>{text.goIn}</button>
+          <button className="rounded border border-ds-200 bg-surface px-2 py-1 text-xs text-ds-800 hover:border-info-500" onClick={(event) => { event.stopPropagation(); onGoToOut(); }}>{text.goOut}</button>
+          <button className="rounded border border-ds-200 bg-surface px-2 py-1 text-xs text-ds-800 hover:border-accent-500" onClick={(event) => { event.stopPropagation(); onSetIn(); }}>{text.setIn}</button>
+          <button className="rounded border border-ds-200 bg-surface px-2 py-1 text-xs text-ds-800 hover:border-accent-500" onClick={(event) => { event.stopPropagation(); onSetOut(); }}>{text.setOut}</button>
+          <button className="rounded border border-ds-200 bg-surface px-2 py-1 text-xs text-ds-800 hover:border-warn-500" onClick={(event) => { event.stopPropagation(); onClearMarks(); }}>{text.clear}</button>
+          <button className="rounded border border-accent-200 bg-accent-100/40 px-2 py-1 text-xs text-accent-800 hover:border-accent-600" onClick={(event) => { event.stopPropagation(); onInsert(); }}>{text.insert}</button>
+          <button className="rounded border border-info-200 bg-info-100/40 px-2 py-1 text-xs text-info-800 hover:border-info-600" onClick={(event) => { event.stopPropagation(); onOverwrite(); }}>{text.overwrite}</button>
         </div>
+        ) : null}
       </div>
     </div>
   );
@@ -281,7 +446,7 @@ function SourceRangeHandleButton({
       disabled={disabled}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
-      className="absolute top-0 h-3 w-4 -translate-x-1/2 rounded border border-emerald-300 bg-zinc-950 text-[8px] font-semibold leading-none text-emerald-100 shadow-sm shadow-black/40 disabled:cursor-not-allowed disabled:opacity-50"
+      className="absolute top-0 z-20 h-3 w-4 -translate-x-1/2 rounded border border-accent-700 bg-paper text-micro font-semibold leading-none text-accent-900 shadow-sm shadow-black/40 disabled:cursor-not-allowed disabled:opacity-50"
       style={{ left: `${Math.min(100, Math.max(0, percent))}%` }}
     >
       {label}
@@ -295,17 +460,21 @@ function SourceAssetPreview({
   playbackRate,
   range,
   audioPeaksByAssetId,
+  language,
 }: {
   asset: EditorAsset;
   playhead: number;
   playbackRate: number;
   range: SourceRange | null;
   audioPeaksByAssetId: Record<string, number[]>;
+  language: DanbiMenuLanguage;
 }) {
+  const text = sourceMonitorText[language];
   const videoRef = useRef<HTMLVideoElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [videoScopeSample, setVideoScopeSample] = useState<VideoScopeSample | undefined>(undefined);
+  const [diagnosticsVisible, setDiagnosticsVisible] = useState(false);
   const sourceTime = roundTime(clampNumber(playhead, 0, asset.duration));
   const mediaTime = getAssetMediaTime(asset, sourceTime);
   const previewState = resolveSourceMonitorPreviewState(asset);
@@ -375,64 +544,117 @@ function SourceAssetPreview({
 
   if (mediaKind === 'image') {
     return (
-      <div className="relative flex min-h-[220px] items-center justify-center bg-black">
+      <div className="relative flex min-h-[140px] items-center justify-center on-dark bg-monitor">
+        <SourcePreviewInfoToggle visible={diagnosticsVisible} onToggle={() => setDiagnosticsVisible((current) => !current)} language={language} />
         {mediaSource ? (
           <img
             ref={imageRef}
             src={mediaSource}
             alt={asset.name}
-            className="max-h-[260px] max-w-full object-contain"
+            className="max-h-[180px] max-w-full object-contain"
             onLoad={(event) => handleVideoScopeSource(event.currentTarget)}
           />
         ) : (
-          <div className="text-sm text-zinc-500">Missing preview source</div>
+          <div className="text-sm text-ds-600">{text.missingPreview}</div>
         )}
-        <ProgramVideoScopesOverlay sample={videoScopeSample} title="Source Scopes" testId="source-video-scopes" statusTestId="source-video-scope-status" />
-        {showSourceAudioMeter ? <SourceAudioMeterOverlay meter={sourceAudioMeter} /> : null}
-        <SourcePreviewOverlay asset={asset} sourceTime={sourceTime} range={range} previewSource={previewSource} />
+        {diagnosticsVisible ? (
+          <>
+            <ProgramVideoScopesOverlay sample={videoScopeSample} title={text.sourceScopes} testId="source-video-scopes" statusTestId="source-video-scope-status" />
+            {showSourceAudioMeter ? <SourceAudioMeterOverlay meter={sourceAudioMeter} language={language} /> : null}
+            <SourcePreviewOverlay asset={asset} sourceTime={sourceTime} range={range} previewSource={previewSource} language={language} />
+          </>
+        ) : null}
       </div>
     );
   }
 
   if (mediaKind === 'audio') {
     return (
-      <div className="relative flex min-h-[220px] flex-col items-center justify-center gap-5 bg-black p-6">
+      <div className="relative flex min-h-[140px] flex-col items-center justify-center gap-4 on-dark bg-monitor p-4">
+        <SourcePreviewInfoToggle visible={diagnosticsVisible} onToggle={() => setDiagnosticsVisible((current) => !current)} language={language} />
         <SourceWaveform peaks={waveformPeaks} seed={asset.id} />
-        {mediaSource ? <audio ref={audioRef} src={mediaSource} className="hidden" /> : null}
-        {showSourceAudioMeter ? <SourceAudioMeterOverlay meter={sourceAudioMeter} /> : null}
-        <SourcePreviewOverlay asset={asset} sourceTime={sourceTime} range={range} previewSource={previewSource} />
+        {mediaSource ? (
+          <audio
+            ref={audioRef}
+            src={mediaSource}
+            preload="auto"
+            data-testid={`source-monitor-audio-${asset.id}`}
+            data-source-asset-id={asset.id}
+            data-source-playback-rate={playbackRate}
+            className="hidden"
+          />
+        ) : null}
+        {diagnosticsVisible ? (
+          <>
+            {showSourceAudioMeter ? <SourceAudioMeterOverlay meter={sourceAudioMeter} language={language} /> : null}
+            <SourcePreviewOverlay asset={asset} sourceTime={sourceTime} range={range} previewSource={previewSource} language={language} />
+          </>
+        ) : null}
       </div>
     );
   }
 
   return (
-    <div className="relative flex min-h-[220px] items-center justify-center bg-black">
+    <div className="relative flex min-h-[140px] items-center justify-center on-dark bg-monitor">
+      <SourcePreviewInfoToggle visible={diagnosticsVisible} onToggle={() => setDiagnosticsVisible((current) => !current)} language={language} />
       {mediaSource ? (
         <video
           ref={videoRef}
           src={mediaSource}
-          className="max-h-[300px] max-w-full object-contain"
-          muted
+          className="max-h-[180px] max-w-full object-contain"
+          playsInline
         />
       ) : (
-        <div className="text-sm text-zinc-500">{previewState.message ?? 'Missing preview source'}</div>
+        <div className="text-sm text-ds-600">{previewState.message ? translatePreviewMessage(previewState.message, language) : text.missingPreview}</div>
       )}
-      <ProgramVideoScopesOverlay sample={videoScopeSample} title="Source Scopes" testId="source-video-scopes" statusTestId="source-video-scope-status" />
-      {showSourceAudioMeter ? <SourceAudioMeterOverlay meter={sourceAudioMeter} /> : null}
-      <SourcePreviewOverlay asset={asset} sourceTime={sourceTime} range={range} previewSource={previewSource} />
+      {diagnosticsVisible ? (
+        <>
+          <ProgramVideoScopesOverlay sample={videoScopeSample} title={text.sourceScopes} testId="source-video-scopes" statusTestId="source-video-scope-status" />
+          {showSourceAudioMeter ? <SourceAudioMeterOverlay meter={sourceAudioMeter} language={language} /> : null}
+          <SourcePreviewOverlay asset={asset} sourceTime={sourceTime} range={range} previewSource={previewSource} language={language} />
+        </>
+      ) : null}
     </div>
   );
 }
 
-function SourceAudioMeterOverlay({ meter }: { meter: ReturnType<typeof buildSourceAudioMeter> }) {
+function SourcePreviewInfoToggle({
+  visible,
+  onToggle,
+  language,
+}: {
+  visible: boolean;
+  onToggle: () => void;
+  language: DanbiMenuLanguage;
+}) {
+  const text = sourceMonitorText[language];
+
+  return (
+    <button
+      type="button"
+      className="absolute left-3 top-3 z-30 rounded border border-ds-300 on-dark bg-black/70 px-2 py-1 text-meta font-medium text-ds-800 hover:border-accent-600 hover:text-white"
+      aria-pressed={visible}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }}
+    >
+      {visible ? text.hideInfo : text.info}
+    </button>
+  );
+}
+
+function SourceAudioMeterOverlay({ meter, language }: { meter: ReturnType<typeof buildSourceAudioMeter>; language: DanbiMenuLanguage }) {
+  const text = sourceMonitorText[language];
+
   return (
     <ProgramAudioMeterOverlay
       meter={meter}
-      title="Source Audio"
+      title={text.sourceAudio}
       testId="source-audio-meter"
       statusTestId="source-audio-meter-status"
       positionClassName="absolute right-3 top-3"
-      readoutOptions={{ contextLabel: 'Source' }}
+      readoutOptions={{ contextLabel: text.source }}
     />
   );
 }
@@ -442,30 +664,33 @@ function SourcePreviewOverlay({
   sourceTime,
   range,
   previewSource,
+  language,
 }: {
   asset: EditorAsset;
   sourceTime: number;
   range: SourceRange | null;
   previewSource: ReturnType<typeof resolvePreviewMediaSource>;
+  language: DanbiMenuLanguage;
 }) {
+  const text = sourceMonitorText[language];
   const subclipOffset = readAssetSourceOffset(asset);
   const subclipOut = readAssetOriginalSourceOut(asset);
 
   return (
     <div className="pointer-events-none absolute bottom-3 left-3 right-3 flex flex-wrap items-center justify-between gap-2">
-      <div className="rounded bg-black/70 px-3 py-2">
+      <div className="rounded on-dark bg-black/70 px-3 py-2">
         <div className="text-sm font-semibold text-white">{asset.name}</div>
-        <div className="text-xs text-zinc-300">
-          {resolveMediaBinAssetKindLabel(asset)} / {asset.width ?? '-'}x{asset.height ?? '-'} / {sourceTime.toFixed(1)}s / {formatPreviewSourceMode(previewSource)}
+        <div className="text-xs text-ds-700">
+          {formatSourceAssetKindLabel(asset, language)} / {asset.width ?? '-'}x{asset.height ?? '-'} / {sourceTime.toFixed(1)}s / {formatPreviewSourceMode(previewSource)}
         </div>
         {isMediaSubclipAsset(asset) ? (
-          <div className="mt-1 text-[11px] text-violet-200">
-            source {subclipOffset.toFixed(1)}s{subclipOut !== undefined ? ` - ${subclipOut.toFixed(1)}s` : ''}
+          <div className="mt-1 text-meta text-accent2-800">
+            {text.source.toLowerCase()} {subclipOffset.toFixed(1)}s{subclipOut !== undefined ? ` - ${subclipOut.toFixed(1)}s` : ''}
           </div>
         ) : null}
       </div>
-      <div className="rounded bg-black/70 px-3 py-2 text-xs text-zinc-300">
-        {range ? `${range.in.toFixed(1)}s - ${range.out.toFixed(1)}s` : 'no range'}
+      <div className="rounded on-dark bg-black/70 px-3 py-2 text-xs text-ds-700">
+        {range ? `${range.in.toFixed(1)}s - ${range.out.toFixed(1)}s` : text.noRange}
       </div>
     </div>
   );
@@ -481,7 +706,7 @@ function SourceWaveform({ peaks, seed = 'source' }: { peaks?: number[]; seed?: s
       {values.map((value, index) => (
         <span
           key={index}
-          className="flex-1 rounded-sm bg-emerald-400/75"
+          className="flex-1 rounded-sm bg-accent-600/75"
           style={{ height: `${roundStylePercent(12 + Math.min(1, Math.max(0, value)) * 78)}%` }}
         />
       ))}
@@ -500,12 +725,50 @@ function formatTimecode(seconds: number, fps: number): string {
   return `${padTime(hours)}:${padTime(minutes)}:${padTime(secs)}:${padTime(Math.min(frames, fps - 1))}`;
 }
 
-function formatPlaybackRate(rate: number): string {
+function formatPlaybackRate(rate: number, language: DanbiMenuLanguage): string {
   if (rate === 0) {
-    return 'stopped';
+    return sourceMonitorText[language].stopped;
   }
 
   return `${rate > 0 ? 'x' : '-x'}${Math.abs(rate)}`;
+}
+
+function translatePreviewMessage(message: string, language: DanbiMenuLanguage): string {
+  if (language !== 'ko') {
+    return message;
+  }
+
+  if (message === 'Missing source asset') {
+    return '소스 에셋 없음';
+  }
+  if (message === 'Missing preview source') {
+    return sourceMonitorText.ko.missingPreview;
+  }
+
+  return message;
+}
+
+function formatSourceAssetKindLabel(asset: EditorAsset, language: DanbiMenuLanguage): string {
+  if (language !== 'ko') {
+    return resolveMediaBinAssetKindLabel(asset);
+  }
+
+  switch (asset.kind) {
+    case 'video':
+      return '비디오';
+    case 'audio':
+      return '오디오';
+    case 'image':
+      return '이미지';
+    case 'text':
+      return '텍스트';
+    case 'ai':
+      return 'AI';
+    case 'effect':
+      return '효과';
+    default:
+      return resolveMediaBinAssetKindLabel(asset);
+  }
 }
 
 function roundTime(value: number): number {

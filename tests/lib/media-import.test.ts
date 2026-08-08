@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { addImportedMediaAsset } from '../../src/lib/editor/media-import';
+import { hasEmbeddedAudio } from '../../src/lib/editor/media-metadata';
 import { createDefaultEditorProject } from '../../src/lib/editor/project';
+import { insertAssetPatchOnTimeline } from '../../src/lib/editor/timeline';
 
 describe('editor media import', () => {
   it('infers supported media kind from exact MIME before extension fallback', () => {
@@ -119,5 +121,72 @@ describe('editor media import', () => {
         hasVideo: true,
       },
     })).toThrow('Unsupported media type for metadata-spoofed.png: image/svg+xml.');
+  });
+
+  it('keeps imported video audio insertable when durable audio metadata is missing', () => {
+    const project = createDefaultEditorProject();
+    const legacyImportProject = addImportedMediaAsset(project, {
+      name: 'legacy-camera.mp4',
+      mimeType: 'video/mp4',
+      size: 4096,
+      source: 'local://legacy-camera.mp4',
+      renderPath: 'E:/media/legacy-camera.mp4',
+      duration: 6,
+    });
+    const legacyAsset = legacyImportProject.assets.at(-1)!;
+
+    expect(legacyAsset.metadata?.hasAudio).toBeUndefined();
+    expect(hasEmbeddedAudio(legacyAsset)).toBe(true);
+
+    const editedProject = insertAssetPatchOnTimeline(legacyImportProject, legacyAsset.id, {
+      start: 70,
+      primaryTargetTrackId: 'track-v2',
+      duration: 4,
+    });
+    const insertedVideo = editedProject.tracks
+      .find((track) => track.id === 'track-v2')
+      ?.clips.find((clip) => clip.assetId === legacyAsset.id && clip.kind === 'video');
+    const insertedAudio = editedProject.tracks
+      .find((track) => track.id === 'track-a1')
+      ?.clips.find((clip) => clip.assetId === legacyAsset.id && clip.kind === 'audio');
+
+    expect(insertedVideo).toMatchObject({
+      trackId: 'track-v2',
+      start: 70,
+      duration: 4,
+    });
+    expect(insertedAudio).toMatchObject({
+      trackId: 'track-a1',
+      start: 70,
+      duration: 4,
+    });
+    expect(insertedAudio?.automationTags).toEqual(expect.arrayContaining([`linked-video:${insertedVideo?.id}`]));
+
+    const analyzedSilentProject = addImportedMediaAsset(project, {
+      name: 'silent-camera.mp4',
+      mimeType: 'video/mp4',
+      size: 4096,
+      source: 'local://silent-camera.mp4',
+      renderPath: 'E:/media/silent-camera.mp4',
+      duration: 6,
+      metadata: {
+        analyzed: true,
+        hasAudio: false,
+      },
+    });
+    expect(hasEmbeddedAudio(analyzedSilentProject.assets.at(-1)!)).toBe(false);
+
+    const codecOnlyProject = addImportedMediaAsset(project, {
+      name: 'codec-camera.mp4',
+      mimeType: 'video/mp4',
+      size: 4096,
+      source: 'local://codec-camera.mp4',
+      renderPath: 'E:/media/codec-camera.mp4',
+      duration: 6,
+      metadata: {
+        audioCodec: 'aac',
+      },
+    });
+    expect(hasEmbeddedAudio(codecOnlyProject.assets.at(-1)!)).toBe(true);
   });
 });

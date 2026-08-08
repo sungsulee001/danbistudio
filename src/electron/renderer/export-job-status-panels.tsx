@@ -50,20 +50,20 @@ export function PreviewRenderParityPanel({
               key={issue.id}
               className={`rounded-md border p-2 text-xs ${
                 issue.severity === 'blocked'
-                  ? 'border-rose-500/30 bg-rose-500/10 text-rose-200'
+                  ? 'border-danger-500/30 bg-danger-500/10 text-danger-800'
                   : issue.severity === 'warning'
-                    ? 'border-amber-500/30 bg-amber-500/10 text-amber-100'
-                    : 'border-sky-500/30 bg-sky-500/10 text-sky-100'
+                    ? 'border-warn-500/30 bg-warn-500/10 text-warn-900'
+                    : 'border-info-500/30 bg-info-500/10 text-info-900'
               }`}
             >
               <div className="font-medium">{issue.message}</div>
-              <div className="mt-1 text-[11px] opacity-80">
+              <div className="mt-1 text-meta opacity-80">
                 {formatTimecode(issue.time, fps)} / {issue.action}
               </div>
             </div>
           ))}
           {issueSummary.hiddenLabel ? (
-            <div className="rounded-md border border-zinc-800 bg-zinc-950/40 p-2 text-xs text-zinc-400">
+            <div className="rounded-md border border-ds-200 bg-paper/40 p-2 text-xs text-ds-700">
               {issueSummary.hiddenLabel}
             </div>
           ) : null}
@@ -99,58 +99,58 @@ export function ComfyUIBatchStatusPanel({
   } = buildComfyUIBatchResultStatus(job);
 
   return (
-    <div className="rounded-md border border-zinc-800 bg-zinc-950 p-3">
+    <div className="rounded-md border border-ds-200 bg-paper p-3">
       <div className="mb-2 flex items-center justify-between text-xs">
-        <span className="text-zinc-400">ComfyUI batch</span>
-        <span className="text-amber-300">{job.status}</span>
+        <span className="text-ds-700">ComfyUI batch</span>
+        <span className="text-warn-700">{job.status}</span>
       </div>
-      <div className="mb-2 text-[11px] text-zinc-500">
+      <div className="mb-2 text-meta text-ds-600">
         {job.completedJobs}/{job.totalJobs} jobs / P{job.priority ?? 0} / {job.execute ? 'execute' : 'prepare'}
       </div>
-      <div className="mb-2 text-[11px] text-zinc-500">
+      <div className="mb-2 text-meta text-ds-600">
         {completedResultCount} result files ready
       </div>
       <JobProgressBar value={job.progress} tone="amber" />
-      <div className="mt-2 flex items-center justify-between gap-3 text-xs text-zinc-500">
+      <div className="mt-2 flex items-center justify-between gap-3 text-xs text-ds-600">
         <span>{job.progress}%</span>
         {job.status === 'queued' || job.status === 'running' ? (
-          <button type="button" className="text-rose-300 hover:text-rose-200" onClick={() => void onCancel()}>
+          <button type="button" className="text-danger-700 hover:text-danger-800" onClick={() => void onCancel()}>
             Cancel
           </button>
         ) : null}
         {job.status === 'failed' || job.status === 'cancelled' ? (
-          <button type="button" className="text-sky-300 hover:text-sky-200" onClick={() => void onRetry()}>
+          <button type="button" className="text-info-700 hover:text-info-800" onClick={() => void onRetry()}>
             Retry
           </button>
         ) : null}
         {hasCompletedResults ? (
           <>
-            <button type="button" className="text-emerald-300 hover:text-emerald-200" onClick={onImportResults}>
+            <button type="button" className="text-accent-700 hover:text-accent-800" onClick={onImportResults}>
               Import results
             </button>
-            <button type="button" className="text-violet-300 hover:text-violet-200" onClick={onReplaceOriginals}>
+            <button type="button" className="text-accent2-700 hover:text-accent2-800" onClick={onReplaceOriginals}>
               Replace originals
             </button>
           </>
         ) : null}
         {hasRenderableEffectPassResults ? (
-          <button type="button" className="text-cyan-300 hover:text-cyan-200" onClick={onApplyAsAiEffectPass}>
+          <button type="button" className="text-info-700 hover:text-info-800" onClick={onApplyAsAiEffectPass}>
             AI effect pass
           </button>
         ) : null}
       </div>
       {job.currentClipId ? (
-        <div className="mt-2 text-[11px] text-zinc-500">
+        <div className="mt-2 text-meta text-ds-600">
           Current {job.currentClipId}
         </div>
       ) : null}
       {job.error ? (
-        <div className="mt-2 rounded border border-rose-500/30 bg-rose-500/10 p-2 text-xs text-rose-200">
+        <div className="mt-2 rounded border border-danger-500/30 bg-danger-500/10 p-2 text-xs text-danger-800">
           {job.error}
         </div>
       ) : null}
       {job.warnings[0] ? (
-        <div className="mt-2 rounded border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-100">
+        <div className="mt-2 rounded border border-warn-500/30 bg-warn-500/10 p-2 text-xs text-warn-900">
           {job.warnings[0]}
         </div>
       ) : null}
@@ -174,45 +174,45 @@ export function SttJobStatusPanel({
   }
 
   return (
-    <div className="rounded-md border border-zinc-800 bg-zinc-950 p-3">
+    <div className="rounded-md border border-ds-200 bg-paper p-3">
       <div className="mb-2 flex items-center justify-between text-xs">
-        <span className="text-zinc-400">STT captions</span>
-        <span className="text-sky-300">{job.status}</span>
+        <span className="text-ds-700">STT captions</span>
+        <span className="text-info-700">{job.status}</span>
       </div>
-      <div className="mb-2 text-[11px] text-zinc-500">
+      <div className="mb-2 text-meta text-ds-600">
         {job.completedClips}/{job.totalClips} clips / {job.captions.length} captions / {job.engine} / {job.language}
       </div>
       <JobProgressBar value={job.progress} tone="sky" />
-      <div className="mt-2 flex items-center justify-between gap-3 text-xs text-zinc-500">
+      <div className="mt-2 flex items-center justify-between gap-3 text-xs text-ds-600">
         <span>{job.progress}%</span>
         {job.status === 'queued' || job.status === 'running' ? (
-          <button type="button" className="text-rose-300 hover:text-rose-200" onClick={() => void onCancel()}>
+          <button type="button" className="text-danger-700 hover:text-danger-800" onClick={() => void onCancel()}>
             Cancel
           </button>
         ) : null}
         {job.status === 'failed' || job.status === 'cancelled' ? (
-          <button type="button" className="text-sky-300 hover:text-sky-200" onClick={() => void onRetry()}>
+          <button type="button" className="text-info-700 hover:text-info-800" onClick={() => void onRetry()}>
             Retry
           </button>
         ) : null}
         {job.captions.length > 0 ? (
-          <button type="button" className="text-emerald-300 hover:text-emerald-200" onClick={onImportCaptions}>
+          <button type="button" className="text-accent-700 hover:text-accent-800" onClick={onImportCaptions}>
             Import captions
           </button>
         ) : null}
       </div>
       {job.currentClipId ? (
-        <div className="mt-2 text-[11px] text-zinc-500">
+        <div className="mt-2 text-meta text-ds-600">
           Current {job.currentClipId}
         </div>
       ) : null}
       {job.error ? (
-        <div className="mt-2 rounded border border-rose-500/30 bg-rose-500/10 p-2 text-xs text-rose-200">
+        <div className="mt-2 rounded border border-danger-500/30 bg-danger-500/10 p-2 text-xs text-danger-800">
           {job.error}
         </div>
       ) : null}
       {job.warnings[0] ? (
-        <div className="mt-2 rounded border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-100">
+        <div className="mt-2 rounded border border-warn-500/30 bg-warn-500/10 p-2 text-xs text-warn-900">
           {job.warnings[0]}
         </div>
       ) : null}
@@ -238,21 +238,21 @@ export function SttReviewStatusPanel({
   }
 
   return (
-    <div className="rounded-md border border-zinc-800 bg-zinc-950 p-3">
+    <div className="rounded-md border border-ds-200 bg-paper p-3">
       <div className="mb-2 flex items-center justify-between text-xs">
-        <span className="text-zinc-400">STT review</span>
-        <span className={review.issueCount > 0 ? 'text-amber-300' : 'text-emerald-300'}>
+        <span className="text-ds-700">STT review</span>
+        <span className={review.issueCount > 0 ? 'text-warn-700' : 'text-accent-700'}>
           {review.issueCount > 0 ? `${review.issueCount} issues` : 'clean'}
         </span>
       </div>
-      <div className="grid grid-cols-2 gap-2 text-[11px] text-zinc-500">
+      <div className="grid grid-cols-2 gap-2 text-meta text-ds-600">
         <span>{review.captionCount} captions</span>
         <span>{review.wordTimedCaptionCount} word-timed</span>
         <span>{review.lowConfidenceCount} low confidence</span>
         <span>{review.readabilityIssueCount} readability</span>
       </div>
       {diarization.captionCount > 0 ? (
-        <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-zinc-500">
+        <div className="mt-2 grid grid-cols-2 gap-2 text-meta text-ds-600">
           <span>{diarization.speakerCount} speakers</span>
           <span>{diarization.turnCount} turns</span>
           <span>{diarization.missingSpeakerCount} missing speakers</span>
@@ -262,23 +262,23 @@ export function SttReviewStatusPanel({
         </div>
       ) : null}
       <div className="mt-2 flex items-center justify-between gap-3 text-xs">
-        <button type="button" className="text-sky-300 hover:text-sky-200" onClick={onSelectIssues}>
+        <button type="button" className="text-info-700 hover:text-info-800" onClick={onSelectIssues}>
           Select issues
         </button>
-        <button type="button" className="text-emerald-300 hover:text-emerald-200" onClick={onCleanStt}>
+        <button type="button" className="text-accent-700 hover:text-accent-800" onClick={onCleanStt}>
           Clean STT
         </button>
-        <button type="button" className="text-cyan-300 hover:text-cyan-200" onClick={onDiarizeSpeakers}>
+        <button type="button" className="text-info-700 hover:text-info-800" onClick={onDiarizeSpeakers}>
           Diarize
         </button>
       </div>
       {diarization.turns[0] ? (
-        <div className="mt-2 rounded border border-cyan-500/20 bg-cyan-500/10 p-2 text-xs text-cyan-100">
+        <div className="mt-2 rounded border border-info-500/20 bg-info-500/10 p-2 text-xs text-info-900">
           {diarization.turns[0].speaker} / {diarization.turns[0].captionCount} caption{diarization.turns[0].captionCount === 1 ? '' : 's'} / {diarization.turns[0].duration.toFixed(1)}s
         </div>
       ) : null}
       {review.issues[0] ? (
-        <div className="mt-2 rounded border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-100">
+        <div className="mt-2 rounded border border-warn-500/30 bg-warn-500/10 p-2 text-xs text-warn-900">
           {review.issues[0].message} / {review.issues[0].action}
         </div>
       ) : null}
@@ -288,18 +288,18 @@ export function SttReviewStatusPanel({
 
 function ExportStatusReadout({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between border-b border-zinc-800 py-2 text-sm">
-      <span className="text-zinc-500">{label}</span>
-      <span className="text-zinc-100">{value}</span>
+    <div className="flex items-center justify-between border-b border-ds-200 py-2 text-sm">
+      <span className="text-ds-600">{label}</span>
+      <span className="text-ink">{value}</span>
     </div>
   );
 }
 
 function JobProgressBar({ value, tone }: { value: number; tone: 'amber' | 'sky' }) {
   return (
-    <div className="h-2 overflow-hidden rounded bg-zinc-800">
+    <div className="h-2 overflow-hidden rounded bg-ds-200">
       <div
-        className={`h-full transition-all ${tone === 'amber' ? 'bg-amber-400' : 'bg-sky-400'}`}
+        className={`h-full transition-all ${tone === 'amber' ? 'bg-warn-600' : 'bg-info-600'}`}
         style={{ width: `${Math.max(0, Math.min(value, 100))}%` }}
       />
     </div>

@@ -29,7 +29,10 @@ export function resolvePreviewMediaSource(asset: EditorAsset | undefined): Previ
   }
 
   if (resolveRenderableAssetMediaKind(asset) === 'video' && asset.mediaCache?.proxySource) {
-    return { source: asset.mediaCache.proxySource, mode: 'proxy', hasProxy, hasThumbnail, hasWaveform };
+    const proxyPath = resolvePreviewSourcePath(asset.mediaCache.proxySource, asset.mediaCache.proxyPath);
+    if (proxyPath.mode !== 'none') {
+      return { source: proxyPath.source, mode: 'proxy', hasProxy, hasThumbnail, hasWaveform };
+    }
   }
 
   const previewPath = resolvePreviewSourcePath(asset.source, asset.renderPath);
@@ -44,6 +47,11 @@ export function resolvePreviewSourcePath(source?: string, renderPath?: string): 
   const directSource = normalizeOptionalPath(source);
   if (directSource && isBrowserPreviewSource(directSource)) {
     return { source: directSource, mode: 'source' };
+  }
+
+  const samplePackSource = resolveSamplePackPreviewPath(renderPath) || resolveSamplePackPreviewPath(directSource);
+  if (samplePackSource) {
+    return { source: samplePackSource, mode: 'public-render-path' };
   }
 
   const publicRenderSource = resolvePublicPreviewPath(renderPath ?? directSource);
@@ -121,4 +129,25 @@ function resolvePublicPreviewPath(value?: string): string {
 
   const relative = path.slice(publicIndex + '/public'.length);
   return relative.startsWith('/') ? relative : `/${relative}`;
+}
+
+function resolveSamplePackPreviewPath(value?: string): string {
+  const path = normalizeOptionalPath(value).replace(/\\/g, '/');
+  if (!path) {
+    return '';
+  }
+
+  const lower = path.toLowerCase();
+  const markers = [
+    '/samples/getting-started/',
+    '/sample-project-pack/getting-started/',
+  ];
+  const marker = markers.find((item) => lower.includes(item));
+  if (!marker) {
+    return '';
+  }
+
+  const markerIndex = lower.lastIndexOf(marker);
+  const relative = path.slice(markerIndex + marker.length);
+  return relative ? `/sample-pack/${relative}` : '';
 }

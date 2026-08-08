@@ -21,6 +21,8 @@ const SUPPORTED_VIDEO_MIME_TYPES = [
   'video/x-m4v',
   'video/quicktime',
   'video/x-matroska',
+  'video/matroska',
+  'application/x-matroska',
   'video/webm',
   'video/x-msvideo',
   'video/avi',

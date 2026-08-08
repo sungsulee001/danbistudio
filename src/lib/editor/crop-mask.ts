@@ -15,7 +15,7 @@ export interface CropMaskPreset {
   parameters: CropMaskParameters;
 }
 
-export type CropMaskHandle = 'left' | 'right' | 'top' | 'bottom';
+export type CropMaskHandle = 'left' | 'right' | 'top' | 'bottom' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
 export const CROP_MASK_EFFECT_LABEL = 'Crop';
 
@@ -83,18 +83,13 @@ export function resolveCropMaskHandleDrag({
   const horizontalDelta = boxWidth > 1 ? deltaX / boxWidth : 0;
   const verticalDelta = boxHeight > 1 ? deltaY / boxHeight : 0;
 
-  switch (handle) {
-    case 'left':
-      return normalizeCropMaskParameters({ ...current, left: current.left + horizontalDelta });
-    case 'right':
-      return normalizeCropMaskParameters({ ...current, right: current.right - horizontalDelta });
-    case 'top':
-      return normalizeCropMaskParameters({ ...current, top: current.top + verticalDelta });
-    case 'bottom':
-      return normalizeCropMaskParameters({ ...current, bottom: current.bottom - verticalDelta });
-    default:
-      return current;
-  }
+  return normalizeCropMaskParameters({
+    ...current,
+    left: handle.includes('left') ? current.left + horizontalDelta : current.left,
+    right: handle.includes('right') ? current.right - horizontalDelta : current.right,
+    top: handle.includes('top') ? current.top + verticalDelta : current.top,
+    bottom: handle.includes('bottom') ? current.bottom - verticalDelta : current.bottom,
+  });
 }
 
 export function readCropMaskParameters(effect?: ClipEffect): CropMaskParameters {

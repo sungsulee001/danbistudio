@@ -106,17 +106,22 @@ export function resolveTimelineClipRenderWindow({
   pixelsPerSecond,
   projectDuration,
   overscanSeconds = 8,
+  timelineStartOffsetPixels = 0,
 }: TimelineViewportState & {
   pixelsPerSecond: number;
   projectDuration: number;
   overscanSeconds?: number;
+  timelineStartOffsetPixels?: number;
 }): TimelineWorkspaceRange {
   if (pixelsPerSecond <= 0 || viewportWidth <= 0 || projectDuration <= 0) {
     return { start: 0, end: Math.max(0, projectDuration) };
   }
 
-  const viewportStart = Math.max(0, scrollLeft / pixelsPerSecond);
-  const viewportEnd = Math.min(projectDuration, (scrollLeft + viewportWidth) / pixelsPerSecond);
+  const timelineStartOffset = Math.max(0, timelineStartOffsetPixels);
+  const viewportStartPixels = Math.max(0, scrollLeft - timelineStartOffset);
+  const viewportEndPixels = Math.max(0, scrollLeft + viewportWidth - timelineStartOffset);
+  const viewportStart = Math.max(0, viewportStartPixels / pixelsPerSecond);
+  const viewportEnd = Math.min(projectDuration, viewportEndPixels / pixelsPerSecond);
   return {
     start: Math.max(0, roundTime(viewportStart - overscanSeconds)),
     end: Math.min(projectDuration, roundTime(viewportEnd + overscanSeconds)),

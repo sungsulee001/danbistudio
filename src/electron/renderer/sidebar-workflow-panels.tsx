@@ -26,9 +26,9 @@ type HookRunOptions = {
 
 export function ShortcutsPanel() {
   return (
-    <div className="mt-6 rounded-md border border-zinc-800 bg-zinc-900 p-3">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Shortcuts</h2>
-      <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs text-zinc-400">
+    <div className="mt-6 rounded-md border border-ds-200 bg-surface p-3">
+      <h2 className="text-kicker font-heading font-semibold uppercase text-ds-600">Shortcuts</h2>
+      <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs text-ds-700">
         {EDITOR_KEYBOARD_SHORTCUTS.map((shortcut) => (
           <ShortcutHint key={shortcut.id} keys={shortcut.keys} label={shortcut.label} />
         ))}
@@ -47,12 +47,12 @@ export function QueueSettingsPanel({
   onApplyQueueSettings: () => void;
 }) {
   return (
-    <div className="mt-6 rounded-md border border-zinc-800 bg-zinc-900 p-3">
+    <div className="mt-6 rounded-md border border-ds-200 bg-surface p-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Queue Settings</h2>
+        <h2 className="text-kicker font-heading font-semibold uppercase text-ds-600">Queue Settings</h2>
         <button
           type="button"
-          className="text-xs text-emerald-300 hover:text-emerald-200"
+          className="text-xs text-accent-700 hover:text-accent-800"
           onClick={onApplyQueueSettings}
         >
           Apply
@@ -146,45 +146,45 @@ export function AutomationHooksPanel({
   const webhookCount = countHookPlanWebhooks(lastHookPlan);
 
   return (
-    <div className="mt-6 rounded-md border border-zinc-800 bg-zinc-900 p-3">
+    <div className="mt-6 rounded-md border border-ds-200 bg-surface p-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Automation Hooks</h2>
-        <span className="text-xs text-sky-300">{automationRuleCount} rules</span>
+        <h2 className="text-kicker font-heading font-semibold uppercase text-ds-600">Automation Hooks</h2>
+        <span className="text-xs text-info-700">{automationRuleCount} rules</span>
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2">
         <button
           type="button"
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 hover:border-emerald-500"
+          className="rounded-md border border-ds-200 bg-paper px-3 py-2 text-xs text-ds-800 hover:border-accent-500"
           onClick={() => onRunHooks('manual')}
         >
           Manual
         </button>
         <button
           type="button"
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 hover:border-sky-500"
+          className="rounded-md border border-ds-200 bg-paper px-3 py-2 text-xs text-ds-800 hover:border-info-500"
           onClick={() => onRunHooks('on-gap', { selectedClipIds: [] })}
         >
           On gap
         </button>
         <button
           type="button"
-          className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 hover:border-amber-500"
+          className="rounded-md border border-ds-200 bg-paper px-3 py-2 text-xs text-ds-800 hover:border-warn-500"
           onClick={() => onRunHooks('before-export', { selectedClipIds: [] })}
         >
           Export
         </button>
       </div>
       {lastHookPlan ? (
-        <div className="mt-3 rounded-md border border-sky-500/30 bg-sky-500/10 p-2 text-xs text-sky-100">
+        <div className="mt-3 rounded-md border border-info-500/30 bg-info-500/10 p-2 text-xs text-info-900">
           <div className="flex items-center justify-between gap-2">
             <span>{lastHookPlan.event} / {lastHookPlan.actionCount} prepared</span>
-            <span className="text-sky-200/70">{lastHookPlan.matchedRuleCount} matched</span>
+            <span className="text-info-800/70">{lastHookPlan.matchedRuleCount} matched</span>
           </div>
           {localActionCount > 0 ? (
             <div className="mt-2">
               <button
                 type="button"
-                className="w-full rounded-md border border-sky-400/40 bg-sky-400/10 px-3 py-2 text-[11px] font-semibold text-sky-100 hover:border-sky-300"
+                className="w-full rounded-md border border-info-600/40 bg-info-600/10 px-3 py-2 text-meta font-semibold text-info-900 hover:border-info-700"
                 onClick={() => onRunHooks(
                   lastHookPlan.event,
                   { selectedClipIds: lastHookPlan.event === 'manual' ? selectedClipIds : [] },
@@ -196,7 +196,7 @@ export function AutomationHooksPanel({
             </div>
           ) : null}
           {lastHookPlan.appliedLocalActions ? (
-            <div className="mt-2 rounded border border-sky-400/20 bg-sky-400/10 px-2 py-1 text-[11px] text-sky-100">
+            <div className="mt-2 rounded border border-info-600/20 bg-info-600/10 px-2 py-1 text-meta text-info-900">
               Applied {lastHookPlan.appliedLocalActions.appliedActionIds.length} local actions
               {lastHookPlan.appliedLocalActions.appliedClipIds.length > 0 ? ` / clips ${lastHookPlan.appliedLocalActions.appliedClipIds.length}` : ''}
             </div>
@@ -206,7 +206,7 @@ export function AutomationHooksPanel({
               <button
                 type="button"
                 disabled={isQueueingComfyUI}
-                className="rounded-md border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-[11px] font-semibold text-amber-100 hover:border-amber-300 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md border border-warn-600/40 bg-warn-600/10 px-3 py-2 text-meta font-semibold text-warn-900 hover:border-warn-700 disabled:cursor-not-allowed disabled:opacity-40"
                 onClick={() => onRunHooks(
                   lastHookPlan.event,
                   { selectedClipIds: lastHookPlan.event === 'manual' ? selectedClipIds : [] },
@@ -218,7 +218,7 @@ export function AutomationHooksPanel({
               <button
                 type="button"
                 disabled={isQueueingComfyUI}
-                className="rounded-md border border-emerald-400/40 bg-emerald-400/10 px-3 py-2 text-[11px] font-semibold text-emerald-100 hover:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-md border border-accent-600/40 bg-accent-600/10 px-3 py-2 text-meta font-semibold text-accent-900 hover:border-accent-700 disabled:cursor-not-allowed disabled:opacity-40"
                 onClick={() => onRunHooks(
                   lastHookPlan.event,
                   { selectedClipIds: lastHookPlan.event === 'manual' ? selectedClipIds : [] },
@@ -230,7 +230,7 @@ export function AutomationHooksPanel({
             </div>
           ) : null}
           {lastHookPlan.queuedJob ? (
-            <div className="mt-2 rounded border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-[11px] text-emerald-100">
+            <div className="mt-2 rounded border border-accent-600/20 bg-accent-600/10 px-2 py-1 text-meta text-accent-900">
               Queue {lastHookPlan.queuedJob.id.slice(0, 8)} / {lastHookPlan.queuedJob.status} / {lastHookPlan.queuedJob.totalJobs} jobs
             </div>
           ) : null}
@@ -238,7 +238,7 @@ export function AutomationHooksPanel({
             <div className="mt-2">
               <button
                 type="button"
-                className="w-full rounded-md border border-violet-400/40 bg-violet-400/10 px-3 py-2 text-[11px] font-semibold text-violet-100 hover:border-violet-300"
+                className="w-full rounded-md border border-accent2-600/40 bg-accent2-600/10 px-3 py-2 text-meta font-semibold text-accent2-900 hover:border-accent2-700"
                 onClick={() => onRunHooks(
                   lastHookPlan.event,
                   { selectedClipIds: lastHookPlan.event === 'manual' ? selectedClipIds : [] },
@@ -250,19 +250,19 @@ export function AutomationHooksPanel({
             </div>
           ) : null}
           {lastHookPlan.webhookExecution ? (
-            <div className="mt-2 rounded border border-violet-400/20 bg-violet-400/10 px-2 py-1 text-[11px] text-violet-100">
+            <div className="mt-2 rounded border border-accent2-600/20 bg-accent2-600/10 px-2 py-1 text-meta text-accent2-900">
               Webhooks sent {lastHookPlan.webhookExecution.sentCount}/{lastHookPlan.webhookExecution.requestedCount}
               {lastHookPlan.webhookExecution.skippedCount > 0 ? ` / skipped ${lastHookPlan.webhookExecution.skippedCount}` : ''}
               {lastHookPlan.webhookExecution.failedCount > 0 ? ` / failed ${lastHookPlan.webhookExecution.failedCount}` : ''}
               {lastHookPlan.webhookExecution.results[0] ? (
-                <div className="mt-1 truncate text-violet-100/75">
+                <div className="mt-1 truncate text-accent2-900/75">
                   {lastHookPlan.webhookExecution.results[0].ruleName} / {lastHookPlan.webhookExecution.results[0].status}
                   {lastHookPlan.webhookExecution.results[0].httpStatus ? ` / HTTP ${lastHookPlan.webhookExecution.results[0].httpStatus}` : ''}
                   {lastHookPlan.webhookExecution.results[0].attemptCount && lastHookPlan.webhookExecution.results[0].attemptCount > 1 ? ` / ${lastHookPlan.webhookExecution.results[0].attemptCount} tries` : ''}
                 </div>
               ) : null}
               {lastHookPlan.webhookExecution.warnings[0] ? (
-                <div className="mt-1 text-amber-200/80">{lastHookPlan.webhookExecution.warnings[0]}</div>
+                <div className="mt-1 text-warn-800/80">{lastHookPlan.webhookExecution.warnings[0]}</div>
               ) : null}
             </div>
           ) : null}
@@ -273,36 +273,36 @@ export function AutomationHooksPanel({
               const actionWebhookCount = action.webhookPayloads?.length ?? 0;
               const targetCount = action.localActions?.reduce((total, item) => total + item.targetClipIds.length, 0) ?? 0;
               return (
-                <div key={action.id} className="rounded border border-sky-400/20 bg-zinc-950/50 p-2">
-                  <div className="flex items-center justify-between gap-2 text-sky-100">
+                <div key={action.id} className="rounded border border-info-600/20 bg-paper/50 p-2">
+                  <div className="flex items-center justify-between gap-2 text-info-900">
                     <span>{action.ruleName}</span>
-                    <span className="text-sky-200/70">{action.provider} / {action.status}</span>
+                    <span className="text-info-800/70">{action.provider} / {action.status}</span>
                   </div>
-                  <div className="mt-1 text-[11px] text-sky-200/80">
+                  <div className="mt-1 text-meta text-info-800/80">
                     {action.description}
                   </div>
-                  <div className="mt-1 text-[11px] text-sky-200/70">
+                  <div className="mt-1 text-meta text-info-800/70">
                     local {localCount} / jobs {jobCount} / webhooks {actionWebhookCount}{targetCount > 0 ? ` / clips ${targetCount}` : ''}
                   </div>
                   {action.jobs?.[0] ? (
-                    <div className="mt-1 text-[11px] text-amber-200/80">
+                    <div className="mt-1 text-meta text-warn-800/80">
                       {action.jobs[0].workflowName} / {action.jobs[0].clipId}
                     </div>
                   ) : null}
                   {action.webhookPayloads?.[0]?.targetUrl ? (
-                    <div className="mt-1 truncate text-[11px] text-violet-200/80">
+                    <div className="mt-1 truncate text-meta text-accent2-800/80">
                       {action.webhookPayloads[0].targetUrl}
                     </div>
                   ) : null}
                   {action.warnings[0] ? (
-                    <div className="mt-1 text-[11px] text-amber-200/80">{action.warnings[0]}</div>
+                    <div className="mt-1 text-meta text-warn-800/80">{action.warnings[0]}</div>
                   ) : null}
                 </div>
               );
             })}
           </div>
           {lastHookPlan.warnings[0] ? (
-            <div className="mt-2 text-[11px] text-sky-200/70">{lastHookPlan.warnings[0]}</div>
+            <div className="mt-2 text-meta text-info-800/70">{lastHookPlan.warnings[0]}</div>
           ) : null}
         </div>
       ) : null}
@@ -338,13 +338,13 @@ export function PluginsPanel({
   const extensionHost = buildExtensionHostSnapshot(project);
 
   return (
-    <div className="mt-6 rounded-md border border-zinc-800 bg-zinc-900 p-3">
+    <div className="mt-6 rounded-md border border-ds-200 bg-surface p-3">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Plugins</h2>
+        <h2 className="text-kicker font-heading font-semibold uppercase text-ds-600">Plugins</h2>
         {onInstallPluginPackage ? (
           <button
             type="button"
-            className="shrink-0 rounded border border-sky-500/30 px-2 py-1 text-[11px] text-sky-100 hover:border-sky-300/60 hover:text-sky-50"
+            className="shrink-0 rounded border border-info-500/30 px-2 py-1 text-meta text-info-900 hover:border-info-700/60 hover:text-info-900"
             title="Install or update a local Danbi plugin package folder"
             onClick={onInstallPluginPackage}
           >
@@ -379,39 +379,39 @@ export function PluginsPanel({
           );
 
           return (
-            <div key={plugin.id} className="rounded-md border border-zinc-800 bg-zinc-950 p-3">
+            <div key={plugin.id} className="rounded-md border border-ds-200 bg-paper p-3">
               <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 text-sm text-zinc-200">{plugin.name}</div>
+                <div className="min-w-0 text-sm text-ds-800">{plugin.name}</div>
                 {sandbox ? (
-                  <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${
+                  <span className={`shrink-0 rounded border px-1.5 py-0.5 text-micro ${
                     sandbox.status === 'trusted-builtin'
-                      ? 'border-emerald-500/40 text-emerald-200'
+                      ? 'border-accent-500/40 text-accent-800'
                       : sandbox.status === 'blocked'
-                        ? 'border-rose-500/40 text-rose-200'
-                        : 'border-amber-500/40 text-amber-200'
+                        ? 'border-danger-500/40 text-danger-800'
+                        : 'border-warn-500/40 text-warn-800'
                   }`}
                   >
                     {sandbox.status}
                   </span>
                 ) : null}
               </div>
-              <div className="mt-1 text-xs text-zinc-500">{plugin.contributes.join(', ')}</div>
-              <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-zinc-400">
-                <span className="rounded border border-zinc-800 px-2 py-1">commands {commands.length}</span>
-                <span className="rounded border border-zinc-800 px-2 py-1">render hooks {renderHooks.length}</span>
+              <div className="mt-1 text-xs text-ds-600">{plugin.contributes.join(', ')}</div>
+              <div className="mt-2 flex flex-wrap gap-2 text-meta text-ds-700">
+                <span className="rounded border border-ds-200 px-2 py-1">commands {commands.length}</span>
+                <span className="rounded border border-ds-200 px-2 py-1">render hooks {renderHooks.length}</span>
                 {sandbox ? (
-                  <span className="rounded border border-zinc-800 px-2 py-1">{sandbox.runtime}</span>
+                  <span className="rounded border border-ds-200 px-2 py-1">{sandbox.runtime}</span>
                 ) : null}
                 {sandbox ? (
                   <span
                     className={`rounded border px-2 py-1 ${
                       sandbox.signature.status === 'verified'
-                        ? 'border-emerald-500/30 text-emerald-200'
+                        ? 'border-accent-500/30 text-accent-800'
                         : sandbox.signature.status === 'mismatch' ||
                           sandbox.signature.status === 'invalid' ||
                           sandbox.signature.status === 'unsupported'
-                          ? 'border-rose-500/30 text-rose-200'
-                          : 'border-zinc-800 text-zinc-400'
+                          ? 'border-danger-500/30 text-danger-800'
+                          : 'border-ds-200 text-ds-700'
                     }`}
                     title={`${sandbox.signature.reason} ${sandbox.signature.signingKeyStatus ? `key ${sandbox.signature.signingKeyStatus}` : ''} ${sandbox.signature.signingKeyFingerprint ?? sandbox.signature.computedFingerprint}`}
                   >
@@ -420,40 +420,40 @@ export function PluginsPanel({
                 ) : null}
               </div>
               {commands[0] ? (
-                <div className="mt-2 truncate text-[11px] text-sky-200/80">{commands[0].title}</div>
+                <div className="mt-2 truncate text-meta text-info-800/80">{commands[0].title}</div>
               ) : null}
               {renderHooks[0] ? (
-                <div className="mt-1 truncate text-[11px] text-emerald-200/80">{renderHooks[0].title}</div>
+                <div className="mt-1 truncate text-meta text-accent-800/80">{renderHooks[0].title}</div>
               ) : null}
               {sandbox?.exporterWriters?.length ? (
                 <div className="mt-3 space-y-1">
                   {sandbox.exporterWriters.map((writer) => (
-                    <div key={writer.writerId} className="rounded border border-zinc-800 px-2 py-1 text-[11px]">
+                    <div key={writer.writerId} className="rounded border border-ds-200 px-2 py-1 text-meta">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="min-w-0 truncate text-zinc-300" title={writer.commandPreview}>{writer.label}</span>
+                        <span className="min-w-0 truncate text-ds-700" title={writer.commandPreview}>{writer.label}</span>
                         <span className={`shrink-0 ${
                           writer.status === 'trusted'
-                            ? 'text-emerald-200'
+                            ? 'text-accent-800'
                             : writer.status === 'blocked'
-                              ? 'text-rose-200'
-                              : 'text-amber-200'
+                              ? 'text-danger-800'
+                              : 'text-warn-800'
                         }`}
                         >
                           {writer.status}
                         </span>
                       </div>
                       {writer.approvalStatus !== 'not-required' ? (
-                        <div className="mt-1 truncate text-[10px] text-zinc-500" title={writer.reason}>
+                        <div className="mt-1 truncate text-micro text-ds-600" title={writer.reason}>
                           approval {writer.approvalStatus} / {writer.fingerprint}
                         </div>
                       ) : null}
                       {writer.runtimePackage ? (
-                        <div className="mt-1 truncate text-[10px] text-zinc-500" title={`${writer.runtimePackage.root}/${writer.runtimePackage.entry}`}>
+                        <div className="mt-1 truncate text-micro text-ds-600" title={`${writer.runtimePackage.root}/${writer.runtimePackage.entry}`}>
                           package {writer.packageStatus} / {writer.runtimePackage.runtime} / {writer.runtimePackage.files.length} files
                         </div>
                       ) : null}
                       {writer.latestTrustDecision ? (
-                        <div className="mt-1 truncate text-[10px] text-zinc-500" title={writer.latestTrustDecision.commandPreview}>
+                        <div className="mt-1 truncate text-micro text-ds-600" title={writer.latestTrustDecision.commandPreview}>
                           {writer.latestTrustDecision.action} {writer.latestTrustDecision.at} / {writer.trustHistoryCount} audit
                         </div>
                       ) : null}
@@ -461,7 +461,7 @@ export function PluginsPanel({
                         <div className="mt-1 flex flex-wrap gap-1">
                           <button
                             type="button"
-                            className="rounded border border-emerald-500/30 px-1.5 py-0.5 text-emerald-100 hover:border-emerald-300/60 disabled:border-zinc-800 disabled:text-zinc-600"
+                            className="rounded border border-accent-500/30 px-1.5 py-0.5 text-accent-900 hover:border-accent-700/60 disabled:border-ds-200 disabled:text-ds-400"
                             disabled={writer.status === 'trusted'}
                             title="Trust this exporter writer for project handoff execution"
                             onClick={() => onSetExporterWriterTrust(plugin.id, writer.writerId, 'trusted')}
@@ -470,7 +470,7 @@ export function PluginsPanel({
                           </button>
                           <button
                             type="button"
-                            className="rounded border border-amber-500/30 px-1.5 py-0.5 text-amber-100 hover:border-amber-300/60 disabled:border-zinc-800 disabled:text-zinc-600"
+                            className="rounded border border-warn-500/30 px-1.5 py-0.5 text-warn-900 hover:border-warn-700/60 disabled:border-ds-200 disabled:text-ds-400"
                             disabled={writer.trust === 'prompt'}
                             title="Require approval before this exporter writer can execute"
                             onClick={() => onSetExporterWriterTrust(plugin.id, writer.writerId, 'prompt')}
@@ -479,7 +479,7 @@ export function PluginsPanel({
                           </button>
                           <button
                             type="button"
-                            className="rounded border border-rose-500/30 px-1.5 py-0.5 text-rose-100 hover:border-rose-300/60 disabled:border-zinc-800 disabled:text-zinc-600"
+                            className="rounded border border-danger-500/30 px-1.5 py-0.5 text-danger-900 hover:border-danger-700/60 disabled:border-ds-200 disabled:text-ds-400"
                             disabled={writer.status === 'blocked'}
                             title="Block this exporter writer from handoff execution"
                             onClick={() => onSetExporterWriterTrust(plugin.id, writer.writerId, 'blocked')}
@@ -494,7 +494,7 @@ export function PluginsPanel({
               ) : null}
               {customCommands.length > 0 ? (
                 <div className="mt-3 space-y-1">
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-600">Custom commands</div>
+                  <div className="text-micro font-semibold uppercase tracking-wide text-ds-400">Custom commands</div>
                   {customCommands.map((command) => {
                     const defaultParameters = buildExternalCustomCommandDefaultParameters(command);
                     const missingDefaultParameters = findMissingExternalCustomCommandDefaultParameters(command);
@@ -515,14 +515,14 @@ export function PluginsPanel({
                                 : command.description ?? `Run ${command.label}`;
 
                     return (
-                      <div key={command.id} className="rounded border border-zinc-800 px-2 py-1 text-[11px]">
+                      <div key={command.id} className="rounded border border-ds-200 px-2 py-1 text-meta">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="min-w-0 truncate text-zinc-300" title={command.description ?? command.label}>
+                          <span className="min-w-0 truncate text-ds-700" title={command.description ?? command.label}>
                             {command.label}
                           </span>
                           <button
                             type="button"
-                            className="shrink-0 rounded border border-sky-500/30 px-1.5 py-0.5 text-sky-100 hover:border-sky-300/60 hover:text-sky-50 disabled:border-zinc-800 disabled:text-zinc-600"
+                            className="shrink-0 rounded border border-info-500/30 px-1.5 py-0.5 text-info-900 hover:border-info-700/60 hover:text-info-900 disabled:border-ds-200 disabled:text-ds-400"
                             disabled={!canRunCommand}
                             title={canRunCommand ? command.description ?? `Run ${command.label}` : unavailableReason}
                             onClick={() => onRunExternalCustomCommand?.(plugin.id, command.id, defaultParameters)}
@@ -530,12 +530,12 @@ export function PluginsPanel({
                             Run
                           </button>
                         </div>
-                        <div className="mt-1 truncate text-[10px] text-zinc-500" title={`${command.kind} / ${command.contribution}`}>
+                        <div className="mt-1 truncate text-micro text-ds-600" title={`${command.kind} / ${command.contribution}`}>
                           {command.kind} / {command.contribution}
                           {Object.keys(defaultParameters).length > 0 ? ` / defaults ${Object.keys(defaultParameters).length}` : ''}
                         </div>
                         {missingDefaultParameters.length > 0 ? (
-                          <div className="mt-1 truncate text-[10px] text-amber-200/80" title={missingDefaultParameters.join(', ')}>
+                          <div className="mt-1 truncate text-micro text-warn-800/80" title={missingDefaultParameters.join(', ')}>
                             missing defaults {missingDefaultParameters.length}
                           </div>
                         ) : null}
@@ -548,7 +548,7 @@ export function PluginsPanel({
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    className="rounded border border-amber-400/30 px-2 py-1 text-[11px] text-amber-100 hover:border-amber-300/60 hover:text-amber-50 disabled:border-zinc-800 disabled:text-zinc-600"
+                    className="rounded border border-warn-600/30 px-2 py-1 text-meta text-warn-900 hover:border-warn-700/60 hover:text-warn-900 disabled:border-ds-200 disabled:text-ds-400"
                     disabled={selectedClipIds.length === 0}
                     title="Apply reviewed warm contrast plan to selected clips"
                     onClick={() => onApplyExternalEffectPlan?.(plugin.id, 'warm-contrast')}
@@ -557,7 +557,7 @@ export function PluginsPanel({
                   </button>
                   <button
                     type="button"
-                    className="rounded border border-orange-400/30 px-2 py-1 text-[11px] text-orange-100 hover:border-orange-300/60 hover:text-orange-50 disabled:border-zinc-800 disabled:text-zinc-600"
+                    className="rounded border border-warn-600/30 px-2 py-1 text-meta text-warn-900 hover:border-warn-700/60 hover:text-warn-900 disabled:border-ds-200 disabled:text-ds-400"
                     disabled={selectedClipIds.length === 0}
                     title="Apply reviewed warm contrast at stronger intensity"
                     onClick={() => onApplyExternalEffectPlan?.(plugin.id, 'warm-contrast', { intensity: 1.5 })}
@@ -566,7 +566,7 @@ export function PluginsPanel({
                   </button>
                   <button
                     type="button"
-                    className="rounded border border-sky-400/30 px-2 py-1 text-[11px] text-sky-100 hover:border-sky-300/60 hover:text-sky-50 disabled:border-zinc-800 disabled:text-zinc-600"
+                    className="rounded border border-info-600/30 px-2 py-1 text-meta text-info-900 hover:border-info-700/60 hover:text-info-900 disabled:border-ds-200 disabled:text-ds-400"
                     disabled={selectedClipIds.length === 0}
                     title="Apply reviewed soft vignette plan to selected clips"
                     onClick={() => onApplyExternalEffectPlan?.(plugin.id, 'soft-vignette')}
@@ -575,7 +575,7 @@ export function PluginsPanel({
                   </button>
                   <button
                     type="button"
-                    className="rounded border border-blue-400/30 px-2 py-1 text-[11px] text-blue-100 hover:border-blue-300/60 hover:text-blue-50 disabled:border-zinc-800 disabled:text-zinc-600"
+                    className="rounded border border-info-600/30 px-2 py-1 text-meta text-info-900 hover:border-info-700/60 hover:text-info-900 disabled:border-ds-200 disabled:text-ds-400"
                     disabled={selectedClipIds.length === 0}
                     title="Apply reviewed stronger soft vignette plan to selected clips"
                     onClick={() => onApplyExternalEffectPlan?.(plugin.id, 'soft-vignette', { vignetteStrength: 0.55 })}
@@ -588,7 +588,7 @@ export function PluginsPanel({
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    className="rounded border border-violet-400/30 px-2 py-1 text-[11px] text-violet-100 hover:border-violet-300/60 hover:text-violet-50 disabled:border-zinc-800 disabled:text-zinc-600"
+                    className="rounded border border-accent2-600/30 px-2 py-1 text-meta text-accent2-900 hover:border-accent2-700/60 hover:text-accent2-900 disabled:border-ds-200 disabled:text-ds-400"
                     disabled={selectedClipIds.length === 0}
                     title="Apply reviewed smooth crossfade plan to selected clips"
                     onClick={() => onApplyExternalTransitionPlan?.(plugin.id, 'smooth-crossfade')}
@@ -597,7 +597,7 @@ export function PluginsPanel({
                   </button>
                   <button
                     type="button"
-                    className="rounded border border-fuchsia-400/30 px-2 py-1 text-[11px] text-fuchsia-100 hover:border-fuchsia-300/60 hover:text-fuchsia-50 disabled:border-zinc-800 disabled:text-zinc-600"
+                    className="rounded border border-accent2-600/30 px-2 py-1 text-meta text-accent2-900 hover:border-accent2-700/60 hover:text-accent2-900 disabled:border-ds-200 disabled:text-ds-400"
                     disabled={selectedClipIds.length === 0}
                     title="Apply reviewed longer crossfade plan to selected clips"
                     onClick={() => onApplyExternalTransitionPlan?.(plugin.id, 'smooth-crossfade', { duration: 1.25, easing: 'easeOut' })}
@@ -606,7 +606,7 @@ export function PluginsPanel({
                   </button>
                   <button
                     type="button"
-                    className="rounded border border-cyan-400/30 px-2 py-1 text-[11px] text-cyan-100 hover:border-cyan-300/60 hover:text-cyan-50 disabled:border-zinc-800 disabled:text-zinc-600"
+                    className="rounded border border-info-600/30 px-2 py-1 text-meta text-info-900 hover:border-info-700/60 hover:text-info-900 disabled:border-ds-200 disabled:text-ds-400"
                     disabled={selectedClipIds.length === 0}
                     title="Apply reviewed push-left transition plan to selected clips"
                     onClick={() => onApplyExternalTransitionPlan?.(plugin.id, 'push-left')}
@@ -615,7 +615,7 @@ export function PluginsPanel({
                   </button>
                   <button
                     type="button"
-                    className="rounded border border-teal-400/30 px-2 py-1 text-[11px] text-teal-100 hover:border-teal-300/60 hover:text-teal-50 disabled:border-zinc-800 disabled:text-zinc-600"
+                    className="rounded border border-accent-600/30 px-2 py-1 text-meta text-accent-900 hover:border-accent-700/60 hover:text-accent-900 disabled:border-ds-200 disabled:text-ds-400"
                     disabled={selectedClipIds.length === 0}
                     title="Apply reviewed upward push transition plan to selected clips"
                     onClick={() => onApplyExternalTransitionPlan?.(plugin.id, 'push-left', { duration: 0.9, direction: 'up' })}
@@ -625,10 +625,10 @@ export function PluginsPanel({
                 </div>
               ) : null}
               {warnings[0] ? (
-                <div className="mt-2 text-[11px] text-amber-200/80">{warnings[0]}</div>
+                <div className="mt-2 text-meta text-warn-800/80">{warnings[0]}</div>
               ) : null}
               {!warnings[0] && sandbox?.reason ? (
-                <div className="mt-2 text-[11px] text-zinc-500">{sandbox.reason}</div>
+                <div className="mt-2 text-meta text-ds-600">{sandbox.reason}</div>
               ) : null}
             </div>
           );
@@ -641,7 +641,7 @@ export function PluginsPanel({
 function ShortcutHint({ keys, label }: { keys: string; label: string }) {
   return (
     <>
-      <span className="rounded border border-zinc-800 bg-zinc-950 px-2 py-1 font-mono text-[11px] text-zinc-300">{keys}</span>
+      <span className="rounded border border-ds-200 bg-paper px-2 py-1 tabular-nums text-meta text-ds-700">{keys}</span>
       <span className="py-1">{label}</span>
     </>
   );

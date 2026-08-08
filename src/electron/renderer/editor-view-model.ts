@@ -244,7 +244,88 @@ export interface TimelineClipEditPreview {
   duration: number;
   snapped: boolean;
   constrained: boolean;
+  operation?: 'move' | 'trim' | 'roll' | 'slip' | 'slide';
+  ripple?: boolean;
+  delta?: number;
+  groupCount?: number;
+  sourceIn?: number;
+  sourceInDelta?: number;
   label?: string;
+}
+
+export interface TimelineGroupMovePreviewClip {
+  id: string;
+  trackId: string;
+  start: number;
+  duration: number;
+  label: string;
+}
+
+export interface TimelineGroupMovePreview {
+  anchorClipId: string;
+  operation: 'group-move';
+  groupCount: number;
+  delta: number;
+  clips: TimelineGroupMovePreviewClip[];
+}
+
+export interface TimelineGroupTrimPreviewClip {
+  id: string;
+  trackId: string;
+  start: number;
+  nextStart: number;
+  duration: number;
+  nextDuration: number;
+  label: string;
+}
+
+export interface TimelineGroupTrimPreview {
+  anchorClipId: string;
+  operation: 'group-trim';
+  edge: 'start' | 'end';
+  groupCount: number;
+  delta: number;
+  clips: TimelineGroupTrimPreviewClip[];
+}
+
+export interface TimelineNeighborImpactPreviewClip {
+  id: string;
+  trackId: string;
+  role: 'anchor' | 'neighbor';
+  start: number;
+  duration: number;
+  nextStart: number;
+  nextDuration: number;
+  sourceIn: number;
+  nextSourceIn: number;
+  label: string;
+}
+
+export interface TimelineNeighborImpactPreview {
+  anchorClipId: string;
+  operation: 'roll' | 'slide';
+  edge?: 'start' | 'end';
+  delta: number;
+  affectedCount: number;
+  clips: TimelineNeighborImpactPreviewClip[];
+}
+
+export interface TimelineRippleTrimPreviewClip {
+  id: string;
+  trackId: string;
+  start: number;
+  nextStart: number;
+  duration: number;
+  label: string;
+}
+
+export interface TimelineRippleTrimPreview {
+  anchorClipId: string;
+  operation: 'ripple-trim';
+  edge: 'start' | 'end';
+  delta: number;
+  affectedCount: number;
+  clips: TimelineRippleTrimPreviewClip[];
 }
 
 export interface TimelineClipDropPreview {
@@ -253,6 +334,12 @@ export interface TimelineClipDropPreview {
   duration: number;
   label: string;
   valid: boolean;
+  snapped?: boolean;
+  constrained?: boolean;
+  collision?: boolean;
+  ripple?: boolean;
+  operation?: 'clip-drop' | 'new-track';
+  groupCount?: number;
   isNewTrack?: boolean;
 }
 
@@ -263,6 +350,11 @@ export interface TimelineAssetDropPreview {
   label: string;
   mode: 'insert' | 'overwrite';
   valid: boolean;
+  operation?: 'asset-drop';
+  snapped?: boolean;
+  constrained?: boolean;
+  ripple?: boolean;
+  collision?: boolean;
 }
 
 export interface TimelineEditGuide {
@@ -270,6 +362,13 @@ export interface TimelineEditGuide {
   time: number;
   label: string;
   tone: 'move' | 'snap' | 'limit' | 'drop';
+  operation?: TimelineClipEditPreview['operation'] | TimelineClipDropPreview['operation'] | TimelineAssetDropPreview['operation'];
+  delta?: number;
+  duration?: number;
+  groupCount?: number;
+  snapped?: boolean;
+  constrained?: boolean;
+  ripple?: boolean;
 }
 
 export type TimelineClipBodyDragMode = 'move' | 'slip' | 'slide';

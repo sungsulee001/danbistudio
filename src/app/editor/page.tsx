@@ -1,13 +1,15 @@
 ﻿'use client';
 
-import type { ChangeEvent, DragEvent, MouseEvent, PointerEvent as ReactPointerEvent } from 'react';
+import type { CSSProperties, ChangeEvent, DragEvent, MouseEvent, PointerEvent as ReactPointerEvent, WheelEvent } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useDanbiTheme } from '../theme';
 import { addAdjustmentLayerAtTime } from '@/lib/editor/adjustment-layer';
 import { AI_ENHANCEMENT_PRESETS, applyAiEnhancementPresetToClips, type AiEnhancementPresetId } from '@/lib/editor/ai-effects';
 import { fillAiBrollGaps, findVisualTimelineGaps } from '@/lib/editor/ai-broll-gap-fill';
-import type { ProgramAudioFftSample } from '@/lib/editor/audio-analyzer';
+import { isSameProgramAudioFftSample, type ProgramAudioFftSample } from '@/lib/editor/audio-analyzer';
 import { AUDIO_CLEANUP_PRESETS, applyAudioCleanupPresetToClips, type AudioCleanupPresetId } from '@/lib/editor/audio-cleanup-effects';
 import { applyAudioPeakNormalizeToClips, DEFAULT_NORMALIZE_TARGET_PEAK } from '@/lib/editor/audio-normalize';
+import { normalizeClipVolume } from '@/lib/editor/audio-mixer';
 import { applyWaveformSync, applyWaveformSyncAndLink, type WaveformSyncPlan } from '@/lib/editor/audio-sync';
 import { addBeatMarkers, buildBeatDetectionPlan, splitClipAtDetectedBeats, type BeatDetectionPlan } from '@/lib/editor/beat-detection';
 import { parseCaptionSidecar, type CaptionSidecarOptions } from '@/lib/editor/caption-sidecar';
@@ -27,7 +29,7 @@ import { applyImportedTimelineMarkers, type MarkerInterchangeFormat } from '@/li
 import { updateMediaAssetBin, type MediaBinKindFilter, type MediaBinSmartCollection, type MediaBinSortKey } from '@/lib/editor/media-bin';
 import { buildMediaCacheBatchPlan } from '@/lib/editor/media-cache-targets';
 import { relinkMediaAsset, removeMediaAsset, removeUnusedMediaAssets } from '@/lib/editor/media-import';
-import { buildDefaultMotionTransformParameters, MOTION_TRANSFORM_EFFECT_LABEL, normalizeMotionTransformPatch, readClipMotionTransform, type ClipMotionTransform } from '@/lib/editor/motion-transform';
+import { buildDefaultMotionTransformParameters, findMotionTransformEffect, MOTION_TRANSFORM_EFFECT_LABEL, normalizeMotionTransformPatch, readClipMotionTransform, type ClipMotionTransform } from '@/lib/editor/motion-transform';
 import { applyTrackedObjectMask } from '@/lib/editor/object-mask';
 import { updatePluginExporterWriterTrust } from '@/lib/editor/plugin-trust';
 import { createBlankEditorProject, createDefaultEditorProject, DEFAULT_EXPORT_PROFILE_ID } from '@/lib/editor/project';
@@ -81,6 +83,7 @@ import {
   duplicateClips,
   closeGapAtTime,
   findClip,
+  getLinkedClipIds,
   generateCaptionDraft,
   groupClips,
   insertAssetPatchOnTimeline,
@@ -111,6 +114,7 @@ import {
   rollTrimLinkedClip,
   slideLinkedClip,
   slipLinkedClip,
+  splitClipAtTime,
   splitAllClipsAtTime,
   splitCaptionAtTime,
   splitClipsAtTime,
@@ -119,6 +123,7 @@ import {
   toggleClipEffect,
   toggleClipsState,
   toggleTrackState,
+  trimClip,
   trimLinkedClipToTime,
   ungroupClips,
   unlinkLinkedClips,
@@ -140,6 +145,8 @@ import {
   type MotionPresetId,
 } from '@/lib/editor/timeline';
 import type { CaptionSegment, CaptionStyle, ClipEffect, ClipKeyframe, EditorAsset, EditorPluginExporterWriterTrust, EditorProject, ExportManifest, TimelineClip, TimelineMarker, TimelineTrack, TimelineTransition } from '@/lib/editor/types';
+import type { DanbiMenuLanguage } from '@/lib/editor/menu-language';
+import { DEFAULT_EDITOR_INTERACTION_SETTINGS, readStoredEditorInteractionSettings, subscribeEditorInteractionSettings, type EditorInteractionSettings } from '@/lib/editor/editor-settings';
 import { resolveCancelledComfyUIJobState, resolveCancelledSttJobState, resolveComfyUIBindingPatchPlan, resolveComfyUIPresetChangePlan, resolveComfyUIQueueFailureState, resolveComfyUIQueueStartState, resolveComfyUIResultActionPlan, resolveComfyUIRetryStartState, resolvePolledComfyUIJobState, resolvePolledSttJobState, resolveQueuedComfyUIJobState, resolveQueuedSttJobState, resolveRetriedComfyUIJobState, resolveRetriedSttJobState, resolveSpeakerDiarizationFailureStatus, resolveSpeakerDiarizationPlan, resolveSpeakerDiarizationResultState, resolveSttCleanupReadiness, resolveSttCleanupResultState, resolveSttImportCaptionPlan, resolveSttIssueSelectionPlan, resolveSttQueueFailureState, resolveSttQueueStartState, resolveSttRetryStartState, shouldPollComfyUIJob, shouldPollSttJob } from '@/electron/renderer/ai-queue-workflow-helpers';
 import { applyRuntimeWaveformToProject, applyRuntimeWaveformsToProject, formatAudioAnalysisFailureStatus, formatBeatCutStatus, formatBeatDetectionStatus, formatBeatMarkerStatus, formatSilenceAnalysisStatus, formatSilenceRemovalStatus, mergeRuntimeAudioPeakEntries, resolveAudioAnalysisTargetPlan, resolveBeatActionPlan, resolveReusableBeatPlan, resolveRuntimeAudioPeakReadRequests, type RuntimeAudioPeakEntry } from '@/electron/renderer/audio-analysis-workflow-helpers';
 import { runAutomationHooks } from '@/electron/renderer/automation-hooks-client';
@@ -184,6 +191,10 @@ import {
   type TimelineClipDropPreview,
   type TimelineClipEditPreview,
   type TimelineEditGuide,
+  type TimelineGroupMovePreview,
+  type TimelineGroupTrimPreview,
+  type TimelineNeighborImpactPreview,
+  type TimelineRippleTrimPreview,
 } from '@/electron/renderer/editor-view-model';
 import { cancelComfyUIQueueJob, fetchComfyUIQueueJob, queueComfyUIBatchJob, retryComfyUIQueueJob } from '@/electron/renderer/comfyui-client';
 import { prepareBrowserMediaRecord, prepareUploadedMediaRecord, pruneRetainedBrowserMediaObjectUrls, readAudioPeaks, revokeRetainedBrowserMediaObjectUrls, selectAndImportNativeMediaFiles, uploadLutFile, uploadMediaFiles } from '@/electron/renderer/editor-media-client';
@@ -209,7 +220,7 @@ import { inferCaptionSidecarFormat, partitionImportFileReferences } from '@/elec
 import { cancelMediaCacheJob, fetchMediaCacheJob, queueMediaCacheJob, retryMediaCacheJob } from '@/electron/renderer/media-cache-client';
 import { omitAssetScopedRecords, resolveBulkRelinkCandidateAssetIds, resolveBulkRelinkCompletionViewState, resolveBulkRelinkUploadedMediaPlan, resolvePreparedMediaBinImportResult, resolveRelinkMediaFailureStatus, resolveRelinkUploadedMediaPlan, resolveRemoveMediaAssetPlan, resolveRemoveUnusedMediaAssetsPlan, resolveSourceAssetBinUpdatePlan } from '@/electron/renderer/media-bin-workflow-helpers';
 import { applyCompletedMediaCacheJobsToProject, applyQueuedMediaCacheJobsToProject, mergeMediaCacheJobsByAssetId, resolveCompletedMediaCacheStatus, resolveMediaCacheAssetQueueFailure, resolveMediaCacheCancelFailureStatus, resolveMediaCacheCancelStatus, resolveMediaCachePollingState, resolveMediaCacheQueueEmptyStatus, resolveMediaCacheQueueResultStatus, resolveMediaCacheRebuildFailureStatus, resolveMediaCacheRebuildQueuedStatus, resolveMediaCacheRetryFailureStatus, resolveMediaCacheRetryStatus, type MediaCacheJobEntry } from '@/electron/renderer/media-cache-workflow-helpers';
-import { appendSkippedNonMediaDropStatus, countNonMediaDraggedFiles, getDraggedMediaFiles, hasDraggedFiles, hasImportableDraggedFiles, readDraggedAssetId, readDraggedMediaFilePreview, resolveAssetTimelineDropCommitPlan, resolveAssetTimelineDropFailureStatus, resolveAssetTimelineDropPreviewPlan, resolveMediaBinDropFailureStatus, resolveMediaFileTimelineDropFailureStatus, resolveMediaFileTimelineDropPreviewPlan, resolvePreparedMediaTimelineDropResult, resolveTimelineDropStartPlan, resolveUnsupportedMediaDropStatus, resolveUnsupportedTimelineMediaDropStatus } from '@/electron/renderer/media-drop-helpers';
+import { appendSkippedNonMediaDropStatus, countNonMediaDraggedFiles, getDraggedMediaFiles, hasDraggedFiles, hasImportableDraggedFiles, readDraggedAssetId, readDraggedMediaFilePreview, resolveAssetTimelineDropCommitPlan, resolveAssetTimelineDropFailureStatus, resolveAssetTimelineDropPreviewPlan, resolveMediaBinDropFailureStatus, resolveMediaFileTimelineDropFailureStatus, resolveMediaFileTimelineDropPreviewPlan, resolvePreparedMediaTimelineDropResult, resolveUnsupportedMediaDropStatus, resolveUnsupportedTimelineMediaDropStatus } from '@/electron/renderer/media-drop-helpers';
 import { MediaBinPanel } from '@/electron/renderer/media-bin-panel';
 import { MediaHealthPanel } from '@/electron/renderer/media-health-cache-panels';
 import { resolvePlaybackFrameElapsedSeconds, resolvePlaybackFrameState, resolveProgramPlaybackRateState, resolveProgramPlaybackToggleRate, resolveShuttlePlaybackRate, type ShuttleDirection } from '@/electron/renderer/playback-workflow-helpers';
@@ -246,24 +257,387 @@ import { resolveSelectedClipCapabilities } from '@/electron/renderer/selected-cl
 import { resolveSelectedClipWorkspaceState } from '@/electron/renderer/selected-clip-workspace-helpers';
 import { AutomationHooksPanel, PluginsPanel, QueueSettingsPanel, ShortcutsPanel, type ExternalEffectPresetId, type ExternalPluginPlanParameters, type ExternalTransitionPresetId } from '@/electron/renderer/sidebar-workflow-panels';
 import { SourceAssetRangePanel } from '@/electron/renderer/source-asset-range-panel';
-import { resolveGoToSourceMarkPlan, resolveInsertedSourceAssetPatchSelection, resolveInsertSourceAssetAtPlayheadPlan, resolveMatchFrameToSourcePlan, resolveMatchSourceRangeToMarkedRange, resolveOverwriteSourceAssetAtPlayheadPlan, resolveReplaceSelectedFromSourcePlan, resolveSourceMarkPatch, resolveSourceRangeHandlePatch, resolveSourceRangePatchPlan, resolveSourceRangeResetPlan, resolveSourceSubclipFailureStatus, resolveSourceSubclipReadinessPlan, resolveSourceSubclipResultPlan, resolveThreePointAssetEditPlan, type SourceRangeHandle } from '@/electron/renderer/source-edit-workflow-helpers';
+import { resolveDirectMediaInsertPatchSettings, resolveGoToSourceMarkPlan, resolveInsertedSourceAssetPatchSelection, resolveInsertSourceAssetAtPlayheadPlan, resolveMatchFrameToSourcePlan, resolveMatchSourceRangeToMarkedRange, resolveOverwriteSourceAssetAtPlayheadPlan, resolveReplaceSelectedFromSourcePlan, resolveSourceMarkPatch, resolveSourceRangeHandlePatch, resolveSourceRangePatchPlan, resolveSourceRangeResetPlan, resolveSourceSubclipFailureStatus, resolveSourceSubclipReadinessPlan, resolveSourceSubclipResultPlan, resolveThreePointAssetEditPlan, type SourceRangeHandle } from '@/electron/renderer/source-edit-workflow-helpers';
 import { cancelSttCaptionJob, fetchSttJob, queueSttCaptionJob, retrySttCaptionJob } from '@/electron/renderer/stt-client';
 import { SourceMonitor } from '@/electron/renderer/source-monitor';
+import { useMenuLanguage } from '@/electron/renderer/use-menu-language';
 import { TimelineClipList } from '@/electron/renderer/timeline-clip-list';
 import { TimelineContextMenu } from '@/electron/renderer/timeline-context-menu';
 import { resolveClearTimelineMarks, resolveCopyMarkedTimelineRangePlan, resolveCutMarkedTimelineRangePlan, resolveDeleteMarkedTimelineRangePlan, resolveGoToTimelineMark, resolveMarkSelectedTimelineClips, resolveSetTimelineMark } from '@/electron/renderer/timeline-mark-workflow-helpers';
 import { auditSourceMonitorConsistency, readWorkflowNumber, resolveSourceAssetSelection, resolveSourceMonitorLoopPlaybackToggle, resolveSourceMonitorNudgePlayhead, resolveSourceMonitorPlaybackRateState, resolveSourceMonitorPlaybackToggleRate, resolveSourceMonitorPlayhead, resolveSourceMonitorShuttlePlaybackState, resolveSourceWorkspaceState } from '@/electron/renderer/timeline-source-helpers';
-import { buildTimelineClipEditGuide, readTimelineLaneBounds, resolveTimelineClipDragCommitState, resolveTimelineClipDragPointerPlan, resolveTimelineClipDragPreviewState, resolveTimelineClipMoveEdit, resolveTimelineClipRollTrimPreview, resolveTimelineClipSlidePreview, resolveTimelineClipSlipPreview, resolveTimelineClipTrimPreview, resolveTimelineTrackIdsInDragRange } from '@/electron/renderer/timeline-edit-preview-helpers';
+import { buildTimelineClipEditGuide, readTimelineLaneBounds, resolveTimelineClipDragCommitState, resolveTimelineClipDragPointerPlan, resolveTimelineClipDragPreviewState, resolveTimelineClipMoveEdit, resolveTimelineClipRollTrimPreview, resolveTimelineClipSlidePreview, resolveTimelineClipSlipPreview, resolveTimelineClipTrimEdit, resolveTimelineClipTrimPreview, resolveTimelineTrackIdsInDragRange, type TimelineClipMoveEdit, type TimelineClipTrimEdit } from '@/electron/renderer/timeline-edit-preview-helpers';
 import { resolveCloseAllTimelineGapsOnTrackPlan, resolveCloseTimelineGapAtPlayheadPlan, resolveInsertTimelineGapAtPlayheadPlan } from '@/electron/renderer/timeline-gap-workflow-helpers';
-import { resolveAdjacentTimelineEdit, resolveMarkedTimelineRangeSelection, resolvePrimarySelection, resolveRelativeTimelineClipSelection, resolveSelectAllTimelineClips, resolveTimelineClipClickSelection, resolveTimelineClipSelection, resolveTimelineClipSelectionAtPlayhead, resolveTimelineLaneDragEndPlan, resolveTimelineLaneDragMovePlan, resolveTimelineLaneDragStartPlan, type ClipSelectionMode, type TimelineBoxSelectionState } from '@/electron/renderer/timeline-selection-helpers';
+import { resolveAdjacentTimelineEdit, resolveMarkedTimelineRangeSelection, resolvePrimarySelection, resolveRelativeTimelineClipSelection, resolveSelectAllTimelineClips, resolveTimelineClipSelection, resolveTimelineClipSelectionAtPlayhead, resolveTimelineLaneDragEndPlan, resolveTimelineLaneDragMovePlan, resolveTimelineLaneDragStartPlan, type ClipSelectionMode, type TimelineBoxSelectionState } from '@/electron/renderer/timeline-selection-helpers';
 import { TimelineTrackRow } from '@/electron/renderer/timeline-track-row';
 import { TimelineTransportRulerPanel } from '@/electron/renderer/timeline-transport-ruler';
-import { resolveTimelineEdgeAutoScrollLeft, resolveTimelineEditGuide, resolveTimelineFitZoom, resolveTimelinePlayheadNudgePlan, resolveTimelinePlayheadTime, resolveTimelineRulerScrubEndPlan, resolveTimelineRulerScrubMovePlan, resolveTimelineRulerScrubStartPlan, resolveTimelineVisibleScrollLeft } from '@/electron/renderer/timeline-viewport-helpers';
+import { resolveTimelineEdgeAutoScrollLeft, resolveTimelineEditGuide, resolveTimelineFitZoom, resolveTimelinePlayheadNudgePlan, resolveTimelinePlayheadTime, resolveTimelineVisibleScrollLeft } from '@/electron/renderer/timeline-viewport-helpers';
+import { beginTimelineScrubInteraction, resolveTimelineClipSelectInteraction, resolveTimelineImportDropStart, resolveTimelineScrubInteractionEnd, resolveTimelineScrubInteractionMove, resolveTimelineWheelZoomInteraction } from '@/electron/renderer/timeline-interaction-adapter';
+import { TIMELINE_TRACK_HEADER_WIDTH } from '@/electron/renderer/timeline-layout-constants';
 import { resolveTimelineClipRenderWindow, resolveTimelineLoopPlaybackToggle, resolveTimelineWorkspaceState, resolveValidatedLoopPlaybackEnabled, type TimelineViewportState } from '@/electron/renderer/timeline-workspace-helpers';
 import { resolveMoveTrackPlan, resolveRemoveTrackPlan, resolveSourcePatchTrackOptions, resolveSourcePatchTrackSelectionPlan, resolveTrackMixerChangePlan, resolveTrackRenamePlan, resolveTrackSelectionPlan, resolveTrackTogglePlan, type TrackSelectionPlan } from '@/electron/renderer/track-workflow-helpers';
 import { buildVoiceoverRecordedFile, cancelVoiceoverRecording, formatVoiceoverFailureStatus, markPreparedMediaAsVoiceover, readVoiceoverRecorderEnvironment, resolveVoiceoverRecorderSupport, resolveVoiceoverTimelineImportResult, startVoiceoverRecording, stopVoiceoverRecording, type VoiceoverRecorderSupport, type VoiceoverRecordingSession, type VoiceoverRecordingState } from '@/electron/renderer/voiceover-workflow-helpers';
 import type { RenderWorkerDaemonRunRecord, RenderWorkerDaemonStatus } from '@/electron/shared/render-worker-contract';
 import { EXTENSION_SANDBOX_PLAN_EFFECTS_COMMAND, EXTENSION_SANDBOX_PLAN_TRANSITIONS_COMMAND, EXTENSION_SANDBOX_RUN_CUSTOM_COMMAND, type ExtensionInvocationResult } from '@/electron/shared/extension-api';
+
+type EditorAssetPanelId = 'media' | 'project' | 'templates' | 'health';
+type EditorDockPanelId = 'clip' | 'video' | 'audio' | 'speed' | 'animation' | 'tracking' | 'adjust' | 'effects' | 'text' | 'jobs' | 'export' | 'plugins';
+type EditorPrimaryModeId = 'media' | 'audio' | 'text' | 'effects' | 'transitions' | 'captions' | 'filters' | 'adjust' | 'templates' | 'ai';
+
+const EDITOR_ASSET_PANELS: Array<{ id: EditorAssetPanelId; label: string; shortLabel: string }> = [
+  { id: 'media', label: 'Media', shortLabel: 'M' },
+  { id: 'project', label: 'Project', shortLabel: 'P' },
+  { id: 'templates', label: 'Templates', shortLabel: 'T' },
+  { id: 'health', label: 'Health', shortLabel: 'H' },
+];
+
+const EDITOR_DOCK_PANELS: Array<{ id: EditorDockPanelId; label: string; shortLabel: string }> = [
+  { id: 'clip', label: 'Clip', shortLabel: 'C' },
+  { id: 'video', label: 'Video', shortLabel: 'V' },
+  { id: 'audio', label: 'Audio', shortLabel: 'A' },
+  { id: 'speed', label: 'Speed', shortLabel: 'Sp' },
+  { id: 'animation', label: 'Animation', shortLabel: 'An' },
+  { id: 'tracking', label: 'Tracking', shortLabel: 'Tr' },
+  { id: 'adjust', label: 'Adjust', shortLabel: 'Ad' },
+  { id: 'effects', label: 'Effects', shortLabel: 'Fx' },
+  { id: 'text', label: 'Text', shortLabel: 'T' },
+  { id: 'jobs', label: 'Jobs', shortLabel: 'J' },
+  { id: 'export', label: 'Export', shortLabel: 'E' },
+  { id: 'plugins', label: 'Plugins', shortLabel: 'P' },
+];
+
+const EDITOR_EDIT_DOCK_PANEL_IDS: readonly EditorDockPanelId[] = ['clip', 'video', 'audio', 'speed', 'animation', 'tracking', 'adjust', 'effects', 'text'];
+const EDITOR_SELECTED_CLIP_DOCK_PANEL_IDS: readonly EditorDockPanelId[] = ['clip', 'video', 'audio', 'speed', 'animation', 'tracking', 'adjust', 'effects'];
+const EDITOR_WORKFLOW_DOCK_PANEL_IDS: readonly EditorDockPanelId[] = ['jobs', 'export', 'plugins'];
+
+const EDITOR_PRIMARY_MODES: Array<{
+  id: EditorPrimaryModeId;
+  label: string;
+  shortLabel: string;
+  assetPanel: EditorAssetPanelId;
+  dockPanel: EditorDockPanelId;
+}> = [
+  { id: 'media', label: 'Media', shortLabel: 'M', assetPanel: 'media', dockPanel: 'clip' },
+  { id: 'audio', label: 'Audio', shortLabel: 'A', assetPanel: 'media', dockPanel: 'audio' },
+  { id: 'text', label: 'Text', shortLabel: 'T', assetPanel: 'templates', dockPanel: 'text' },
+  { id: 'effects', label: 'Effects', shortLabel: 'Fx', assetPanel: 'templates', dockPanel: 'effects' },
+  { id: 'transitions', label: 'Transitions', shortLabel: 'Tr', assetPanel: 'templates', dockPanel: 'video' },
+  { id: 'captions', label: 'Captions', shortLabel: 'CC', assetPanel: 'project', dockPanel: 'text' },
+  { id: 'filters', label: 'Filters', shortLabel: 'Fi', assetPanel: 'media', dockPanel: 'adjust' },
+  { id: 'adjust', label: 'Adjust', shortLabel: 'Ad', assetPanel: 'media', dockPanel: 'adjust' },
+  { id: 'templates', label: 'Templates', shortLabel: 'Te', assetPanel: 'templates', dockPanel: 'clip' },
+  { id: 'ai', label: 'AI', shortLabel: 'AI', assetPanel: 'project', dockPanel: 'jobs' },
+];
+
+const editorPageText: Record<DanbiMenuLanguage, {
+  assetPanels: Record<EditorAssetPanelId, string>;
+  dockPanels: Record<EditorDockPanelId, string>;
+  primaryModes: Record<EditorPrimaryModeId, string>;
+  chrome: {
+    activeMonitor: string;
+    assetBay: string;
+    assetPanels: string;
+    comfyBinding: string;
+    comfyCfg: string;
+    comfyHeight: string;
+    comfyNegativePrompt: string;
+    comfyPreset: string;
+    comfyPrompt: string;
+    comfySeed: string;
+    comfySteps: string;
+    comfyWidth: string;
+    edit: string;
+    editWorkspace: string;
+    emptySelection: string;
+    hideSource: string;
+    import: string;
+    info: string;
+    inspector: string;
+    inspectorPanels: string;
+    program: string;
+    selectClip: string;
+    showSource: string;
+    source: string;
+    themeDark: string;
+    themeLight: string;
+    themeToDark: string;
+    themeToLight: string;
+    workflow: string;
+  };
+}> = {
+  en: {
+    assetPanels: {
+      media: 'Media',
+      project: 'Project',
+      templates: 'Templates',
+      health: 'Health',
+    },
+    dockPanels: {
+      clip: 'Clip',
+      video: 'Video',
+      audio: 'Audio',
+      speed: 'Speed',
+      animation: 'Animation',
+      tracking: 'Tracking',
+      adjust: 'Adjust',
+      effects: 'Effects',
+      text: 'Text',
+      jobs: 'Jobs',
+      export: 'Export',
+      plugins: 'Plugins',
+    },
+    primaryModes: {
+      media: 'Media',
+      audio: 'Audio',
+      text: 'Text',
+      effects: 'Effects',
+      transitions: 'Transitions',
+      captions: 'Captions',
+      filters: 'Filters',
+      adjust: 'Adjust',
+      templates: 'Templates',
+      ai: 'AI',
+    },
+    chrome: {
+      activeMonitor: 'Active monitor',
+      assetBay: 'Asset Bay',
+      assetPanels: 'Asset panels',
+      comfyBinding: 'ComfyUI Binding',
+      comfyCfg: 'CFG',
+      comfyHeight: 'Height',
+      comfyNegativePrompt: 'Negative prompt',
+      comfyPreset: 'Preset',
+      comfyPrompt: 'Prompt',
+      comfySeed: 'Seed',
+      comfySteps: 'Steps',
+      comfyWidth: 'Width',
+      edit: 'Edit',
+      editWorkspace: 'Edit Workspace',
+      emptySelection: 'Select a timeline clip to edit these properties.',
+      hideSource: 'Hide Source',
+      import: 'Import',
+      info: 'Info',
+      inspector: 'Inspector',
+      inspectorPanels: 'inspector panels',
+      program: 'Program',
+      selectClip: 'Select a clip',
+      showSource: 'Show Source',
+      source: 'Source',
+      themeDark: 'Dark',
+      themeLight: 'Light',
+      themeToDark: 'Switch to the dark ground',
+      themeToLight: 'Switch to the paper ground',
+      workflow: 'Workflow',
+    },
+  },
+  ko: {
+    assetPanels: {
+      media: '미디어',
+      project: '프로젝트',
+      templates: '템플릿',
+      health: '상태',
+    },
+    dockPanels: {
+      clip: '클립',
+      video: '동영상',
+      audio: '오디오',
+      speed: '속도',
+      animation: '애니메이션',
+      tracking: '트래킹',
+      adjust: '조정',
+      effects: '효과',
+      text: '텍스트',
+      jobs: '작업',
+      export: '내보내기',
+      plugins: '플러그인',
+    },
+    primaryModes: {
+      media: '미디어',
+      audio: '오디오',
+      text: '텍스트',
+      effects: '효과',
+      transitions: '전환',
+      captions: '자막',
+      filters: '필터',
+      adjust: '조정',
+      templates: '템플릿',
+      ai: 'AI',
+    },
+    chrome: {
+      activeMonitor: '활성 모니터',
+      assetBay: '에셋 보관함',
+      assetPanels: '에셋 패널',
+      comfyBinding: 'ComfyUI 바인딩',
+      comfyCfg: 'CFG',
+      comfyHeight: '높이',
+      comfyNegativePrompt: '네거티브 프롬프트',
+      comfyPreset: '프리셋',
+      comfyPrompt: '프롬프트',
+      comfySeed: '시드',
+      comfySteps: '스텝',
+      comfyWidth: '너비',
+      edit: '편집',
+      editWorkspace: '편집 작업공간',
+      emptySelection: '타임라인 클립을 선택하면 속성을 편집할 수 있습니다.',
+      hideSource: '소스 닫기',
+      import: '가져오기',
+      info: '정보',
+      inspector: '인스펙터',
+      inspectorPanels: '인스펙터 패널',
+      program: '프로그램',
+      selectClip: '클립 선택',
+      showSource: '소스 열기',
+      source: '소스',
+      themeDark: '다크',
+      themeLight: '라이트',
+      themeToDark: '어두운 바탕으로 전환',
+      themeToLight: '종이 바탕으로 전환',
+      workflow: '워크플로',
+    },
+  },
+};
+
+function readEditorAssetPanelLabel(id: EditorAssetPanelId, language: DanbiMenuLanguage): string {
+  return editorPageText[language].assetPanels[id];
+}
+
+function readEditorDockPanelLabel(id: EditorDockPanelId, language: DanbiMenuLanguage): string {
+  return editorPageText[language].dockPanels[id];
+}
+
+function readEditorPrimaryModeLabel(id: EditorPrimaryModeId, language: DanbiMenuLanguage): string {
+  return editorPageText[language].primaryModes[id];
+}
+
+function readEditorDockPanel(id: EditorDockPanelId, language: DanbiMenuLanguage = 'en'): { id: EditorDockPanelId; label: string; shortLabel: string } {
+  const panel = EDITOR_DOCK_PANELS.find((item) => item.id === id) ?? EDITOR_DOCK_PANELS[0];
+  return {
+    ...panel,
+    label: readEditorDockPanelLabel(panel.id, language),
+  };
+}
+
+function listEditorDockPanels(ids: readonly EditorDockPanelId[], language: DanbiMenuLanguage = 'en'): Array<{ id: EditorDockPanelId; label: string; shortLabel: string }> {
+  return ids.map((id) => readEditorDockPanel(id, language));
+}
+
+function readEditorPrimaryMode(id: EditorPrimaryModeId): { id: EditorPrimaryModeId; label: string; shortLabel: string; assetPanel: EditorAssetPanelId; dockPanel: EditorDockPanelId } {
+  return EDITOR_PRIMARY_MODES.find((mode) => mode.id === id) ?? EDITOR_PRIMARY_MODES[0];
+}
+
+function readEditorAssetPanel(id: EditorAssetPanelId): { id: EditorAssetPanelId; label: string; shortLabel: string } {
+  return EDITOR_ASSET_PANELS.find((panel) => panel.id === id) ?? EDITOR_ASSET_PANELS[0];
+}
+
+/*
+ * Keep the original English labels on EDITOR_* constants for stable tests,
+ * status messages, and data attributes. Visible chrome is localized through
+ * the helpers above.
+ */
+function readEditorAssetPanelDisplay(id: EditorAssetPanelId, language: DanbiMenuLanguage): { id: EditorAssetPanelId; label: string; shortLabel: string } {
+  const panel = readEditorAssetPanel(id);
+  return {
+    ...panel,
+    label: readEditorAssetPanelLabel(id, language),
+  };
+}
+
+function readEditorPrimaryModeDisplay(id: EditorPrimaryModeId, language: DanbiMenuLanguage): { id: EditorPrimaryModeId; label: string; shortLabel: string; assetPanel: EditorAssetPanelId; dockPanel: EditorDockPanelId } {
+  const mode = readEditorPrimaryMode(id);
+  return {
+    ...mode,
+    label: readEditorPrimaryModeLabel(id, language),
+  };
+}
+
+
+function InspectorDockTabList({
+  label,
+  testId,
+  panels,
+  activeDockPanel,
+  onSelect,
+}: {
+  label: string;
+  testId: string;
+  panels: Array<{ id: EditorDockPanelId; label: string; shortLabel: string }>;
+  activeDockPanel: EditorDockPanelId;
+  onSelect: (panelId: EditorDockPanelId) => void;
+}) {
+  /* Broadsheet's tab: a serif word with a 2px accent rule under the active one.
+     These were 78px two-line boxed buttons, which cost the inspector a third of
+     its height before any content appeared — twelve of them wrapped to a
+     742px-wide scroll strip. As words they wrap into two tidy rows. */
+  return (
+    <div>
+      <div className="mb-0.5 text-micro font-semibold uppercase tracking-[0.1em] text-ds-500">{label}</div>
+      <div
+        role="tablist"
+        aria-label={`${label} inspector panels`}
+        data-testid={testId}
+        className="flex flex-wrap items-baseline gap-x-3 gap-y-1"
+      >
+        {panels.map((panel) => (
+          <button
+            key={panel.id}
+            type="button"
+            role="tab"
+            title={panel.label}
+            data-testid={`inspector-dock-tab-${panel.id}`}
+            aria-selected={activeDockPanel === panel.id}
+            onClick={() => onSelect(panel.id)}
+            className={`shrink-0 border-b-2 pb-0.5 font-heading text-sm font-semibold leading-tight transition ${
+              activeDockPanel === panel.id
+                ? 'border-accent text-ink'
+                : 'border-transparent text-ds-600 hover:text-ink'
+            }`}
+          >
+            {panel.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function InspectorEmptySelectionPanel({ panelLabel, message }: { panelLabel: string; message: string }) {
+  return (
+    <div
+      data-testid="inspector-empty-selection"
+      className="rounded-md border border-ds-200 bg-surface p-4 text-sm text-ds-700"
+    >
+      <div className="text-kicker font-heading font-semibold uppercase text-ds-600">{panelLabel}</div>
+      <div className="mt-2 text-ds-800">{message}</div>
+    </div>
+  );
+}
+
+function resolveEditorMonitorGridClass(sourceMonitorVisible: boolean, sceneReadoutVisible: boolean): string {
+  if (sourceMonitorVisible && sceneReadoutVisible) {
+    return 'lg:grid-cols-[220px_minmax(620px,1fr)] 2xl:grid-cols-[220px_minmax(680px,1fr)_220px]';
+  }
+
+  if (sourceMonitorVisible) {
+    return 'lg:grid-cols-[220px_minmax(620px,1fr)]';
+  }
+
+  if (sceneReadoutVisible) {
+    return 'lg:grid-cols-[minmax(560px,1fr)_220px]';
+  }
+
+  return 'lg:grid-cols-[minmax(560px,1fr)]';
+}
+
+function formatSourcePlaybackStatus(rate: number): string {
+  if (rate === 0) {
+    return 'source paused';
+  }
+
+  return `source ${rate > 0 ? '+' : '-'}${Math.abs(rate)}x`;
+}
+
+function timelineClipContainsPlayhead(clip: TimelineClip | null | undefined, playhead: number): clip is TimelineClip {
+  return Boolean(clip && playhead > clip.start && playhead < clip.start + clip.duration);
+}
 
 interface CaptionSidecarImportSource {
   filename: string;
@@ -296,6 +670,10 @@ function readLocalProjectFallbackSnapshot(): ProjectPackageImport | null {
 }
 
 export default function EditorPage() {
+  const menuLanguage = useMenuLanguage();
+  const editorText = editorPageText[menuLanguage];
+  const { theme, toggleTheme } = useDanbiTheme();
+  const [editorSettings, setEditorSettings] = useState<EditorInteractionSettings>(DEFAULT_EDITOR_INTERACTION_SETTINGS);
   const [project, setProject] = useState<EditorProject>(() => createDefaultEditorProject());
   const [history, setHistory] = useState<EditorProject[]>([]);
   const [future, setFuture] = useState<EditorProject[]>([]);
@@ -374,13 +752,63 @@ export default function EditorPage() {
   const [sourcePlaybackRate, setSourcePlaybackRate] = useState(0);
   const [sourceLoopPlaybackEnabled, setSourceLoopPlaybackEnabled] = useState(false);
   const [activeMonitor, setActiveMonitor] = useState<'source' | 'program'>('program');
+  const [sourceMonitorPinned, setSourceMonitorPinned] = useState(false);
+  const [sceneReadoutVisible, setSceneReadoutVisible] = useState(false);
+  const [activeAssetPanel, setActiveAssetPanel] = useState<EditorAssetPanelId>('media');
+  const [activeDockPanel, setActiveDockPanel] = useState<EditorDockPanelId>('clip');
+  const [preferredPrimaryModeId, setPreferredPrimaryModeId] = useState<EditorPrimaryModeId>('media');
+  const activePrimaryModeId = EDITOR_PRIMARY_MODES.find((mode) => (
+    mode.id === preferredPrimaryModeId &&
+    mode.assetPanel === activeAssetPanel &&
+    mode.dockPanel === activeDockPanel
+  ))?.id ?? EDITOR_PRIMARY_MODES.find((mode) => (
+    mode.assetPanel === activeAssetPanel && mode.dockPanel === activeDockPanel
+  ))?.id ?? null;
+  const sourceMonitorVisible = sourceMonitorPinned || activeMonitor === 'source';
+  const editorMonitorGridClass = resolveEditorMonitorGridClass(sourceMonitorVisible, sceneReadoutVisible);
+  const handlePrimaryModeSelect = (mode: (typeof EDITOR_PRIMARY_MODES)[number]) => {
+    setPreferredPrimaryModeId(mode.id);
+    setActiveAssetPanel(mode.assetPanel);
+    setActiveDockPanel(mode.dockPanel);
+    setStatus(`${mode.label} workspace selected`);
+  };
+  const handleActivateProgramMonitor = () => {
+    setActiveMonitor('program');
+    setStatus('Program Monitor active');
+  };
+  const handleActivateSourceMonitor = () => {
+    setSourceMonitorPinned(true);
+    setActiveMonitor('source');
+    setStatus('Source Monitor active');
+  };
+  const handleToggleSourceMonitorPanel = () => {
+    if (sourceMonitorVisible) {
+      if (activeMonitor === 'source') {
+        setActiveMonitor('program');
+        setStatus('Program Monitor active');
+      }
+      setSourceMonitorPinned(false);
+      return;
+    }
+
+    setSourceMonitorPinned(true);
+  };
   const [clipDragTargetTrackId, setClipDragTargetTrackId] = useState<string | null>(null);
   const [clipDragPreview, setClipDragPreview] = useState<TimelineClipDropPreview | null>(null);
+  const [groupMovePreview, setGroupMovePreview] = useState<TimelineGroupMovePreview | null>(null);
+  const [groupTrimPreview, setGroupTrimPreview] = useState<TimelineGroupTrimPreview | null>(null);
+  const [neighborImpactPreview, setNeighborImpactPreview] = useState<TimelineNeighborImpactPreview | null>(null);
+  const [rippleTrimPreview, setRippleTrimPreview] = useState<TimelineRippleTrimPreview | null>(null);
   const [assetDropPreview, setAssetDropPreview] = useState<TimelineAssetDropPreview | null>(null);
   const [timelineEditGuide, setTimelineEditGuide] = useState<TimelineEditGuide | null>(null);
   const [markerTimePreview, setMarkerTimePreview] = useState<{ id: string; time: number } | null>(null);
   const [mediaFileDropActive, setMediaFileDropActive] = useState(false);
+  const [draggingAssetId, setDraggingAssetId] = useState<string | null>(null);
   const [pixelsPerSecond, setPixelsPerSecond] = useState(DEFAULT_PIXELS_PER_SECOND);
+  const [timelineShowWaveforms, setTimelineShowWaveforms] = useState(true);
+  const [timelineShowThumbnails, setTimelineShowThumbnails] = useState(true);
+  const [timelineTrackHeight, setTimelineTrackHeight] = useState(80);
+  const [timelinePanelHeight, setTimelinePanelHeight] = useState(300);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [rippleMode, setRippleMode] = useState(false);
   const [gapInsertDuration, setGapInsertDuration] = useState(1);
@@ -425,12 +853,19 @@ export default function EditorPage() {
   const bulkRelinkFileInputRef = useRef<HTMLInputElement>(null);
   const relinkAssetIdRef = useRef<string | null>(null);
   const timelineScrollRef = useRef<HTMLDivElement>(null);
+  const suppressNextTimelineVisibleScrollRef = useRef(false);
   const timelineLaneRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const importedObjectUrlsRef = useRef<string[]>([]);
   const markerDragRef = useRef<MarkerDragSessionState | null>(null);
   const projectReplacementGenerationRef = useRef(0);
   const voiceoverSessionRef = useRef<VoiceoverRecordingSession | null>(null);
   const voiceoverRequestIdRef = useRef(0);
+  const linkedClipEditsEnabled = editorSettings.linkedClipEditMode === 'linked';
+
+  useEffect(() => {
+    setEditorSettings(readStoredEditorInteractionSettings());
+    return subscribeEditorInteractionSettings(setEditorSettings);
+  }, []);
 
   const beginProjectReplacementRequest = useCallback(() => {
     projectReplacementGenerationRef.current += 1;
@@ -720,11 +1155,17 @@ export default function EditorPage() {
     project,
     selectedClips,
   ]);
+  const timelinePlayheadEditTargetClip = timelineClipContainsPlayhead(selectedClip, playhead)
+    ? selectedClip
+    : activeTimelineClip ?? null;
+  const canEditTimelinePlayheadTarget = Boolean(timelinePlayheadEditTargetClip);
+  const canDeleteTimelineToolbarTarget = selectedClips.length > 0 || canEditTimelinePlayheadTarget;
   const timelineClipRenderWindow = useMemo(() => resolveTimelineClipRenderWindow({
     scrollLeft: timelineViewport.scrollLeft,
     viewportWidth: timelineViewport.viewportWidth,
     pixelsPerSecond,
     projectDuration: project.duration,
+    timelineStartOffsetPixels: TIMELINE_TRACK_HEADER_WIDTH,
   }), [pixelsPerSecond, project.duration, timelineViewport.scrollLeft, timelineViewport.viewportWidth]);
   const handleTimelineViewportChange = useCallback((viewport: TimelineViewportState) => {
     setTimelineViewport((current) => (
@@ -776,7 +1217,10 @@ export default function EditorPage() {
       : programAudioAnalysis
   ), [programAudioAnalysis, programAudioFftSample]);
   const handleProgramAudioFftSample = useCallback((sample: ProgramAudioFftSample) => {
-    setProgramAudioFftSample(sample.capturedLayerCount > 0 ? sample : null);
+    setProgramAudioFftSample((current) => {
+      const next = sample.capturedLayerCount > 0 ? sample : null;
+      return isSameProgramAudioFftSample(current, next) ? current : next;
+    });
   }, []);
   const handleProgramVideoScopeReadout = useCallback((readout: VideoScopeReadout | null) => {
     setProgramVideoScopeReadout((current) => (
@@ -839,6 +1283,11 @@ export default function EditorPage() {
     setPlayhead(resolveTimelinePlayheadTime({ project, time, snapEnabled }));
   };
 
+  const handleProgramMonitorPlayheadChange = (time: number) => {
+    setActiveMonitor('program');
+    setTimelinePlayhead(time);
+  };
+
   const handleEditModeChange = (mode: 'insert' | 'overwrite') => {
     setEditMode(mode);
     setStatus(`Edit mode: ${mode === 'overwrite' ? 'Overwrite' : 'Insert'}`);
@@ -877,11 +1326,17 @@ export default function EditorPage() {
       return;
     }
 
+    if (suppressNextTimelineVisibleScrollRef.current) {
+      suppressNextTimelineVisibleScrollRef.current = false;
+      return;
+    }
+
     scrollContainer.scrollLeft = resolveTimelineVisibleScrollLeft({
       playhead,
       viewportWidth: scrollContainer.clientWidth,
       currentScrollLeft: scrollContainer.scrollLeft,
       pixelsPerSecond,
+      timelineStartOffsetPixels: TIMELINE_TRACK_HEADER_WIDTH,
     });
   }, [pixelsPerSecond, playhead]);
 
@@ -899,14 +1354,89 @@ export default function EditorPage() {
       selectedClipIds,
       viewportWidth,
       mode,
+      timelineStartOffsetPixels: TIMELINE_TRACK_HEADER_WIDTH,
     });
 
+    if (fitState.nextPixelsPerSecond !== pixelsPerSecond) {
+      suppressNextTimelineVisibleScrollRef.current = true;
+    }
     setPixelsPerSecond(fitState.nextPixelsPerSecond);
     if (timelineScrollRef.current) {
       timelineScrollRef.current.scrollLeft = fitState.nextScrollLeft;
     }
 
     setStatus(fitState.status);
+  };
+
+  const handleTimelinePanelResizePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    const startY = event.clientY;
+    const startHeight = timelinePanelHeight;
+    const maxHeight = Math.max(260, Math.round(window.innerHeight * 0.62));
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      moveEvent.preventDefault();
+      const nextHeight = clampNumber(startHeight + (startY - moveEvent.clientY), 220, maxHeight);
+      setTimelinePanelHeight(Math.round(nextHeight));
+    };
+    const handlePointerUp = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp, { once: true });
+  };
+
+  const handleTimelineWheelZoom = (event: WheelEvent<HTMLDivElement>) => {
+    if (!editorSettings.wheelZoomEnabled) {
+      return;
+    }
+
+    const isZoomGesture = event.ctrlKey || event.metaKey;
+    const isHorizontalScrollGesture = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY);
+    if (!isZoomGesture || isHorizontalScrollGesture) {
+      return;
+    }
+
+    event.preventDefault();
+    const scrollContainer = timelineScrollRef.current;
+    if (!scrollContainer) {
+      return;
+    }
+
+    const rect = scrollContainer.getBoundingClientRect();
+    const plan = resolveTimelineWheelZoomInteraction({
+      clientX: event.clientX,
+      viewportLeft: rect.left,
+      viewportWidth: scrollContainer.clientWidth,
+      scrollLeft: scrollContainer.scrollLeft,
+      currentPixelsPerSecond: pixelsPerSecond,
+      deltaY: event.deltaY,
+      deltaMode: event.deltaMode,
+      duration: project.duration,
+      timelineStartOffsetPixels: TIMELINE_TRACK_HEADER_WIDTH,
+    });
+
+    if (!plan.shouldZoom) {
+      return;
+    }
+
+    suppressNextTimelineVisibleScrollRef.current = true;
+    setPixelsPerSecond(plan.nextPixelsPerSecond);
+    window.requestAnimationFrame(() => {
+      scrollContainer.scrollLeft = plan.nextScrollLeft;
+      setTimelineViewport({
+        scrollLeft: plan.nextScrollLeft,
+        viewportWidth: scrollContainer.clientWidth,
+      });
+    });
+    setStatus(`Timeline zoom ${plan.nextPixelsPerSecond}px/s at ${formatTimecode(plan.anchorTime, project.fps)}`);
   };
 
   const handleTimelineRulerPointerDown = (event: MouseEvent<HTMLDivElement>) => {
@@ -917,7 +1447,7 @@ export default function EditorPage() {
     event.preventDefault();
     const requestGeneration = projectReplacementGenerationRef.current;
     const rect = event.currentTarget.getBoundingClientRect();
-    const scrubStartPlan = resolveTimelineRulerScrubStartPlan({
+    const scrubStartPlan = beginTimelineScrubInteraction({
       rulerLeft: rect.left,
       startScrollLeft: timelineScrollRef.current?.scrollLeft ?? 0,
       playhead,
@@ -931,7 +1461,7 @@ export default function EditorPage() {
       }
 
       const currentScrollLeft = applyTimelineEdgeAutoScroll(clientX);
-      const movePlan = resolveTimelineRulerScrubMovePlan({
+      const movePlan = resolveTimelineScrubInteractionMove({
         session: scrubSession,
         clientX,
         currentScrollLeft,
@@ -958,7 +1488,7 @@ export default function EditorPage() {
       }
 
       const currentScrollLeft = applyTimelineEdgeAutoScroll(upEvent.clientX);
-      const endPlan = resolveTimelineRulerScrubEndPlan({
+      const endPlan = resolveTimelineScrubInteractionEnd({
         session: scrubSession,
         clientX: upEvent.clientX,
         currentScrollLeft,
@@ -985,6 +1515,7 @@ export default function EditorPage() {
     );
     setActiveMonitor(playbackState.activeMonitor);
     setSourcePlaybackRate(playbackState.sourcePlaybackRate);
+    setStatus(formatSourcePlaybackStatus(playbackState.sourcePlaybackRate));
   };
 
   const toggleActiveMonitorPlayback = () => {
@@ -1085,6 +1616,26 @@ export default function EditorPage() {
     if (plan.sourcePlayhead !== undefined) {
       setSourcePlayhead(plan.sourcePlayhead);
     }
+  };
+
+  const revealImportedMediaAssets = (assetIds: string[]) => {
+    const selectedImportedAssetId = assetIds[assetIds.length - 1];
+    if (!selectedImportedAssetId) {
+      return;
+    }
+
+    setSelectedSourceAssetId(selectedImportedAssetId);
+    setSourcePlayhead(0);
+    setSourcePlaybackRate(0);
+    setSourceMonitorPinned(true);
+    setActiveMonitor('source');
+    setPreferredPrimaryModeId('media');
+    setActiveAssetPanel('media');
+    setActiveDockPanel('clip');
+    setMediaSearchQuery('');
+    setMediaKindFilter('all');
+    setMediaSmartFilter('all');
+    setMediaBinFilter('all');
   };
 
   const handleUpdateSelectedSourceBin = (binName: string) => {
@@ -1456,6 +2007,9 @@ export default function EditorPage() {
       const elapsedSeconds = resolvePlaybackFrameElapsedSeconds(previousTimestamp, timestamp);
       previousTimestamp = timestamp;
 
+      // 다음 프레임을 먼저 예약해야 상태 갱신이 던지더라도 재생 루프가 죽지 않는다.
+      animationFrame = window.requestAnimationFrame(tick);
+
       setPlayhead((current) => {
         const frameState = resolvePlaybackFrameState({
           currentPlayhead: current,
@@ -1471,8 +2025,6 @@ export default function EditorPage() {
 
         return frameState.playhead;
       });
-
-      animationFrame = window.requestAnimationFrame(tick);
     };
 
     animationFrame = window.requestAnimationFrame(tick);
@@ -1491,6 +2043,9 @@ export default function EditorPage() {
       const elapsedSeconds = resolvePlaybackFrameElapsedSeconds(previousTimestamp, timestamp);
       previousTimestamp = timestamp;
 
+      // 다음 프레임을 먼저 예약해야 상태 갱신이 던지더라도 재생 루프가 죽지 않는다.
+      animationFrame = window.requestAnimationFrame(tick);
+
       setSourcePlayhead((current) => {
         const frameState = resolvePlaybackFrameState({
           currentPlayhead: current,
@@ -1507,8 +2062,6 @@ export default function EditorPage() {
 
         return frameState.playhead;
       });
-
-      animationFrame = window.requestAnimationFrame(tick);
     };
 
     animationFrame = window.requestAnimationFrame(tick);
@@ -1594,11 +2147,11 @@ export default function EditorPage() {
         onShuttlePlayback: handleShuttlePlayback,
         onToggleLoopPlayback: handleToggleLoopPlayback,
         onSplit: handleSplit,
-        onTrimToPlayhead: handleTrimToPlayhead,
+        onTrimToPlayhead: (edge) => handleTrimToPlayhead(edge, timelinePlayheadEditTargetClip, true),
         onCopyMarkedRange: handleCopyMarkedRange,
         onSplitActiveCaption: handleSplitActiveCaption,
         onDeleteSelectedCaptions: handleDeleteSelectedCaptions,
-        onDeleteSelected: handleDeleteSelected,
+        onDeleteSelected: (ripple) => handleDeleteSelected(ripple, timelinePlayheadEditTargetClip),
         onSetTimelinePlayhead: setTimelinePlayhead,
         onGoToSourceBoundary: handleGoToSourceBoundary,
         onProgramMotionNudge: handleProgramMotionNudge,
@@ -1621,6 +2174,8 @@ export default function EditorPage() {
         onGoToSourceMark: handleGoToSourceMark,
         onSetSourceMark: handleSetSourceMark,
         onClearSourceMarks: handleClearSourceMarks,
+        customShortcuts: editorSettings.customShortcuts,
+        onRunCommand: (commandId) => handleRunPaletteCommand(commandId),
         onCutMarkedRange: handleCutMarkedRange,
         onDeleteMarkedRange: handleDeleteMarkedRange,
         onClearMarks: handleClearMarks,
@@ -3028,6 +3583,9 @@ export default function EditorPage() {
     if (cacheJobEntries.length > 0) {
       setCacheJobsByAssetId((current) => mergeMediaCacheJobsByAssetId(current, cacheJobEntries));
     }
+    if (importedAssetIds.length > 0) {
+      revealImportedMediaAssets(importedAssetIds);
+    }
     setStatus(statusParts.join(' / '));
     if (importedAssetIds.length > 0) {
       void runEditorHooks('on-import', nextProject, { assetIds: importedAssetIds });
@@ -3802,6 +4360,7 @@ export default function EditorPage() {
       clip,
       shouldSeek,
       mode,
+      includeLinked: linkedClipEditsEnabled,
     }).selectedClipIds);
 
     if (shouldSeek) {
@@ -3810,7 +4369,7 @@ export default function EditorPage() {
   };
 
   const handleTimelineClipSelect = (clip: TimelineClip, event: MouseEvent<HTMLButtonElement>) => {
-    const selection = resolveTimelineClipClickSelection({
+    const selection = resolveTimelineClipSelectInteraction({
       project,
       currentSelectedClipIds: selectedClipIds,
       clip,
@@ -3819,6 +4378,7 @@ export default function EditorPage() {
         ctrlKey: event.ctrlKey,
         shiftKey: event.shiftKey,
       },
+      includeLinked: linkedClipEditsEnabled,
     });
     setSelectedClipId(selection.selectedClipId);
     setSelectedTrackId(selection.selectedTrackId);
@@ -3859,7 +4419,7 @@ export default function EditorPage() {
     nextProject: EditorProject;
     assetId: string;
     start: number;
-  }) => {
+  }): boolean => {
     const selection = resolveInsertedSourceAssetPatchSelection({
       previousProject,
       nextProject,
@@ -3871,7 +4431,11 @@ export default function EditorPage() {
       setSelectedClipIds(selection.selectedClipIds);
       setSelectedTrackId(selection.selectedTrackId);
       setPlayhead(selection.nextPlayhead);
+      setActiveMonitor('program');
+      return true;
     }
+
+    return false;
   };
 
   const handleProgramPreviewClipSelect = (clipId: string) => {
@@ -3891,13 +4455,13 @@ export default function EditorPage() {
       project,
       asset: assetById.get(assetId),
       start: playhead,
-      settings: {
+      settings: resolveDirectMediaInsertPatchSettings({
         selectedTrackId,
         sourcePrimaryPatchTrackId,
         sourceAudioPatchTrackId,
         sourcePrimaryPatchEnabled,
         sourceAudioPatchEnabled,
-      },
+      }),
     });
     if (!plan.canInsert) {
       setStatus(plan.status);
@@ -3924,13 +4488,13 @@ export default function EditorPage() {
       project,
       asset: assetById.get(assetId),
       start: playhead,
-      settings: {
+      settings: resolveDirectMediaInsertPatchSettings({
         selectedTrackId,
         sourcePrimaryPatchTrackId,
         sourceAudioPatchTrackId,
         sourcePrimaryPatchEnabled,
         sourceAudioPatchEnabled,
-      },
+      }),
     });
     if (!plan.canOverwrite) {
       setStatus(plan.status);
@@ -3955,14 +4519,43 @@ export default function EditorPage() {
   const resolveAssetDropStart = (event: DragEvent<HTMLDivElement>): number => {
     applyTimelineEdgeAutoScroll(event.clientX);
     const rect = event.currentTarget.getBoundingClientRect();
-    return resolveTimelineDropStartPlan({
+    return resolveTimelineImportDropStart({
       project,
       clientX: event.clientX,
       laneLeft: rect.left,
       pixelsPerSecond,
       snapEnabled,
       snapExtraPoints: timelineEditSnapPoints,
-    }).start;
+    });
+  };
+
+  const resolveAssetPointerDropStart = (clientX: number, laneNode: HTMLDivElement): number => {
+    applyTimelineEdgeAutoScroll(clientX);
+    const rect = laneNode.getBoundingClientRect();
+    return resolveTimelineImportDropStart({
+      project,
+      clientX,
+      laneLeft: rect.left,
+      pixelsPerSecond,
+      snapEnabled,
+      snapExtraPoints: timelineEditSnapPoints,
+    });
+  };
+
+  const resolveTimelineLaneAtPoint = (clientX: number, clientY: number): { track: TimelineTrack; node: HTMLDivElement } | null => {
+    for (const track of project.tracks) {
+      const node = timelineLaneRefs.current[track.id];
+      if (!node) {
+        continue;
+      }
+
+      const rect = node.getBoundingClientRect();
+      if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
+        return { track, node };
+      }
+    }
+
+    return null;
   };
 
   const handleAssetDragStart = (event: DragEvent<HTMLDivElement>, asset: EditorAsset) => {
@@ -3970,8 +4563,142 @@ export default function EditorPage() {
     event.dataTransfer.setData(MEDIA_ASSET_DRAG_MIME, asset.id);
     event.dataTransfer.setData('text/plain', asset.id);
     setSelectedSourceAssetId(asset.id);
+    setDraggingAssetId(asset.id);
     setAssetDropPreview(null);
     showTimelineEditGuide(null);
+    setStatus(`Drag ${asset.name} to a timeline lane`);
+  };
+
+  const handleAssetPointerDragStart = (event: MouseEvent<HTMLElement>, asset: EditorAsset) => {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    const dragStartClientX = event.clientX;
+    const dragStartClientY = event.clientY;
+    const requestGeneration = projectReplacementGenerationRef.current;
+    let hasStartedDrag = false;
+    setSelectedSourceAssetId(asset.id);
+    setAssetDropPreview(null);
+    showTimelineEditGuide(null);
+
+    const previewAssetDrop = (clientX: number, clientY: number) => {
+      if (projectReplacementGenerationRef.current !== requestGeneration) {
+        return null;
+      }
+
+      const target = resolveTimelineLaneAtPoint(clientX, clientY);
+      if (!target) {
+        setAssetDropPreview(null);
+        showTimelineEditGuide(null);
+        return null;
+      }
+
+      const start = resolveAssetPointerDropStart(clientX, target.node);
+      const previewPlan = resolveAssetTimelineDropPreviewPlan({
+        project,
+        asset,
+        track: target.track,
+        start,
+        sourceRange: sourceRangesByAssetId[asset.id],
+        settings: {
+          selectedTrackId,
+          sourceAudioPatchTrackId,
+          sourceAudioPatchEnabled,
+          editMode,
+        },
+      });
+      setAssetDropPreview(previewPlan.assetDropPreview);
+      showTimelineEditGuide(previewPlan.editGuide);
+      return { ...target, start };
+    };
+
+    const handlePointerMove = (moveEvent: globalThis.MouseEvent) => {
+      moveEvent.preventDefault();
+      if (!hasStartedDrag) {
+        const dragDistance = Math.hypot(moveEvent.clientX - dragStartClientX, moveEvent.clientY - dragStartClientY);
+        if (dragDistance < 4) {
+          return;
+        }
+
+        hasStartedDrag = true;
+        setDraggingAssetId(asset.id);
+        setStatus(`Drag ${asset.name} to a timeline lane`);
+      }
+
+      previewAssetDrop(moveEvent.clientX, moveEvent.clientY);
+    };
+
+    const handlePointerUp = (upEvent: globalThis.MouseEvent) => {
+      window.removeEventListener('mousemove', handlePointerMove);
+      window.removeEventListener('mouseup', handlePointerUp);
+      setAssetDropPreview(null);
+      showTimelineEditGuide(null);
+      setDraggingAssetId(null);
+
+      if (!hasStartedDrag) {
+        return;
+      }
+
+      if (projectReplacementGenerationRef.current !== requestGeneration) {
+        return;
+      }
+
+      const target = previewAssetDrop(upEvent.clientX, upEvent.clientY);
+      setAssetDropPreview(null);
+      showTimelineEditGuide(null);
+      if (!target) {
+        setStatus('Drop media on a timeline track');
+        return;
+      }
+
+      try {
+        const dropPlan = resolveAssetTimelineDropCommitPlan({
+          project,
+          asset,
+          track: target.track,
+          start: target.start,
+          sourceRange: sourceRangesByAssetId[asset.id],
+          settings: {
+            selectedTrackId,
+            sourceAudioPatchTrackId,
+            sourceAudioPatchEnabled,
+            editMode,
+          },
+        });
+        const result = commitProjectResult(
+          dropPlan.commitLabel,
+          (current) => (
+            editMode === 'overwrite'
+              ? overwriteAssetPatchOnTimeline(current, asset.id, dropPlan.options)
+              : insertAssetPatchOnTimeline(current, asset.id, dropPlan.options)
+          ),
+        );
+
+        if (result.committed) {
+          setSelectedSourceAssetId(dropPlan.selectedSourceAssetId);
+          const selectedInsertedClip = applyInsertedAssetPatchSelection({
+            previousProject: project,
+            nextProject: result.project,
+            assetId: asset.id,
+            start: dropPlan.options.start,
+          });
+          if (!selectedInsertedClip) {
+            setSelectedTrackId(dropPlan.selectedTrackId);
+            setPlayhead(dropPlan.nextPlayhead);
+            setActiveMonitor('program');
+          }
+          setStatus(dropPlan.status);
+        }
+      } catch (error) {
+        setStatus(resolveAssetTimelineDropFailureStatus(error));
+      }
+    };
+
+    window.addEventListener('mousemove', handlePointerMove);
+    window.addEventListener('mouseup', handlePointerUp);
   };
 
   const handleAssetDragOverTimeline = (event: DragEvent<HTMLDivElement>, track: TimelineTrack) => {
@@ -4011,6 +4738,7 @@ export default function EditorPage() {
     event.preventDefault();
     setAssetDropPreview(null);
     showTimelineEditGuide(null);
+    setDraggingAssetId(null);
     const start = resolveAssetDropStart(event);
     try {
       const dropPlan = resolveAssetTimelineDropCommitPlan({
@@ -4026,7 +4754,7 @@ export default function EditorPage() {
           editMode,
         },
       });
-      const committed = commitProject(
+      const result = commitProjectResult(
         dropPlan.commitLabel,
         (current) => (
           editMode === 'overwrite'
@@ -4035,10 +4763,19 @@ export default function EditorPage() {
         ),
       );
 
-      if (committed) {
+      if (result.committed) {
         setSelectedSourceAssetId(dropPlan.selectedSourceAssetId);
-        setSelectedTrackId(dropPlan.selectedTrackId);
-        setTimelinePlayhead(dropPlan.nextPlayhead);
+        const selectedInsertedClip = applyInsertedAssetPatchSelection({
+          previousProject: project,
+          nextProject: result.project,
+          assetId: asset.id,
+          start: dropPlan.options.start,
+        });
+        if (!selectedInsertedClip) {
+          setSelectedTrackId(dropPlan.selectedTrackId);
+          setPlayhead(dropPlan.nextPlayhead);
+          setActiveMonitor('program');
+        }
         setStatus(dropPlan.status);
       }
     } catch (error) {
@@ -4126,8 +4863,17 @@ export default function EditorPage() {
         setCacheJobsByAssetId((current) => mergeMediaCacheJobsByAssetId(current, dropResult.cacheJobEntries));
       }
       setSelectedSourceAssetId(dropResult.selectedSourceAssetId);
-      setSelectedTrackId(dropResult.selectedTrackId);
-      setPlayhead(dropResult.nextPlayhead);
+      const selectedInsertedClip = applyInsertedAssetPatchSelection({
+        previousProject: project,
+        nextProject: dropResult.nextProject,
+        assetId: dropResult.selectedSourceAssetId,
+        start,
+      });
+      if (!selectedInsertedClip) {
+        setSelectedTrackId(dropResult.selectedTrackId);
+        setPlayhead(dropResult.nextPlayhead);
+        setActiveMonitor('program');
+      }
       setStatus(appendSkippedNonMediaDropStatus(dropResult.status, skippedFileCount));
       void runEditorHooks('on-import', dropResult.nextProject, { assetIds: dropResult.importedAssetIds });
     } catch (error) {
@@ -4417,10 +5163,13 @@ export default function EditorPage() {
     ));
   };
 
-  const handleDeleteSelected = (ripple = rippleMode) => {
+  const handleDeleteSelected = (ripple = rippleMode, fallbackClip?: TimelineClip | null) => {
+    const targetClips = selectedClips.length > 0
+      ? selectedClips
+      : fallbackClip ? [fallbackClip] : [];
     const plan = resolveDeleteSelectedClipsPlan({
       project,
-      selectedClips,
+      selectedClips: targetClips,
       ripple,
     });
     if (!plan.canCommit) {
@@ -5117,9 +5866,20 @@ export default function EditorPage() {
       return;
     }
 
-    commitProject(plan.commitLabel, (current) => (
-      trimLinkedClipToTime(current, plan.clipId, plan.edge, playhead)
-    ));
+    commitProject(plan.commitLabel, (current) => {
+      if (linkedClipEditsEnabled) {
+        return trimLinkedClipToTime(current, plan.clipId, plan.edge, playhead);
+      }
+
+      const currentClip = findClip(current, plan.clipId);
+      if (!currentClip) {
+        throw new Error('Clip not found.');
+      }
+      const delta = plan.edge === 'start'
+        ? playhead - currentClip.start
+        : playhead - (currentClip.start + currentClip.duration);
+      return trimClip(current, plan.clipId, plan.edge, delta);
+    });
   };
 
   const handleSplit = () => {
@@ -5140,12 +5900,18 @@ export default function EditorPage() {
     setSelectedTrackId(plan.nextSelectedTrackId);
     if (plan.mode === 'selected') {
       commitProject(plan.commitLabel, (current) => (
-        splitClipsAtTime(current, plan.targetClipIds, playhead)
+        linkedClipEditsEnabled
+          ? splitClipsAtTime(current, plan.targetClipIds, playhead)
+          : plan.targetClipIds.reduce((nextProject, clipId) => splitClipAtTime(nextProject, clipId, playhead), current)
       ));
       return;
     }
 
-    commitProject(plan.commitLabel, (current) => splitLinkedClipAtTime(current, plan.targetClipId!, playhead));
+    commitProject(plan.commitLabel, (current) => (
+      linkedClipEditsEnabled
+        ? splitLinkedClipAtTime(current, plan.targetClipId!, playhead)
+        : splitClipAtTime(current, plan.targetClipId!, playhead)
+    ));
   };
 
   const handleSplitAll = () => {
@@ -5420,6 +6186,7 @@ export default function EditorPage() {
         clipId: plan.clipId,
         value,
         snapEnabled,
+        includeLinked: linkedClipEditsEnabled,
       });
       nextPlayhead = result.nextPlayhead;
 
@@ -5445,10 +6212,19 @@ export default function EditorPage() {
         clipId: plan.clipId,
         value,
         rippleMode,
+        includeLinked: linkedClipEditsEnabled,
       });
       nextPlayhead = result.nextPlayhead;
 
-      return trimLinkedClipToTime(current, plan.clipId, 'end', result.nextEnd, result.trimOptions);
+      if (linkedClipEditsEnabled) {
+        return trimLinkedClipToTime(current, plan.clipId, 'end', result.nextEnd, result.trimOptions);
+      }
+
+      const currentClip = findClip(current, plan.clipId);
+      if (!currentClip) {
+        throw new Error('Clip not found.');
+      }
+      return trimClip(current, plan.clipId, 'end', result.nextEnd - (currentClip.start + currentClip.duration));
     });
 
     if (committed) {
@@ -5565,30 +6341,35 @@ export default function EditorPage() {
     }
 
     const parameters = normalizeMotionTransformPatch(patch);
-    if (plan.mode === 'update' && plan.effectId) {
-      commitProject(plan.commitLabel, (current) => (
-        updateClipEffectParameters(
-          plan.effectEnabled ? current : toggleClipEffect(current, plan.clipId!, plan.effectId!),
+    commitProject(plan.commitLabel, (current) => {
+      const currentClip = findClip(current, plan.clipId!);
+      if (!currentClip) {
+        throw new Error('Clip not found.');
+      }
+
+      const currentMotionEffect = findMotionTransformEffect(currentClip);
+      if (currentMotionEffect) {
+        return updateClipEffectParameters(
+          currentMotionEffect.enabled ? current : toggleClipEffect(current, plan.clipId!, currentMotionEffect.id),
           plan.clipId!,
-          plan.effectId!,
+          currentMotionEffect.id,
           { ...parameters },
-        )
-      ));
-      return;
-    }
+        );
+      }
 
-    const effect: ClipEffect = {
-      id: `effect-motion-transform-${Date.now()}`,
-      type: 'motion',
-      label: MOTION_TRANSFORM_EFFECT_LABEL,
-      enabled: true,
-      parameters: {
-        ...buildDefaultMotionTransformParameters(),
-        ...parameters,
-      },
-    };
+      const effect: ClipEffect = {
+        id: `effect-motion-transform-${Date.now()}`,
+        type: 'motion',
+        label: MOTION_TRANSFORM_EFFECT_LABEL,
+        enabled: true,
+        parameters: {
+          ...buildDefaultMotionTransformParameters(),
+          ...parameters,
+        },
+      };
 
-    commitProject(plan.commitLabel, (current) => addClipEffect(current, plan.clipId!, effect));
+      return addClipEffect(current, plan.clipId!, effect);
+    });
   };
 
   const handleProgramMotionDragCommit = (clipId: string, patch: ProgramMotionPatch) => {
@@ -5774,13 +6555,30 @@ export default function EditorPage() {
     }
   };
 
+  const handleTimelineClipVolumeDrag = (clip: TimelineClip, volume: number) => {
+    const nextVolume = normalizeClipVolume(volume);
+    const committed = commitProject('Timeline clip volume adjusted', (current) => (
+      updateClip(current, clip.id, { volume: nextVolume })
+    ));
+
+    if (committed) {
+      setPrimarySelection(clip.id);
+      setSelectedTrackId(clip.trackId);
+      setStatus(`Timeline clip volume ${nextVolume.toFixed(2)}`);
+    }
+  };
+
   const handleDeleteKeyframe = (keyframeId: string) => {
     handleClipEdit('Keyframe deleted', (current, id) => deleteClipKeyframe(current, id, keyframeId));
   };
 
-  const handleTrimToPlayhead = (edge: 'start' | 'end') => {
+  const handleTrimToPlayhead = (
+    edge: 'start' | 'end',
+    targetClip: TimelineClip | null | undefined = timelinePlayheadEditTargetClip,
+    forceRipple = false,
+  ) => {
     const plan = resolveTrimClipToPlayheadPlan({
-      selectedClip,
+      selectedClip: targetClip,
       playhead,
       edge,
     });
@@ -5789,9 +6587,25 @@ export default function EditorPage() {
       return;
     }
 
-    commitProject(plan.commitLabel, (current) => (
-      trimLinkedClipToTime(current, plan.clipId, plan.edge, playhead, { ripple: rippleMode })
-    ));
+    commitProject(plan.commitLabel, (current) => {
+      if (linkedClipEditsEnabled) {
+        return trimLinkedClipToTime(current, plan.clipId, plan.edge, playhead, { ripple: forceRipple || rippleMode });
+      }
+
+      const currentClip = findClip(current, plan.clipId);
+      if (!currentClip) {
+        throw new Error('Clip not found.');
+      }
+      const delta = plan.edge === 'start'
+        ? playhead - currentClip.start
+        : playhead - (currentClip.start + currentClip.duration);
+      return trimClip(current, plan.clipId, plan.edge, delta);
+    });
+    if (targetClip && selectedClipIds.length === 0) {
+      setSelectedClipId(targetClip.id);
+      setSelectedClipIds([targetClip.id]);
+      setSelectedTrackId(targetClip.trackId);
+    }
   };
 
   const handleMoveSelected = (deltaSeconds: number) => {
@@ -5801,6 +6615,7 @@ export default function EditorPage() {
       selectedClips,
       deltaSeconds,
       snapEnabled,
+      includeLinked: linkedClipEditsEnabled,
     });
     if (!plan.canCommit) {
       setStatus(plan.status);
@@ -5821,6 +6636,7 @@ export default function EditorPage() {
       project,
       selectedClips,
       playhead,
+      includeLinked: linkedClipEditsEnabled,
     });
     if (!plan.canCommit) {
       setStatus(plan.status);
@@ -7226,6 +8042,7 @@ export default function EditorPage() {
     selectedClipIds,
     snapEnabled,
     snapExtraPoints: timelineEditSnapPoints,
+    includeLinked: linkedClipEditsEnabled,
   });
 
   const resolveClipMoveEdit = (anchorClip: TimelineClip, nextStart: number) => (
@@ -7235,6 +8052,210 @@ export default function EditorPage() {
       nextStart,
     })
   );
+
+  const buildGroupMovePreview = (
+    anchorClip: TimelineClip,
+    moveEdit: TimelineClipMoveEdit,
+  ): TimelineGroupMovePreview | null => {
+    if (moveEdit.group.length <= 1 || Math.abs(moveEdit.appliedDelta) < 0.001) {
+      return null;
+    }
+
+    return {
+      anchorClipId: anchorClip.id,
+      operation: 'group-move',
+      groupCount: moveEdit.group.length,
+      delta: moveEdit.appliedDelta,
+      clips: moveEdit.group.map((clip) => ({
+        id: clip.id,
+        trackId: clip.trackId,
+        start: roundTime(Math.max(0, clip.start + moveEdit.appliedDelta)),
+        duration: clip.duration,
+        label: clip.name,
+      })),
+    };
+  };
+
+  const buildGroupTrimPreview = (
+    anchorClip: TimelineClip,
+    trimEdit: TimelineClipTrimEdit,
+  ): TimelineGroupTrimPreview | null => {
+    if (trimEdit.group.length <= 1 || trimEdit.preview.ripple || Math.abs(trimEdit.appliedDelta) < 0.001) {
+      return null;
+    }
+
+    const updateByClipId = new Map(trimEdit.updates.map((update) => [update.clipId, update]));
+    const clips = trimEdit.group.flatMap((clip) => {
+      const update = updateByClipId.get(clip.id);
+      if (!update) {
+        return [];
+      }
+
+      const currentEnd = roundTime(clip.start + clip.duration);
+      const nextStart = trimEdit.edge === 'start'
+        ? update.appliedTimelineTime
+        : clip.start;
+      const nextDuration = trimEdit.edge === 'start'
+        ? roundTime(Math.max(0.25, currentEnd - update.appliedTimelineTime))
+        : roundTime(Math.max(0.25, update.appliedTimelineTime - clip.start));
+
+      return [{
+        id: clip.id,
+        trackId: clip.trackId,
+        start: clip.start,
+        nextStart,
+        duration: clip.duration,
+        nextDuration,
+        label: clip.name,
+      }];
+    });
+
+    if (clips.length <= 1) {
+      return null;
+    }
+
+    return {
+      anchorClipId: anchorClip.id,
+      operation: 'group-trim',
+      edge: trimEdit.edge,
+      groupCount: trimEdit.group.length,
+      delta: trimEdit.appliedDelta,
+      clips,
+    };
+  };
+
+  const buildNeighborImpactPreview = (
+    anchorClip: TimelineClip,
+    preview: TimelineClipEditPreview | null,
+    edge?: 'start' | 'end',
+  ): TimelineNeighborImpactPreview | null => {
+    if (!preview || preview.delta === undefined || Math.abs(preview.delta) < 0.001) {
+      return null;
+    }
+
+    const operation = preview.operation;
+    if (operation !== 'roll' && operation !== 'slide') {
+      return null;
+    }
+    if (operation === 'roll' && !edge) {
+      return null;
+    }
+
+    let previewProject = project;
+    try {
+      previewProject = operation === 'roll'
+        ? rollTrimLinkedClip(project, anchorClip.id, edge!, preview.delta)
+        : slideLinkedClip(project, anchorClip.id, preview.delta);
+    } catch {
+      return null;
+    }
+
+    const nextClipById = new Map(previewProject.tracks.flatMap((track) => (
+      track.clips.map((clip) => [clip.id, clip] as const)
+    )));
+    const clips = project.tracks.flatMap((track) => (
+      track.clips.flatMap((clip) => {
+        const nextClip = nextClipById.get(clip.id);
+        if (!nextClip) {
+          return [];
+        }
+
+        const startChanged = Math.abs(nextClip.start - clip.start) > 0.001;
+        const durationChanged = Math.abs(nextClip.duration - clip.duration) > 0.001;
+        const sourceChanged = Math.abs(nextClip.sourceIn - clip.sourceIn) > 0.001;
+        if (!startChanged && !durationChanged && !sourceChanged) {
+          return [];
+        }
+
+        return [{
+          id: clip.id,
+          trackId: track.id,
+          role: clip.id === anchorClip.id ? 'anchor' as const : 'neighbor' as const,
+          start: clip.start,
+          duration: clip.duration,
+          nextStart: nextClip.start,
+          nextDuration: nextClip.duration,
+          sourceIn: clip.sourceIn,
+          nextSourceIn: nextClip.sourceIn,
+          label: clip.name,
+        }];
+      })
+    ));
+
+    if (clips.length <= 1) {
+      return null;
+    }
+
+    return {
+      anchorClipId: anchorClip.id,
+      operation,
+      edge: operation === 'roll' ? edge : undefined,
+      delta: preview.delta,
+      affectedCount: clips.length,
+      clips,
+    };
+  };
+
+  const buildRippleTrimPreview = (
+    anchorClip: TimelineClip,
+    preview: TimelineClipEditPreview | null,
+    edge?: 'start' | 'end',
+  ): TimelineRippleTrimPreview | null => {
+    if (!preview || !preview.ripple || preview.operation !== 'trim' || !edge || preview.delta === undefined || Math.abs(preview.delta) < 0.001) {
+      return null;
+    }
+
+    const delta = preview.delta;
+    const linkedIds = getLinkedClipIds(project, anchorClip.id);
+    const linkedIdSet = new Set(linkedIds);
+    const affectedClips = project.tracks.flatMap((track) => {
+      const sortedClips = [...track.clips].sort((a, b) => a.start - b.start);
+      const linkedClip = sortedClips.find((clip) => linkedIdSet.has(clip.id));
+      if (!linkedClip) {
+        return [];
+      }
+
+      const linkedIndex = sortedClips.findIndex((clip) => clip.id === linkedClip.id);
+      const shift = edge === 'start' ? -delta : delta;
+      const affectedIds = new Set(sortedClips.slice(linkedIndex + 1).map((clip) => clip.id));
+      if (edge === 'start') {
+        affectedIds.add(linkedClip.id);
+      }
+
+      return sortedClips.flatMap((clip) => {
+        if (!affectedIds.has(clip.id)) {
+          return [];
+        }
+
+        const nextStart = roundTime(Math.max(0, clip.start + shift));
+        if (Math.abs(nextStart - clip.start) < 0.001) {
+          return [];
+        }
+
+        return [{
+          id: clip.id,
+          trackId: track.id,
+          start: clip.start,
+          nextStart,
+          duration: clip.id === linkedClip.id && edge === 'start' ? preview.duration : clip.duration,
+          label: clip.name,
+        }];
+      });
+    });
+
+    if (affectedClips.length === 0) {
+      return null;
+    }
+
+    return {
+      anchorClipId: anchorClip.id,
+      operation: 'ripple-trim',
+      edge,
+      delta,
+      affectedCount: affectedClips.length,
+      clips: affectedClips,
+    };
+  };
 
   const resolveTrackIdsInDragRange = (startClientY: number, endClientY: number): string[] => (
     resolveTimelineTrackIdsInDragRange(readCurrentTimelineLaneBounds(), startClientY, endClientY)
@@ -7250,6 +8271,10 @@ export default function EditorPage() {
       });
       setClipDragTargetTrackId(pointerPlan.targetTrackId);
       setClipDragPreview(pointerPlan.clipDragPreview ?? null);
+      setGroupMovePreview(null);
+      setGroupTrimPreview(null);
+      setNeighborImpactPreview(null);
+      setRippleTrimPreview(null);
       showTimelineEditGuide(pointerPlan.editGuide ?? null);
       return;
     }
@@ -7274,6 +8299,10 @@ export default function EditorPage() {
       laneBounds: readCurrentTimelineLaneBounds(),
     });
     setClipDragPreview(previewState.dropPreview);
+    setGroupMovePreview(buildGroupMovePreview(anchorClip, previewState.moveEdit));
+    setGroupTrimPreview(null);
+    setNeighborImpactPreview(null);
+    setRippleTrimPreview(null);
     showTimelineEditGuide(previewState.editGuide);
   };
 
@@ -7282,6 +8311,19 @@ export default function EditorPage() {
     preview: TimelineClipEditPreview | null,
     edge?: 'start' | 'end',
   ) => {
+    const trimEdit = preview?.operation === 'trim' && edge && preview.delta !== undefined
+      ? resolveTimelineClipTrimEdit({
+        ...buildTimelinePreviewOptions(),
+        rippleMode,
+        clip,
+        edge,
+        deltaSeconds: preview.delta,
+      })
+      : null;
+    setGroupMovePreview(null);
+    setGroupTrimPreview(trimEdit ? buildGroupTrimPreview(clip, trimEdit) : null);
+    setNeighborImpactPreview(buildNeighborImpactPreview(clip, preview, edge));
+    setRippleTrimPreview(buildRippleTrimPreview(clip, preview, edge));
     showTimelineEditGuide(buildTimelineClipEditGuide(clip, preview, edge));
   };
 
@@ -7304,6 +8346,31 @@ export default function EditorPage() {
     edge: 'start' | 'end',
     deltaSeconds: number,
   ) => {
+    const trimEdit = resolveTimelineClipTrimEdit({
+      ...buildTimelinePreviewOptions(),
+      rippleMode,
+      clip,
+      edge,
+      deltaSeconds,
+    });
+
+    if (!rippleMode && trimEdit.group.length > 1 && trimEdit.updates.length > 1) {
+      const committed = commitProject('Selected clip edges trimmed', (current) => (
+        trimEdit.updates.reduce((nextProject, update) => (
+          trimLinkedClipToTime(nextProject, update.clipId, edge, update.appliedTimelineTime, { ripple: false, preventOverlap: false })
+        ), current)
+      ));
+      if (committed) {
+        const anchorUpdate = trimEdit.updates.find((update) => update.clipId === clip.id);
+        setSelectedClipId(clip.id);
+        setSelectedClipIds(trimEdit.group.map((item) => item.id));
+        setSelectedTrackId(clip.trackId);
+        setActiveMonitor('program');
+        setTimelinePlayhead(anchorUpdate?.appliedTimelineTime ?? (edge === 'start' ? trimEdit.preview.start : roundTime(trimEdit.preview.start + trimEdit.preview.duration)));
+      }
+      return;
+    }
+
     const plan = resolveTimelineClipTrimDragCommitPlan({
       project,
       clip,
@@ -7313,10 +8380,25 @@ export default function EditorPage() {
       snapEnabled,
       snapExtraPoints: timelineEditSnapPoints,
     });
-    const committed = commitProject(plan.commitLabel, (current) => (
-      trimLinkedClipToTime(current, plan.clipId, plan.edge, plan.nextTimelineTime, plan.trimOptions)
-    ));
+    const committed = commitProject(plan.commitLabel, (current) => {
+      if (linkedClipEditsEnabled) {
+        return trimLinkedClipToTime(current, plan.clipId, plan.edge, plan.nextTimelineTime, plan.trimOptions);
+      }
+
+      const currentClip = findClip(current, plan.clipId);
+      if (!currentClip) {
+        throw new Error('Clip not found.');
+      }
+      const separateTimelineTime = trimEdit.updates.find((update) => update.clipId === plan.clipId)?.appliedTimelineTime ?? plan.nextTimelineTime;
+      const delta = plan.edge === 'start'
+        ? separateTimelineTime - currentClip.start
+        : separateTimelineTime - (currentClip.start + currentClip.duration);
+      return trimClip(current, plan.clipId, plan.edge, delta);
+    });
     if (committed) {
+      setPrimarySelection(plan.clipId);
+      setSelectedTrackId(clip.trackId);
+      setActiveMonitor('program');
       setTimelinePlayhead(plan.nextTimelineTime);
     }
   };
@@ -7372,9 +8454,13 @@ export default function EditorPage() {
       },
     );
     if (committed) {
+      setSelectedClipId(plan.anchorClipId);
+      setActiveMonitor('program');
       setTimelinePlayhead(plan.nextPlayhead);
       if (plan.nextSelectedTrackId) {
         setSelectedTrackId(plan.nextSelectedTrackId);
+      } else {
+        setSelectedTrackId(anchorClip.trackId);
       }
     }
   };
@@ -8855,7 +9941,7 @@ export default function EditorPage() {
         escape: handleEscape,
         deleteSelected: handleDeleteSelected,
         deleteSide: handleDeleteSide,
-        trimToPlayhead: handleTrimToPlayhead,
+        trimToPlayhead: (edge) => handleTrimToPlayhead(edge, timelinePlayheadEditTargetClip, true),
         setStatus,
         moveSelected: handleMoveSelected,
         slideSelected: handleSlideSelected,
@@ -8895,9 +9981,12 @@ export default function EditorPage() {
 
   return (
     <main
-      className="min-h-screen bg-zinc-950 text-zinc-100"
+      className="min-h-screen bg-paper text-ink"
       data-hydrated={editorHydrated ? 'true' : 'false'}
       data-testid="editor-shell"
+      data-active-primary-mode={activePrimaryModeId ?? 'custom'}
+      data-active-asset-panel={activeAssetPanel}
+      data-active-dock-panel={activeDockPanel}
     >
       <CommandPalette
         open={commandPaletteOpen}
@@ -8921,9 +10010,14 @@ export default function EditorPage() {
         canUndo={history.length > 0}
         canRedo={future.length > 0}
         canPackSelection={selectedClips.length >= 2}
+        canSplitAtPlayhead={selectedClipIds.length > 0 || Boolean(activeTimelineClip)}
+        canTrimSelectionToPlayhead={Boolean(selectedClip)}
         selectedClipCount={selectedClipIds.length}
         clipboardClipCount={clipboardClips.length}
         hasAttributeClipboard={Boolean(attributeClipboard)}
+        hasInMark={markIn !== null}
+        hasOutMark={markOut !== null}
+        hasMarkedRange={Boolean(markedRange)}
         historyCount={history.length}
         futureCount={future.length}
         saveStateLabel={projectSaveStateLabel}
@@ -8994,14 +10088,135 @@ export default function EditorPage() {
         onQueueSttCaptions={() => void handleQueueSttCaptions()}
       />
 
-      <section className="grid min-h-[calc(100vh-4rem)] grid-cols-1 xl:grid-cols-[240px_minmax(0,1fr)] 2xl:grid-cols-[280px_minmax(0,1fr)_340px]">
-        <aside className="border-b border-zinc-800 bg-zinc-950 p-4 xl:border-b-0 xl:border-r">
-          <ProjectOverviewPanel
-            name={project.name}
-            fps={project.fps}
-            width={project.width}
-            clipCount={allClips.length}
-          />
+      <section
+        data-testid="editor-workspace-layout"
+        data-layout-density="commercial-compact"
+        data-asset-column-width="420"
+        data-inspector-column-width="300"
+        data-timeline-row-height={timelinePanelHeight}
+        data-resizable-layout="true"
+        style={{ '--timeline-row-height': `${timelinePanelHeight}px` } as CSSProperties}
+        // Column ladder: the side panels give way to the monitor as the window
+        // narrows, rather than the whole workspace collapsing into one column.
+        className="grid min-h-[calc(100vh-3.25rem)] grid-cols-1 bg-paper p-2 ed:h-[calc(100vh-3.25rem)] ed:grid-cols-[52px_360px_minmax(0,1fr)_270px] ed:grid-rows-[minmax(0,1fr)_var(--timeline-row-height)] ed:gap-2 ed:overflow-hidden xl:grid-cols-[52px_420px_minmax(0,1fr)_300px] 2xl:grid-cols-[52px_520px_minmax(0,1fr)_340px]"
+      >
+        <nav data-testid="editor-primary-modes" className="flex min-w-0 items-stretch gap-1 overflow-x-auto bg-surface px-2 py-2 ed:col-start-1 ed:row-span-2 ed:flex-col ed:items-center ed:overflow-y-auto ed:overflow-x-hidden ed:rounded-sm ed:px-1" aria-label={editorText.chrome.assetPanels}>
+          {EDITOR_PRIMARY_MODES.map((mode) => {
+            const displayMode = readEditorPrimaryModeDisplay(mode.id, menuLanguage);
+            const displayAssetPanel = readEditorAssetPanelDisplay(mode.assetPanel, menuLanguage);
+            const displayDockPanel = readEditorDockPanel(mode.dockPanel, menuLanguage);
+
+            return (
+            <button
+              key={mode.id}
+              type="button"
+              data-testid={`editor-primary-mode-${mode.id}`}
+              data-mode-asset-panel={mode.assetPanel}
+              data-mode-dock-panel={mode.dockPanel}
+              title={`${displayMode.label}: ${displayAssetPanel.label} / ${displayDockPanel.label}`}
+              aria-pressed={activePrimaryModeId === mode.id}
+              onClick={() => handlePrimaryModeSelect(mode)}
+              // The rail is icon-only at desktop width, as the prototype has it:
+              // a 34px square per mode, name in the tooltip. Below xl it lays
+              // out as a horizontal strip and can afford the label.
+              className={`flex h-12 w-[78px] shrink-0 flex-col items-center justify-center gap-1 rounded-md px-1 text-meta font-semibold transition ed:h-[34px] ed:w-[34px] ed:gap-0 ed:px-0 ${
+                activePrimaryModeId === mode.id
+                  ? 'bg-accent text-white'
+                  : 'text-ds-700 hover:bg-ds-200 hover:text-ink'
+              }`}
+            >
+              <span className={`grid h-5 min-w-5 place-items-center rounded px-1 text-micro leading-none ed:h-auto ed:min-w-0 ed:bg-transparent ed:px-0 ed:text-xs ${
+                activePrimaryModeId === mode.id ? 'bg-white/20 text-white' : 'bg-ds-200 text-ds-700 ed:bg-transparent ed:text-inherit'
+              }`}>
+                {mode.shortLabel}
+              </span>
+              <span className="max-w-full truncate ed:hidden">{displayMode.label}</span>
+            </button>
+            );
+          })}
+
+          {/* The asset panels used to be a second 96px icon column inside the
+              bay, sitting right beside this one and doing the same kind of job.
+              They live here now, under a hairline, so the left edge carries one
+              navigation instead of two — and the bay gets that width back. */}
+          <div className="hidden shrink-0 self-stretch border-t border-ds-300 ed:block ed:my-1 ed:w-6" aria-hidden="true" />
+          <div className="ml-1 hidden w-px shrink-0 self-stretch bg-ds-300 ed:hidden" aria-hidden="true" />
+
+          {EDITOR_ASSET_PANELS.map((panel) => {
+            const displayPanel = readEditorAssetPanelDisplay(panel.id, menuLanguage);
+
+            return (
+              <button
+                key={panel.id}
+                type="button"
+                data-testid={`editor-asset-panel-${panel.id}`}
+                title={displayPanel.label}
+                aria-pressed={activeAssetPanel === panel.id}
+                onClick={() => setActiveAssetPanel(panel.id)}
+                className={`flex h-12 w-[78px] shrink-0 flex-col items-center justify-center gap-1 rounded-md px-1 text-meta font-semibold transition ed:h-[34px] ed:w-[34px] ed:gap-0 ed:px-0 ${
+                  activeAssetPanel === panel.id
+                    ? 'bg-accent2 text-white'
+                    : 'text-ds-700 hover:bg-ds-200 hover:text-ink'
+                }`}
+              >
+                <span className="text-micro leading-none ed:text-xs">{panel.shortLabel}</span>
+                <span className="max-w-full truncate ed:hidden">{displayPanel.label}</span>
+              </button>
+            );
+          })}
+
+          {/* Broadsheet ships two grounds; the rail carries the switch, as in
+              the prototype. The monitors stay dark either way. */}
+          <button
+            type="button"
+            data-testid="editor-theme-toggle"
+            aria-pressed={theme === 'light'}
+            title={theme === 'light' ? editorText.chrome.themeToDark : editorText.chrome.themeToLight}
+            onClick={toggleTheme}
+            className="flex h-9 w-[78px] shrink-0 items-center justify-center gap-1 rounded-md text-meta font-semibold text-ds-700 transition hover:bg-ds-200 hover:text-ink ed:mt-auto ed:h-[30px] ed:w-[30px]"
+          >
+            <span aria-hidden="true">{theme === 'light' ? '☾' : '☀'}</span>
+            <span className="max-w-full truncate ed:hidden">{theme === 'light' ? editorText.chrome.themeLight : editorText.chrome.themeDark}</span>
+          </button>
+        </nav>
+
+        <aside
+          data-testid="editor-asset-bay"
+          data-panel-density="compact"
+          className="flex max-h-[70vh] min-h-0 flex-col overflow-hidden bg-surface ed:max-h-none ed:col-start-2 ed:row-start-1 ed:h-full ed:rounded-sm"
+        >
+          {/* One line, not three: the bay names itself and the active panel on
+              the same baseline. Broadsheet gives the 19px display size to the
+              inspector, which names the selected clip — the bay only needs its
+              kicker, and the height goes to the list instead. */}
+          <div className="px-3 pb-2 pt-2">
+            <div className="flex items-baseline justify-between gap-2">
+              <div className="flex min-w-0 items-baseline gap-2">
+                <p className="shrink-0 text-micro font-semibold uppercase tracking-[0.1em] text-accent-700">{editorText.chrome.assetBay}</p>
+                <h1 className="truncate font-heading text-sm font-semibold leading-tight text-ink">
+                  {readEditorAssetPanelDisplay(activeAssetPanel, menuLanguage).label}
+                </h1>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleImportMediaRequest()}
+                className="rounded border border-ds-300 px-2 py-1 text-xs font-medium text-ds-800 hover:border-ds-500 hover:bg-surface"
+              >
+                {editorText.chrome.import}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex min-h-0 flex-1">
+
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            <div className={activeAssetPanel === 'project' ? 'space-y-4' : 'hidden'}>
+            <ProjectOverviewPanel
+              name={project.name}
+              fps={project.fps}
+              width={project.width}
+              clipCount={allClips.length}
+            />
 
           <ProjectSettingsPanel
             project={project}
@@ -9009,10 +10224,6 @@ export default function EditorPage() {
           />
 
           <EditorApiTokenPanel />
-
-          <CreatorTemplatesPanel
-            onApplyTemplate={handleApplyCreatorTemplate}
-          />
 
           <SavedProjectsPanel
             projects={savedProjects}
@@ -9049,7 +10260,15 @@ export default function EditorPage() {
             onRestoreLocalFallback={handleRestoreLocalProjectFallback}
             onRestorePackageImport={handleRestoreImportedProjectPackage}
           />
+            </div>
 
+            <div className={activeAssetPanel === 'templates' ? 'space-y-4' : 'hidden'}>
+              <CreatorTemplatesPanel
+                onApplyTemplate={handleApplyCreatorTemplate}
+              />
+            </div>
+
+            <div className={activeAssetPanel === 'health' ? 'space-y-4' : 'hidden'}>
           <MediaHealthPanel
             report={mediaHealth}
             assetById={assetById}
@@ -9057,7 +10276,9 @@ export default function EditorPage() {
             onRelinkAsset={handleRelinkAsset}
             onCacheAsset={(asset) => void handleRebuildMediaCache(asset)}
           />
+            </div>
 
+            <div className={activeAssetPanel === 'media' ? 'space-y-4' : 'hidden'}>
           <MediaBinPanel
             assets={filteredMediaAssets}
             totalAssetCount={project.assets.length}
@@ -9074,6 +10295,7 @@ export default function EditorPage() {
             mediaCachePlan={filteredMediaCachePlan}
             bulkRelinkCandidateCount={bulkRelinkCandidateCount}
             selectedAssetId={selectedSourceAsset?.id}
+            draggingAssetId={draggingAssetId ?? undefined}
             assetReferenceCounts={assetReferenceCounts}
             healthByAssetId={mediaHealthByAssetId}
             cacheJobsByAssetId={cacheJobsByAssetId}
@@ -9102,9 +10324,11 @@ export default function EditorPage() {
             onSortKeyChange={setMediaSortKey}
             onAssetDragStart={handleAssetDragStart}
             onAssetDragEnd={() => {
+              setDraggingAssetId(null);
               setAssetDropPreview(null);
               showTimelineEditGuide(null);
             }}
+            onAssetPointerDragStart={handleAssetPointerDragStart}
             onSelectSourceAsset={handleSelectSourceAsset}
             onRebuildMediaCache={handleRebuildMediaCache}
             onRelinkAsset={handleRelinkAsset}
@@ -9154,38 +10378,126 @@ export default function EditorPage() {
               />
             ) : null}
           />
+            </div>
+          </div>
+          </div>
         </aside>
 
-        <section className="flex min-w-0 flex-col bg-zinc-950">
-          <div className="grid min-h-[360px] grid-cols-1 gap-4 border-b border-zinc-800 p-4 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_220px]">
-            <SourceMonitor
-              asset={selectedSourceAsset}
-              range={selectedSourceRange}
-              playhead={sourcePlayhead}
-              playbackRate={sourcePlaybackRate}
-              loopPlaybackEnabled={sourceLoopPlaybackEnabled}
-              audioPeaksByAssetId={audioPeaksByAssetId}
-              fps={project.fps}
-              active={activeMonitor === 'source'}
-              onActivate={() => setActiveMonitor('source')}
-              onPlayheadChange={setSourceMonitorPlayhead}
-              onPlaybackRateChange={(rate) => {
-                const playbackState = resolveSourceMonitorPlaybackRateState(rate);
-                setActiveMonitor(playbackState.activeMonitor);
-                setSourcePlaybackRate(playbackState.sourcePlaybackRate);
-              }}
-              onToggleLoopPlayback={handleToggleLoopPlayback}
-              onGoToStart={() => handleGoToSourceBoundary('start')}
-              onGoToEnd={() => handleGoToSourceBoundary('end')}
-              onSetIn={() => handleSetSourceMark('in')}
-              onSetOut={() => handleSetSourceMark('out')}
-              onGoToIn={() => handleGoToSourceMark('in')}
-              onGoToOut={() => handleGoToSourceMark('out')}
-              onClearMarks={handleClearSourceMarks}
-              onRangeHandleDrag={handleSourceRangeHandleDrag}
-              onInsert={() => handleThreePointAssetEdit('insert', selectedSourceAsset?.id)}
-              onOverwrite={() => handleThreePointAssetEdit('overwrite', selectedSourceAsset?.id)}
-            />
+        <section
+          className="flex max-h-[70vh] min-h-0 min-w-0 flex-col overflow-hidden bg-surface ed:max-h-none ed:col-start-3 ed:row-start-1 ed:h-full ed:rounded-sm"
+          data-testid="editor-monitor-workspace"
+          data-active-monitor={activeMonitor}
+          data-source-monitor-visible={sourceMonitorVisible ? 'true' : 'false'}
+          data-scene-readout-visible={sceneReadoutVisible ? 'true' : 'false'}
+        >
+          <div className="px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ds-700">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold uppercase tracking-wide text-ds-600">{editorText.chrome.editWorkspace}</span>
+                <span className="rounded border border-ds-200 px-2 py-0.5 text-ds-700">
+                  {readEditorPrimaryModeDisplay(activePrimaryModeId, menuLanguage).label}
+                </span>
+                <div
+                  role="group"
+                  aria-label={editorText.chrome.activeMonitor}
+                  data-testid="editor-monitor-switcher"
+                  className="flex shrink-0 rounded border border-ds-200 bg-paper"
+                >
+                  <button
+                    type="button"
+                    data-testid="editor-monitor-switch-program"
+                    aria-pressed={activeMonitor === 'program'}
+                    onClick={handleActivateProgramMonitor}
+                    className={`px-2.5 py-1 text-meta font-medium ${
+                      activeMonitor === 'program'
+                        ? 'bg-accent-500/15 text-accent-900'
+                        : 'text-ds-600 hover:bg-surface hover:text-ds-800'
+                    }`}
+                  >
+                    {editorText.chrome.program}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="editor-monitor-switch-source"
+                    aria-pressed={activeMonitor === 'source'}
+                    onClick={handleActivateSourceMonitor}
+                    className={`border-l border-ds-200 px-2.5 py-1 text-meta font-medium ${
+                      activeMonitor === 'source'
+                        ? 'bg-accent-500/15 text-accent-900'
+                        : 'text-ds-600 hover:bg-surface hover:text-ds-800'
+                    }`}
+                  >
+                    {editorText.chrome.source}
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  data-testid="editor-source-monitor-toggle"
+                  aria-pressed={sourceMonitorVisible}
+                  onClick={handleToggleSourceMonitorPanel}
+                  className={`rounded border px-2 py-1 text-meta font-medium ${
+                    sourceMonitorVisible
+                      ? 'border-info-500/60 bg-info-500/10 text-info-900'
+                      : 'border-ds-200 text-ds-700 hover:border-ds-400 hover:text-ink'
+                  }`}
+                >
+                  {sourceMonitorVisible ? editorText.chrome.hideSource : editorText.chrome.showSource}
+                </button>
+                <button
+                  type="button"
+                  data-testid="editor-scene-readout-toggle"
+                  aria-pressed={sceneReadoutVisible}
+                  onClick={() => setSceneReadoutVisible((current) => !current)}
+                  className={`rounded border px-2 py-1 text-meta font-medium ${
+                    sceneReadoutVisible
+                      ? 'border-accent-500/60 bg-accent-500/10 text-accent-900'
+                      : 'border-ds-200 text-ds-700 hover:border-ds-400 hover:text-ink'
+                  }`}
+                >
+                  {editorText.chrome.info}
+                </button>
+              </div>
+              <span className="tabular-nums text-ds-700">{formatTimecode(playhead, project.fps)}</span>
+            </div>
+          </div>
+          <div className={`grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-auto border-b border-ds-200 p-3 ${editorMonitorGridClass}`}>
+            {sourceMonitorVisible ? (
+              <SourceMonitor
+                asset={selectedSourceAsset}
+                range={selectedSourceRange}
+                playhead={sourcePlayhead}
+                playbackRate={sourcePlaybackRate}
+                loopPlaybackEnabled={sourceLoopPlaybackEnabled}
+                audioPeaksByAssetId={audioPeaksByAssetId}
+                fps={project.fps}
+                active={activeMonitor === 'source'}
+                onActivate={() => setActiveMonitor('source')}
+                onPlayheadChange={setSourceMonitorPlayhead}
+                onPlaybackRateChange={(rate) => {
+                  const playbackState = resolveSourceMonitorPlaybackRateState(rate);
+                  setActiveMonitor(playbackState.activeMonitor);
+                  setSourcePlaybackRate(playbackState.sourcePlaybackRate);
+                }}
+                onToggleLoopPlayback={handleToggleLoopPlayback}
+                onGoToStart={() => handleGoToSourceBoundary('start')}
+                onGoToEnd={() => handleGoToSourceBoundary('end')}
+                onSetIn={() => handleSetSourceMark('in')}
+                onSetOut={() => handleSetSourceMark('out')}
+                onGoToIn={() => handleGoToSourceMark('in')}
+                onGoToOut={() => handleGoToSourceMark('out')}
+                onClearMarks={handleClearSourceMarks}
+                onRangeHandleDrag={handleSourceRangeHandleDrag}
+                onInsert={() => handleThreePointAssetEdit('insert', selectedSourceAsset?.id)}
+                onOverwrite={() => handleThreePointAssetEdit('overwrite', selectedSourceAsset?.id)}
+                compact
+                onClose={() => {
+                  setSourceMonitorPinned(false);
+                  setActiveMonitor('program');
+                }}
+              />
+            ) : null}
             <PreviewStage
               stack={programPreviewStack}
               audioMeter={programAudioMeter}
@@ -9193,6 +10505,8 @@ export default function EditorPage() {
               isPlaying={isPlaying}
               playbackRate={timelinePlaybackRate}
               playhead={playhead}
+              duration={project.duration}
+              fps={project.fps}
               active={activeMonitor === 'program'}
               onActivate={() => setActiveMonitor('program')}
               selectedClipId={selectedClipId}
@@ -9201,169 +10515,106 @@ export default function EditorPage() {
               onMotionDragCommit={handleProgramMotionDragCommit}
               onCropDragCommit={handleProgramCropDragCommit}
               onSelectPreviewClip={handleProgramPreviewClipSelect}
+              onTogglePlayback={toggleProgramPlayback}
+              onPlayheadChange={handleProgramMonitorPlayheadChange}
               activeCacheJobAssetIds={activeCacheJobAssetIds}
               cacheJobsByAssetId={cacheJobsByAssetId}
               onQueuePreviewCache={(assetIds) => void handleRebuildPreviewMediaCache(assetIds)}
               onAudioFftSample={handleProgramAudioFftSample}
               onVideoScopeReadout={handleProgramVideoScopeReadout}
+              audioAnalyzerVisible={sceneReadoutVisible}
             />
-            <SceneReadoutPanel
-              className="lg:col-span-2 xl:col-span-1"
-              stack={programPreviewStack}
-              audioMeter={programAudioMeter}
-              audioAnalysis={programAudioAnalysisWithFft}
-              videoScopeReadout={programVideoScopeReadout}
-              selectedClip={selectedClip}
-              selectedClipCount={selectedClipIds.length}
-              activeMonitor={activeMonitor}
-              sourcePlaybackRate={sourcePlaybackRate}
-              timelinePlaybackRate={timelinePlaybackRate}
-            />
-          </div>
-
-          <div className="min-h-[420px] flex-1 overflow-auto p-4">
-            <TimelineTransportRulerPanel
-              scrollRef={timelineScrollRef}
-              titleText={titleTextDraft}
-              duration={project.duration}
-              fps={project.fps}
-              playhead={playhead}
-              playbackRate={timelinePlaybackRate}
-              pixelsPerSecond={pixelsPerSecond}
-              timelineWidth={timelineWidth}
-              markIn={markIn}
-              markOut={markOut}
-              markedRange={markedRange}
-              loopPlaybackEnabled={loopPlaybackEnabled}
-              gapInsertDuration={gapInsertDuration}
-              visualGapCount={visualTimelineGaps.length}
-              markers={project.markers}
-              markerTimePreview={markerTimePreview}
-              onTitleTextChange={setTitleTextDraft}
-              onAddTitle={handleAddTitleAtPlayhead}
-              onAddAdjustmentLayer={handleAddAdjustmentLayerAtPlayhead}
-              onAddVideoTrack={() => commitProject('Video track added', (current) => addTrack(current, 'video'))}
-              onAddAudioTrack={() => commitProject('Audio track added', (current) => addTrack(current, 'audio'))}
-              onGenerateCaptions={() => commitProject('Caption draft generated', (current) => generateCaptionDraft(current))}
-              onSaveProject={handleSaveProject}
-              onLoadProject={handleLoadProject}
-              onTogglePlayback={toggleProgramPlayback}
-              onNudgePlayhead={handleNudgePlayhead}
-              onPlayheadChange={setTimelinePlayhead}
-              onClearMarks={handleClearMarks}
-              onPixelsPerSecondChange={setPixelsPerSecond}
-              onFitTimelineZoom={handleFitTimelineZoom}
-              onGapInsertDurationChange={(nextValue) => setGapInsertDuration(clampNumber(nextValue, 0.1, Math.max(0.1, project.duration)))}
-              onInsertGap={handleInsertGapAtPlayhead}
-              onFillAiBrollGaps={handleFillAiBrollGaps}
-              onRulerPointerDown={handleTimelineRulerPointerDown}
-              onMarkerPointerDown={handleTimelineMarkerPointerDown}
-              onViewportChange={handleTimelineViewportChange}
-            >
-              {project.tracks.map((track, trackIndex) => (
-                <TimelineTrackRow
-                  key={track.id}
-                  track={track}
-                  trackIndex={trackIndex}
-                  trackCount={project.tracks.length}
-                  selected={track.id === selectedTrackId}
-                  pixelsPerSecond={pixelsPerSecond}
-                  playhead={playhead}
-                  fps={project.fps}
-                  markedRange={markedRange}
-                  timelineEditGuide={timelineEditGuide}
-                  boxSelection={boxSelection}
-                  clipDragPreview={clipDragPreview}
-                  assetDropPreview={assetDropPreview}
-                  clipDragTargetTrackId={clipDragTargetTrackId}
-                  sourcePrimaryPatchEnabled={sourcePrimaryPatchEnabled}
-                  sourceAudioPatchEnabled={sourceAudioPatchEnabled}
-                  activeSourcePrimaryPatchTrackId={activeSourcePrimaryPatchTrackId}
-                  activeSourceAudioPatchTrackId={activeSourceAudioPatchTrackId}
-                  onTrackSelect={handleTrackSelect}
-                  onTrackRename={handleTrackRename}
-                  onMoveTrack={handleMoveTrack}
-                  onRemoveTrack={handleRemoveTrack}
-                  onSetPrimaryPatchTrack={(trackId) => applyTrackSelectionPlan(resolveSourcePatchTrackSelectionPlan({
-                    trackId,
-                    targetKind: 'primary',
-                  }))}
-                  onSetAudioPatchTrack={(trackId) => applyTrackSelectionPlan(resolveSourcePatchTrackSelectionPlan({
-                    trackId,
-                    targetKind: 'audio',
-                  }))}
-                  onTrackToggle={handleTrackToggle}
-                  onTrackMixerChange={handleTrackMixerChange}
-                  onLaneRef={(trackId, node) => {
-                    timelineLaneRefs.current[trackId] = node;
-                  }}
-                  onLanePointerDown={handleLanePointerDown}
-                  onLaneDragOver={handleTimelineDragOver}
-                  onLaneDrop={handleTimelineDrop}
-                  onLaneDragLeave={(event, rowTrack) => {
-                    const nextTarget = event.relatedTarget as Node | null;
-                    if (!nextTarget || !event.currentTarget.contains(nextTarget)) {
-                      setAssetDropPreview((current) => (current?.trackId === rowTrack.id ? null : current));
-                      setTimelineEditGuide((current) => (current?.trackId === rowTrack.id ? null : current));
-                    }
-                  }}
-                >
-                  <TimelineClipList
-                    track={track}
-                    tracks={project.tracks}
-                    assetById={assetById}
-                    audioPeaksByAssetId={audioPeaksByAssetId}
-                    selectedClipIds={selectedClipIds}
-                    visibleTimeRange={timelineClipRenderWindow}
-                    pixelsPerSecond={pixelsPerSecond}
-                    getScrollLeft={() => timelineScrollRef.current?.scrollLeft ?? 0}
-                    isTrackPlayable={isTrackPlayable}
-                    onSelectClip={(event, clip) => handleTimelineClipSelect(clip, event)}
-                    onContextMenuClip={(event, clip) => {
-                      if (!selectedClipIds.includes(clip.id)) {
-                        selectClip(clip, false);
-                      }
-                      setContextMenu({ x: event.clientX, y: event.clientY, clipId: clip.id });
-                    }}
-                    onMoveClip={handleMoveClipGroup}
-                    onMoveClipDrop={handleMoveClipGroup}
-                    onDragPointer={handleClipDragPointer}
-                    onDragPreview={handleClipDragPreview}
-                    onTrimPointer={(clientX) => {
-                      if (clientX !== null) {
-                        applyTimelineEdgeAutoScroll(clientX);
-                      } else {
-                        showTimelineEditGuide(null);
-                      }
-                    }}
-                    onPreviewMove={(clip, nextStart) => resolveClipMoveEdit(clip, nextStart).preview}
-                    onPreviewTrim={resolveClipTrimPreview}
-                    onPreviewRollTrim={resolveClipRollTrimPreview}
-                    onPreviewSlip={resolveClipSlipPreview}
-                    onPreviewSlide={resolveClipSlidePreview}
-                    onPreviewGuide={handleClipEditPreviewGuide}
-                    onRollTrim={handleTimelineRollTrimDrag}
-                    onSlip={handleTimelineSlipDrag}
-                    onSlide={handleTimelineSlideDrag}
-                    onTransitionDuration={handleTimelineTransitionDurationDrag}
-                    onKeyframeTime={handleTimelineKeyframeTimeDrag}
-                    onTrim={handleTimelineClipTrimDrag}
-                  />
-                </TimelineTrackRow>
-              ))}
-            </TimelineTransportRulerPanel>
+            {sceneReadoutVisible ? (
+              <SceneReadoutPanel
+                stack={programPreviewStack}
+                audioMeter={programAudioMeter}
+                audioAnalysis={programAudioAnalysisWithFft}
+                videoScopeReadout={programVideoScopeReadout}
+                selectedClip={selectedClip}
+                selectedClipCount={selectedClipIds.length}
+                activeMonitor={activeMonitor}
+                sourcePlaybackRate={sourcePlaybackRate}
+                timelinePlaybackRate={timelinePlaybackRate}
+              />
+            ) : null}
           </div>
         </section>
 
-        <aside className="border-t border-zinc-800 bg-zinc-950 p-4 xl:col-span-2 2xl:col-span-1 2xl:border-l 2xl:border-t-0">
-          <PanelTitle eyebrow="Inspector" title={selectedClip?.name ?? 'Select a clip'} />
+        <aside
+          data-testid="editor-inspector-panel"
+          data-panel-density="clustered"
+          className="flex max-h-[70vh] min-h-0 flex-col overflow-hidden bg-surface ed:max-h-none ed:col-start-4 ed:row-start-1 ed:h-full ed:rounded-sm"
+        >
+          {/* The EDIT / WORKFLOW chip that used to sit here said the same thing
+              as the group labels directly below it, so it is gone. The clip
+              name holds one line instead of wrapping to two — the full name is
+              in the tooltip. */}
+          <div className="px-3 pb-2 pt-2">
+            <div className="min-w-0">
+              <PanelTitle
+                eyebrow={editorText.chrome.inspector}
+                title={activeDockPanel === 'clip' ? selectedClip?.name ?? editorText.chrome.selectClip : readEditorDockPanel(activeDockPanel, menuLanguage).label}
+                titleClassName="mt-0.5 truncate font-heading text-lg font-semibold leading-tight text-ink"
+              />
+            </div>
+            <div
+              data-testid="inspector-dock-tabs"
+              className="mt-2 space-y-1.5"
+            >
+              <InspectorDockTabList
+                label={editorText.chrome.edit}
+                testId="inspector-edit-dock-tabs"
+                panels={listEditorDockPanels(EDITOR_EDIT_DOCK_PANEL_IDS, menuLanguage)}
+                activeDockPanel={activeDockPanel}
+                onSelect={setActiveDockPanel}
+              />
+              <InspectorDockTabList
+                label={editorText.chrome.workflow}
+                testId="inspector-workflow-dock-tabs"
+                panels={listEditorDockPanels(EDITOR_WORKFLOW_DOCK_PANEL_IDS, menuLanguage)}
+                activeDockPanel={activeDockPanel}
+                onSelect={setActiveDockPanel}
+              />
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
           {selectedClip ? (
-            <div className="mt-4 space-y-4">
+            <>
+            <div className={activeDockPanel === 'clip' ? 'space-y-4' : 'hidden'}>
+              <InspectorMotionPanel
+                motionEffect={selectedMotionEffect}
+                motionTransform={selectedMotionTransform}
+                canApplyMotionPreset={selectedCanApplyMotionPreset}
+                canUseMotion={selectedCanUseMotion}
+                testIdPrefix="inspector-primary-transform"
+                onMotionTransformPatch={handleMotionTransformPatch}
+                onApplyMotionPreset={handleApplyMotionPreset}
+                onResetMotionTransform={handleResetMotionTransform}
+              />
+
+              <InspectorKeyframesPanel
+                clip={selectedClip}
+                fps={project.fps}
+                localTime={selectedClipLocalTime}
+                keyframes={selectedClipKeyframes}
+                keyframeDraft={keyframeDraft}
+                onKeyframeDraftPropertyChange={handleKeyframeDraftPropertyChange}
+                onKeyframeDraftChange={(patch) => setKeyframeDraft((current) => ({ ...current, ...patch }))}
+                onAddKeyframeAtPlayhead={handleAddKeyframeAtPlayhead}
+                onKeyframePatch={handleKeyframePatch}
+                onDeleteKeyframe={handleDeleteKeyframe}
+                formatTimecode={formatTimecode}
+              />
+
               <InspectorCommandPanels
                 fps={project.fps}
                 clipArrangeGap={clipArrangeGap}
                 precisionEditStepFrames={precisionEditStepFrames}
                 selectedClipCount={selectedClips.length}
+                clipboardClipCount={clipboardClips.length}
+                hasAttributeClipboard={Boolean(attributeClipboard)}
+                hasMarkedRange={Boolean(markedRange)}
+                canSplitAtPlayhead={selectedClipIds.length > 0 || Boolean(activeTimelineClip)}
                 selectedCanRelinkAudio={selectedCanRelinkAudio}
                 onSplit={handleSplit}
                 onSplitAll={handleSplitAll}
@@ -9439,33 +10690,33 @@ export default function EditorPage() {
               />
 
               {selectedComfyUIBinding ? (
-                <div className="rounded-md border border-violet-500/30 bg-zinc-900 p-3">
+                <div className="rounded-md border border-accent2-500/30 bg-surface p-3">
                   <div className="flex items-center justify-between gap-2">
-                    <h2 className="text-xs font-semibold uppercase tracking-wide text-violet-200">ComfyUI Binding</h2>
-                    <span className={`rounded px-2 py-0.5 text-[11px] ${
+                    <h2 className="text-kicker font-heading font-semibold uppercase text-accent2-800">{editorText.chrome.comfyBinding}</h2>
+                    <span className={`rounded px-2 py-0.5 text-meta ${
                       selectedComfyUIBinding.status === 'rendered'
-                        ? 'bg-emerald-500/10 text-emerald-200'
-                        : 'bg-violet-500/10 text-violet-100'
+                        ? 'bg-accent-500/10 text-accent-800'
+                        : 'bg-accent2-500/10 text-accent2-900'
                     }`}>
                       {selectedComfyUIBinding.status}
                     </span>
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-3">
-                    <label className="block text-xs text-zinc-500">
-                      Preset
+                    <label className="block text-xs text-ds-600">
+                      {editorText.chrome.comfyPreset}
                       <select
                         value={selectedComfyUIBinding.presetId}
                         disabled={!selectedCanEditComfyUIBinding}
                         onChange={(event) => handleComfyUIPresetChange(event.currentTarget.value)}
-                        className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-sm text-zinc-100 outline-none focus:border-violet-400 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="mt-1 w-full rounded-md border border-ds-200 bg-paper px-2 py-2 text-sm text-ink outline-none focus:border-accent2-600 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {listComfyUIWorkflowPresets(project).map((preset) => (
                           <option key={preset.id} value={preset.id}>{preset.label}</option>
                         ))}
                       </select>
                     </label>
-                    <label className="block text-xs text-zinc-500">
-                      Workflow
+                    <label className="block text-xs text-ds-600">
+                      {editorText.chrome.workflow}
                       <input
                         key={`${selectedClip.id}-${selectedComfyUIBinding.workflowName}-workflow`}
                         defaultValue={selectedComfyUIBinding.workflowName}
@@ -9475,12 +10726,12 @@ export default function EditorPage() {
                             handleComfyUIBindingPatch({ workflowName: event.currentTarget.value, status: 'draft' });
                           }
                         }}
-                        className="mt-1 w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-sm text-zinc-100 outline-none focus:border-violet-400 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="mt-1 w-full rounded-md border border-ds-200 bg-paper px-2 py-2 text-sm text-ink outline-none focus:border-accent2-600 disabled:cursor-not-allowed disabled:opacity-50"
                       />
                     </label>
                   </div>
-                  <label className="mt-3 block text-xs text-zinc-500">
-                    Prompt
+                  <label className="mt-3 block text-xs text-ds-600">
+                    {editorText.chrome.comfyPrompt}
                     <textarea
                       key={`${selectedClip.id}-${selectedComfyUIBinding.prompt}-prompt`}
                       defaultValue={selectedComfyUIBinding.prompt}
@@ -9491,11 +10742,11 @@ export default function EditorPage() {
                           handleComfyUIBindingPatch({ prompt: event.currentTarget.value, status: 'draft' });
                         }
                       }}
-                      className="mt-1 w-full resize-none rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-sm text-zinc-100 outline-none focus:border-violet-400 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="mt-1 w-full resize-none rounded-md border border-ds-200 bg-paper px-2 py-2 text-sm text-ink outline-none focus:border-accent2-600 disabled:cursor-not-allowed disabled:opacity-50"
                     />
                   </label>
-                  <label className="mt-3 block text-xs text-zinc-500">
-                    Negative prompt
+                  <label className="mt-3 block text-xs text-ds-600">
+                    {editorText.chrome.comfyNegativePrompt}
                     <textarea
                       key={`${selectedClip.id}-${selectedComfyUIBinding.negativePrompt}-negative`}
                       defaultValue={selectedComfyUIBinding.negativePrompt}
@@ -9506,12 +10757,12 @@ export default function EditorPage() {
                           handleComfyUIBindingPatch({ negativePrompt: event.currentTarget.value, status: 'draft' });
                         }
                       }}
-                      className="mt-1 w-full resize-none rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-sm text-zinc-100 outline-none focus:border-violet-400 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="mt-1 w-full resize-none rounded-md border border-ds-200 bg-paper px-2 py-2 text-sm text-ink outline-none focus:border-accent2-600 disabled:cursor-not-allowed disabled:opacity-50"
                     />
                   </label>
                   <div className="mt-3 grid grid-cols-2 gap-2 2xl:grid-cols-5">
                     <NumberField
-                      label="Seed"
+                      label={editorText.chrome.comfySeed}
                       value={selectedComfyUIBinding.seed}
                       step={1}
                       min={0}
@@ -9519,7 +10770,7 @@ export default function EditorPage() {
                       onChange={(value) => handleComfyUIBindingPatch({ seed: Math.round(value), status: 'draft' })}
                     />
                     <NumberField
-                      label="Steps"
+                      label={editorText.chrome.comfySteps}
                       value={readWorkflowNumber(selectedComfyUIBinding.parameters.steps, 24)}
                       step={1}
                       min={1}
@@ -9528,7 +10779,7 @@ export default function EditorPage() {
                       onChange={(value) => handleComfyUIBindingPatch({ parameters: { steps: Math.round(value) }, status: 'draft' })}
                     />
                     <NumberField
-                      label="CFG"
+                      label={editorText.chrome.comfyCfg}
                       value={readWorkflowNumber(selectedComfyUIBinding.parameters.cfg, 6)}
                       step={0.1}
                       min={0}
@@ -9537,7 +10788,7 @@ export default function EditorPage() {
                       onChange={(value) => handleComfyUIBindingPatch({ parameters: { cfg: value }, status: 'draft' })}
                     />
                     <NumberField
-                      label="Width"
+                      label={editorText.chrome.comfyWidth}
                       value={readWorkflowNumber(selectedComfyUIBinding.parameters.width, project.width)}
                       step={2}
                       min={64}
@@ -9546,7 +10797,7 @@ export default function EditorPage() {
                       onChange={(value) => handleComfyUIBindingPatch({ parameters: { width: Math.round(value) }, status: 'draft' })}
                     />
                     <NumberField
-                      label="Height"
+                      label={editorText.chrome.comfyHeight}
                       value={readWorkflowNumber(selectedComfyUIBinding.parameters.height, project.height)}
                       step={2}
                       min={64}
@@ -9555,12 +10806,16 @@ export default function EditorPage() {
                       onChange={(value) => handleComfyUIBindingPatch({ parameters: { height: Math.round(value) }, status: 'draft' })}
                     />
                   </div>
-                  <div className="mt-3 rounded border border-zinc-800 bg-zinc-950 p-2 text-[11px] text-zinc-400">
+                  <div className="mt-3 rounded border border-ds-200 bg-paper p-2 text-meta text-ds-700">
                     {selectedComfyUIBinding.preset.description}
                   </div>
                 </div>
               ) : null}
 
+              <InspectorTechnicalPanel clip={selectedClip} />
+            </div>
+
+            <div className={activeDockPanel === 'video' ? 'mt-4 space-y-4' : 'hidden'}>
               <InspectorVisualPanel
                 clip={selectedClip}
                 fps={project.fps}
@@ -9573,7 +10828,9 @@ export default function EditorPage() {
                 onApplyCanvasLayout={handleApplyCanvasLayout}
                 onApplyVisualFade={handleApplyVisualFade}
               />
+            </div>
 
+            <div className={activeDockPanel === 'audio' ? 'mt-4 space-y-4' : 'hidden'}>
               <InspectorAudioPanel
                 clip={selectedClip}
                 fps={project.fps}
@@ -9588,7 +10845,9 @@ export default function EditorPage() {
                 onSyncByWaveform={handleSyncSelectedAudioByWaveform}
                 formatSignedEditDelta={formatSignedEditDelta}
               />
+            </div>
 
+            <div className={activeDockPanel === 'video' ? 'space-y-4' : 'hidden'}>
               <InspectorMotionPanel
                 motionEffect={selectedMotionEffect}
                 motionTransform={selectedMotionTransform}
@@ -9620,7 +10879,9 @@ export default function EditorPage() {
                 onDeleteKeyframe={handleDeleteKeyframe}
                 formatTimecode={formatTimecode}
               />
+            </div>
 
+            <div className={activeDockPanel === 'audio' ? 'space-y-4' : 'hidden'}>
               <InspectorAudioAnalysisPanels
                 clipId={selectedClip.id}
                 fps={project.fps}
@@ -9645,9 +10906,164 @@ export default function EditorPage() {
                 onBeatCut={handleBeatCut}
                 formatTimecode={formatTimecode}
               />
+            </div>
 
+            <div data-testid="inspector-speed-panel" className={activeDockPanel === 'speed' ? 'space-y-4' : 'hidden'}>
+              <InspectorClipMediaPanel
+                clip={selectedClip}
+                asset={selectedClipAsset}
+                mediaHealth={selectedClipAsset ? mediaHealthByAssetId.get(selectedClipAsset.id) : undefined}
+                cacheJob={selectedClipAsset ? cacheJobsByAssetId[selectedClipAsset.id] : undefined}
+                tracks={project.tracks}
+                fps={project.fps}
+                projectHeight={project.height}
+                summary={selectedClipSummary}
+                moveTrackOptions={selectedClipMoveTrackOptions}
+                isTitleClip={selectedIsTitleClip}
+                titleText={selectedTitleText}
+                selectedAnyHasSpeedRamp={selectedAnyHasSpeedRamp}
+                selectedHasSpeedRamp={selectedHasSpeedRamp}
+                selectedSpeedRampPoints={selectedSpeedRampPoints}
+                canApplyFreezeFrame={selectedCanApplyFreezeFrame}
+                canClearFreezeFrame={selectedCanClearFreezeFrame}
+                canDetachAudio={selectedCanDetachAudio}
+                canRelinkAudio={selectedCanRelinkAudio}
+                canUnlinkAudio={selectedCanUnlinkAudio}
+                canLinkAudio={selectedCanLinkAudio}
+                onClipPatch={handleClipPatch}
+                onSelectedClipsPatch={handleSelectedClipsPatch}
+                onMoveSelectedClipsToTrack={handleMoveSelectedClipsToTrack}
+                onTitleTextPatch={handleTitleTextPatch}
+                onTitleStylePatch={handleTitleStylePatch}
+                onInspectorStartChange={handleInspectorStartChange}
+                onInspectorDurationChange={handleInspectorDurationChange}
+                onRetimeSpeedChange={handleRetimeSpeedChange}
+                onApplySpeedRamp={handleApplySpeedRamp}
+                onClearSpeedRamp={handleClearSpeedRamp}
+                onToggleSelectedClipState={handleToggleSelectedClipState}
+                onApplyFreezeFrame={handleApplyFreezeFrame}
+                onClearFreezeFrame={handleClearFreezeFrame}
+                onDetachAudio={handleDetachSelectedAudio}
+                onRelinkAudio={handleRelinkSelectedAudio}
+                onUnlinkAudio={handleUnlinkSelectedAudio}
+                onLinkAudio={handleLinkSelectedAudio}
+                onRebuildMediaCache={handleRebuildMediaCache}
+                onCancelMediaCache={handleCancelMediaCache}
+                onRetryMediaCache={handleRetryMediaCache}
+                onRelinkAsset={handleRelinkAsset}
+                formatTimecode={formatTimecode}
+              />
+            </div>
+
+            <div data-testid="inspector-animation-panel" className={activeDockPanel === 'animation' ? 'space-y-4' : 'hidden'}>
+              <InspectorMotionPanel
+                motionEffect={selectedMotionEffect}
+                motionTransform={selectedMotionTransform}
+                canApplyMotionPreset={selectedCanApplyMotionPreset}
+                canUseMotion={selectedCanUseMotion}
+                testIdPrefix="inspector-animation-transform"
+                onMotionTransformPatch={handleMotionTransformPatch}
+                onApplyMotionPreset={handleApplyMotionPreset}
+                onResetMotionTransform={handleResetMotionTransform}
+              />
+
+              <InspectorKeyframesPanel
+                clip={selectedClip}
+                fps={project.fps}
+                localTime={selectedClipLocalTime}
+                keyframes={selectedClipKeyframes}
+                keyframeDraft={keyframeDraft}
+                onKeyframeDraftPropertyChange={handleKeyframeDraftPropertyChange}
+                onKeyframeDraftChange={(patch) => setKeyframeDraft((current) => ({ ...current, ...patch }))}
+                onAddKeyframeAtPlayhead={handleAddKeyframeAtPlayhead}
+                onKeyframePatch={handleKeyframePatch}
+                onDeleteKeyframe={handleDeleteKeyframe}
+                formatTimecode={formatTimecode}
+              />
+            </div>
+
+            <div data-testid="inspector-tracking-panel" className={activeDockPanel === 'tracking' ? 'space-y-4' : 'hidden'}>
               <InspectorEffectsPanel
                 clip={selectedClip}
+                testIdPrefix="inspector-tracking-effects"
+                canAddColorEffect={selectedCanAddColorEffect}
+                canApplyColorLut={selectedCanApplyColorLut}
+                canAddColorMatch={selectedCanAddColorMatch}
+                canApplyAiEnhancement={selectedCanApplyAiEnhancement}
+                canApplyVisualFilter={selectedCanApplyVisualFilter}
+                canAddAudioGain={selectedCanAddAudioGain}
+                canApplyAudioCleanup={selectedCanApplyAudioCleanup}
+                canApplyStabilize={selectedCanApplyStabilize}
+                canAddCropMask={selectedCanAddCropMask}
+                canAddSmartReframe={selectedCanAddSmartReframe}
+                canTrackSubject={selectedCanTrackSubject}
+                canApplyObjectMask={selectedCanApplyObjectMask}
+                canApplyCropPreset={selectedCanApplyCropPreset}
+                canApplyColorPreset={selectedCanApplyColorPreset}
+                onAddColorEffect={handleAddColorEffect}
+                onRequestLutFile={() => lutFileInputRef.current?.click()}
+                onAddColorMatchEffect={handleAddColorMatchEffect}
+                onApplyAiEnhancementPreset={handleApplyAiEnhancementPreset}
+                onApplyVisualFilterPreset={handleApplyVisualFilterPreset}
+                onAddAudioGainEffect={handleAddAudioGainEffect}
+                onApplyAudioCleanupPreset={handleApplyAudioCleanupPreset}
+                onApplyStabilizePreset={handleApplyStabilizePreset}
+                onAddCropMaskEffect={handleAddCropMaskEffect}
+                onAddSmartReframeEffect={handleAddSmartReframeEffect}
+                onTrackSubjectReframe={handleTrackSubjectReframe}
+                onApplyTrackedObjectMask={handleApplyTrackedObjectMask}
+                onApplyCropPreset={handleApplyCropPreset}
+                onApplyColorPreset={handleApplyColorPreset}
+                onToggleClipEffect={handleToggleClipEffect}
+                onMoveClipEffect={handleMoveClipEffect}
+                onRemoveClipEffect={handleRemoveClipEffect}
+                onEffectParameterChange={handleEffectParameterChange}
+              />
+            </div>
+
+            <div data-testid="inspector-adjust-panel" className={activeDockPanel === 'adjust' ? 'space-y-4' : 'hidden'}>
+              <InspectorEffectsPanel
+                clip={selectedClip}
+                testIdPrefix="inspector-adjust-effects"
+                canAddColorEffect={selectedCanAddColorEffect}
+                canApplyColorLut={selectedCanApplyColorLut}
+                canAddColorMatch={selectedCanAddColorMatch}
+                canApplyAiEnhancement={selectedCanApplyAiEnhancement}
+                canApplyVisualFilter={selectedCanApplyVisualFilter}
+                canAddAudioGain={selectedCanAddAudioGain}
+                canApplyAudioCleanup={selectedCanApplyAudioCleanup}
+                canApplyStabilize={selectedCanApplyStabilize}
+                canAddCropMask={selectedCanAddCropMask}
+                canAddSmartReframe={selectedCanAddSmartReframe}
+                canTrackSubject={selectedCanTrackSubject}
+                canApplyObjectMask={selectedCanApplyObjectMask}
+                canApplyCropPreset={selectedCanApplyCropPreset}
+                canApplyColorPreset={selectedCanApplyColorPreset}
+                onAddColorEffect={handleAddColorEffect}
+                onRequestLutFile={() => lutFileInputRef.current?.click()}
+                onAddColorMatchEffect={handleAddColorMatchEffect}
+                onApplyAiEnhancementPreset={handleApplyAiEnhancementPreset}
+                onApplyVisualFilterPreset={handleApplyVisualFilterPreset}
+                onAddAudioGainEffect={handleAddAudioGainEffect}
+                onApplyAudioCleanupPreset={handleApplyAudioCleanupPreset}
+                onApplyStabilizePreset={handleApplyStabilizePreset}
+                onAddCropMaskEffect={handleAddCropMaskEffect}
+                onAddSmartReframeEffect={handleAddSmartReframeEffect}
+                onTrackSubjectReframe={handleTrackSubjectReframe}
+                onApplyTrackedObjectMask={handleApplyTrackedObjectMask}
+                onApplyCropPreset={handleApplyCropPreset}
+                onApplyColorPreset={handleApplyColorPreset}
+                onToggleClipEffect={handleToggleClipEffect}
+                onMoveClipEffect={handleMoveClipEffect}
+                onRemoveClipEffect={handleRemoveClipEffect}
+                onEffectParameterChange={handleEffectParameterChange}
+              />
+            </div>
+
+            <div className={activeDockPanel === 'effects' ? 'space-y-4' : 'hidden'}>
+              <InspectorEffectsPanel
+                clip={selectedClip}
+                testIdPrefix="inspector-effects"
                 canAddColorEffect={selectedCanAddColorEffect}
                 canApplyColorLut={selectedCanApplyColorLut}
                 canAddColorMatch={selectedCanAddColorMatch}
@@ -9682,10 +11098,16 @@ export default function EditorPage() {
                 onEffectParameterChange={handleEffectParameterChange}
               />
 
-              <InspectorTechnicalPanel clip={selectedClip} />
             </div>
+            </>
+          ) : EDITOR_SELECTED_CLIP_DOCK_PANEL_IDS.includes(activeDockPanel) ? (
+            <InspectorEmptySelectionPanel
+              panelLabel={readEditorDockPanel(activeDockPanel, menuLanguage).label}
+              message={editorText.chrome.emptySelection}
+            />
           ) : null}
 
+          <div className={activeDockPanel === 'text' ? 'space-y-4' : 'hidden'}>
           <MarkerPanel
             markers={project.markers}
             fps={project.fps}
@@ -9735,7 +11157,9 @@ export default function EditorPage() {
           />
 
           <ShortcutsPanel />
+          </div>
 
+          <div className={activeDockPanel === 'jobs' ? 'space-y-4' : 'hidden'}>
           <QueueSettingsPanel
             queueSettings={queueSettings}
             onPatchQueueSettings={(patch) => setQueueSettings((current) => ({ ...current, ...patch }))}
@@ -9749,7 +11173,9 @@ export default function EditorPage() {
             isQueueingComfyUI={isQueueingComfyUI}
             onRunHooks={(event, context, options) => void runEditorHooks(event, project, context, options)}
           />
+          </div>
 
+          <div className={activeDockPanel === 'export' ? 'space-y-4' : 'hidden'}>
           <ExportWorkspacePanel
             renderInputCount={renderPlan.inputs.length}
             exportSettings={{
@@ -9884,7 +11310,9 @@ export default function EditorPage() {
               onResolveDiagnosticAction: handleResolveRenderDiagnosticAction,
             }}
           />
+          </div>
 
+          <div className={activeDockPanel === 'plugins' ? 'space-y-4' : 'hidden'}>
           <PluginsPanel
             project={project}
             selectedClipIds={selectedClips.map((clip) => clip.id)}
@@ -9894,13 +11322,222 @@ export default function EditorPage() {
             onRunExternalCustomCommand={handleRunExternalCustomCommand}
             onSetExporterWriterTrust={handleSetExporterWriterTrust}
           />
+          </div>
+          </div>
         </aside>
+
+        <section
+          data-testid="editor-timeline-panel"
+          data-panel-density="timeline-first"
+          className="flex min-h-[300px] flex-col overflow-hidden bg-surface p-3 ed:col-start-2 ed:col-span-3 ed:row-start-2 ed:min-h-0 ed:rounded-sm"
+        >
+          <div
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label="Resize timeline panel"
+            data-testid="editor-timeline-resize-handle"
+            data-timeline-panel-height={timelinePanelHeight}
+            className="-mx-3 -mt-3 mb-2 h-3 cursor-row-resize border-b border-ds-200 bg-surface/70 hover:bg-info-500/10"
+            onPointerDown={handleTimelinePanelResizePointerDown}
+          />
+          <TimelineTransportRulerPanel
+            scrollRef={timelineScrollRef}
+            titleText={titleTextDraft}
+            duration={project.duration}
+            fps={project.fps}
+            playhead={playhead}
+            playbackRate={timelinePlaybackRate}
+            pixelsPerSecond={pixelsPerSecond}
+            timelineWidth={timelineWidth}
+            markIn={markIn}
+            markOut={markOut}
+            markedRange={markedRange}
+            loopPlaybackEnabled={loopPlaybackEnabled}
+            rippleMode={rippleMode}
+            snapEnabled={snapEnabled}
+            editMode={editMode}
+            showWaveforms={timelineShowWaveforms}
+            showThumbnails={timelineShowThumbnails}
+            trackHeight={timelineTrackHeight}
+            gapInsertDuration={gapInsertDuration}
+            visualGapCount={visualTimelineGaps.length}
+            markers={project.markers}
+            markerTimePreview={markerTimePreview}
+            canUndo={history.length > 0}
+            canRedo={future.length > 0}
+            canSplitAtPlayhead={selectedClipIds.length > 0 || Boolean(activeTimelineClip)}
+            canTrimAtPlayhead={canEditTimelinePlayheadTarget}
+            canDeleteTimelineTarget={canDeleteTimelineToolbarTarget}
+            selectedClipCount={selectedClipIds.length}
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            onOpenCommandPalette={openCommandPalette}
+            onSplit={handleSplit}
+            onSplitAll={handleSplitAll}
+            onTrimIn={() => handleTrimToPlayhead('start', timelinePlayheadEditTargetClip, true)}
+            onTrimOut={() => handleTrimToPlayhead('end', timelinePlayheadEditTargetClip, true)}
+            onDeleteSelection={() => handleDeleteSelected(false, timelinePlayheadEditTargetClip)}
+            onRippleDeleteSelection={() => handleDeleteSelected(true, timelinePlayheadEditTargetClip)}
+            onDuplicateSelection={handleDuplicateSelectedClips}
+            onGroupSelection={handleGroupSelectedClips}
+            onUngroupSelection={handleUngroupSelectedClips}
+            onPreviousEdit={() => handleJumpAdjacentEdit('previous')}
+            onNextEdit={() => handleJumpAdjacentEdit('next')}
+            onRippleModeChange={() => setRippleMode((current) => !current)}
+            onSnapEnabledChange={() => setSnapEnabled((current) => !current)}
+            onToggleLoopPlayback={handleToggleLoopPlayback}
+            onEditModeChange={handleEditModeChange}
+            onTitleTextChange={setTitleTextDraft}
+            onAddTitle={handleAddTitleAtPlayhead}
+            onAddAdjustmentLayer={handleAddAdjustmentLayerAtPlayhead}
+            onAddVideoTrack={() => commitProject('Video track added', (current) => addTrack(current, 'video'))}
+            onAddAudioTrack={() => commitProject('Audio track added', (current) => addTrack(current, 'audio'))}
+            onGenerateCaptions={() => commitProject('Caption draft generated', (current) => generateCaptionDraft(current))}
+            onSaveProject={handleSaveProject}
+            onLoadProject={handleLoadProject}
+            onTogglePlayback={toggleProgramPlayback}
+            onShuttlePlayback={handleShuttlePlayback}
+            onNudgePlayhead={handleNudgePlayhead}
+            onPlayheadChange={setTimelinePlayhead}
+            onSelectLeft={() => handleSelectClipsRelativeToPlayhead('left')}
+            onSelectRight={() => handleSelectClipsRelativeToPlayhead('right')}
+            onSetInMark={() => handleSetMark('in')}
+            onSetOutMark={() => handleSetMark('out')}
+            onMarkSelection={handleMarkSelectedClips}
+            onSelectMarkedRange={() => handleSelectMarkedRange()}
+            onAddMarkerAtPlayhead={handleAddMarkerAtPlayhead}
+            onClearMarks={handleClearMarks}
+            onPixelsPerSecondChange={setPixelsPerSecond}
+            onShowWaveformsChange={setTimelineShowWaveforms}
+            onShowThumbnailsChange={setTimelineShowThumbnails}
+            onTrackHeightChange={(nextHeight) => setTimelineTrackHeight(clampNumber(nextHeight, 56, 128))}
+            onFitTimelineZoom={handleFitTimelineZoom}
+            onGapInsertDurationChange={(nextValue) => setGapInsertDuration(clampNumber(nextValue, 0.1, Math.max(0.1, project.duration)))}
+            onInsertGap={handleInsertGapAtPlayhead}
+            onFillAiBrollGaps={handleFillAiBrollGaps}
+            onRulerPointerDown={handleTimelineRulerPointerDown}
+            onMarkerPointerDown={handleTimelineMarkerPointerDown}
+            onWheelZoom={handleTimelineWheelZoom}
+            onViewportChange={handleTimelineViewportChange}
+            stickyControls={editorSettings.stickyTimelineControls}
+          >
+            {project.tracks.map((track, trackIndex) => (
+              <TimelineTrackRow
+                key={track.id}
+                track={track}
+                trackIndex={trackIndex}
+                trackCount={project.tracks.length}
+                selected={track.id === selectedTrackId}
+                pixelsPerSecond={pixelsPerSecond}
+                trackHeight={timelineTrackHeight}
+                playhead={playhead}
+                fps={project.fps}
+                markedRange={markedRange}
+                timelineEditGuide={timelineEditGuide}
+                boxSelection={boxSelection}
+                clipDragPreview={clipDragPreview}
+                groupMovePreview={groupMovePreview}
+                groupTrimPreview={groupTrimPreview}
+                neighborImpactPreview={neighborImpactPreview}
+                rippleTrimPreview={rippleTrimPreview}
+                assetDropPreview={assetDropPreview}
+                clipDragTargetTrackId={clipDragTargetTrackId}
+                sourcePrimaryPatchEnabled={sourcePrimaryPatchEnabled}
+                sourceAudioPatchEnabled={sourceAudioPatchEnabled}
+                activeSourcePrimaryPatchTrackId={activeSourcePrimaryPatchTrackId}
+                activeSourceAudioPatchTrackId={activeSourceAudioPatchTrackId}
+                onTrackSelect={handleTrackSelect}
+                onTrackRename={handleTrackRename}
+                onMoveTrack={handleMoveTrack}
+                onRemoveTrack={handleRemoveTrack}
+                onSetPrimaryPatchTrack={(trackId) => applyTrackSelectionPlan(resolveSourcePatchTrackSelectionPlan({
+                  trackId,
+                  targetKind: 'primary',
+                }))}
+                onSetAudioPatchTrack={(trackId) => applyTrackSelectionPlan(resolveSourcePatchTrackSelectionPlan({
+                  trackId,
+                  targetKind: 'audio',
+                }))}
+                onTrackToggle={handleTrackToggle}
+                onTrackMixerChange={handleTrackMixerChange}
+                onLaneRef={(trackId, node) => {
+                  timelineLaneRefs.current[trackId] = node;
+                }}
+                onLanePointerDown={handleLanePointerDown}
+                onLaneDragOver={handleTimelineDragOver}
+                onLaneDrop={handleTimelineDrop}
+                onLaneDragLeave={(event, rowTrack) => {
+                  const nextTarget = event.relatedTarget as Node | null;
+                  if (!nextTarget || !event.currentTarget.contains(nextTarget)) {
+                    setAssetDropPreview((current) => (current?.trackId === rowTrack.id ? null : current));
+                    setTimelineEditGuide((current) => (current?.trackId === rowTrack.id ? null : current));
+                  }
+                }}
+              >
+                <TimelineClipList
+                  track={track}
+                  tracks={project.tracks}
+                  assetById={assetById}
+                  audioPeaksByAssetId={audioPeaksByAssetId}
+                  selectedClipIds={selectedClipIds}
+                  visibleTimeRange={timelineClipRenderWindow}
+                  showWaveforms={timelineShowWaveforms}
+                  showThumbnails={timelineShowThumbnails}
+                  trackHeight={timelineTrackHeight}
+                  pixelsPerSecond={pixelsPerSecond}
+                  getScrollLeft={() => timelineScrollRef.current?.scrollLeft ?? 0}
+                  isTrackPlayable={isTrackPlayable}
+                  onSelectClip={(event, clip) => handleTimelineClipSelect(clip, event)}
+                  onContextMenuClip={(event, clip) => {
+                    if (!selectedClipIds.includes(clip.id)) {
+                      selectClip(clip, false);
+                    }
+                    setContextMenu({ x: event.clientX, y: event.clientY, clipId: clip.id });
+                  }}
+                  onMoveClip={handleMoveClipGroup}
+                  onMoveClipDrop={handleMoveClipGroup}
+                  onDragPointer={handleClipDragPointer}
+                  onDragPreview={handleClipDragPreview}
+                  onTrimPointer={(clientX) => {
+                    if (clientX !== null) {
+                      applyTimelineEdgeAutoScroll(clientX);
+                    } else {
+                      showTimelineEditGuide(null);
+                    }
+                  }}
+                  onPreviewMove={(clip, nextStart) => resolveClipMoveEdit(clip, nextStart).preview}
+                  onPreviewTrim={resolveClipTrimPreview}
+                  onPreviewRollTrim={resolveClipRollTrimPreview}
+                  onPreviewSlip={resolveClipSlipPreview}
+                  onPreviewSlide={resolveClipSlidePreview}
+                  onPreviewGuide={handleClipEditPreviewGuide}
+                  onRollTrim={handleTimelineRollTrimDrag}
+                  onSlip={handleTimelineSlipDrag}
+                  onSlide={handleTimelineSlideDrag}
+                  onTransitionDuration={handleTimelineTransitionDurationDrag}
+                  onKeyframeTime={handleTimelineKeyframeTimeDrag}
+                  onVolumeChange={handleTimelineClipVolumeDrag}
+                  onTrim={handleTimelineClipTrimDrag}
+                />
+              </TimelineTrackRow>
+            ))}
+          </TimelineTransportRulerPanel>
+        </section>
       </section>
       {contextMenu ? (
         <TimelineContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
+          anchorClipId={contextMenu.clipId}
+          anchorClipName={allClips.find((clip) => clip.id === contextMenu.clipId)?.name}
           selectionCount={selectedClipIds.length}
+          selectedCaptionCount={selectedCaptionIds.length}
+          clipboardClipCount={clipboardClips.length}
+          hasAttributeClipboard={Boolean(attributeClipboard)}
+          hasInMark={markIn !== null}
+          hasOutMark={markOut !== null}
+          hasMarkedRange={Boolean(markedRange)}
+          canSplitAtPlayhead={selectedClipIds.length > 0 || Boolean(activeTimelineClip)}
           onCopy={() => runContextAction(handleCopySelected)}
           onCopyAttributes={() => runContextAction(handleCopyClipAttributes)}
           onCut={() => runContextAction(handleCutSelected)}
