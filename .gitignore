@@ -73,3 +73,9 @@ third_party/source-mirrors/
 
 # OS
 Thumbs.db
+
+# K8: 비밀·바이너리 추적 차단 (2026-08-08)
+.env
+prisma/prisma/dev.db
+files.zip
+동영상 편집기 프로토타입.zip
