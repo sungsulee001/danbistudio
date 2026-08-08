@@ -1,0 +1,386 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="ko">
+<head>
+  <title>Danbi Studio Editor Interaction Audit</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style type="text/css">
+    :root {
+      color-scheme: dark;
+      --bg: #111111;
+      --panel: #1b1b1b;
+      --panel2: #242424;
+      --line: #333333;
+      --text: #eeeeee;
+      --muted: #aaaaaa;
+      --dim: #777777;
+      --green: #42d392;
+      --amber: #e8b84e;
+      --red: #ff6b6b;
+      --blue: #52a8ff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.55;
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 32px 24px 56px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      line-height: 1.2;
+    }
+
+    h2 {
+      margin: 32px 0 12px;
+      font-size: 20px;
+    }
+
+    p {
+      margin: 8px 0;
+      color: var(--muted);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 24px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+      text-align: left;
+      font-size: 14px;
+    }
+
+    th {
+      background: var(--panel2);
+      color: #ffffff;
+      white-space: nowrap;
+    }
+
+    code {
+      color: #e6edf3;
+      background: #252525;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 1px 4px;
+      font-family: Consolas, Monaco, monospace;
+      font-size: 0.92em;
+    }
+
+    ul {
+      margin: 8px 0 18px;
+      padding-left: 22px;
+      color: var(--muted);
+    }
+
+    li {
+      margin: 5px 0;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 16px 0 24px;
+    }
+
+    .pill {
+      display: inline-block;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 10px;
+      color: var(--muted);
+      background: var(--panel);
+      font-size: 13px;
+    }
+
+    .implemented {
+      color: var(--green);
+      font-weight: 700;
+    }
+
+    .partial {
+      color: var(--amber);
+      font-weight: 700;
+    }
+
+    .missing {
+      color: var(--red);
+      font-weight: 700;
+    }
+
+    .hidden {
+      color: var(--blue);
+      font-weight: 700;
+    }
+
+    .summary {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 8px;
+      padding: 16px;
+      margin: 20px 0;
+    }
+
+    .small {
+      color: var(--dim);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Danbi Studio Editor 상호작용 감사</h1>
+    <p>CapCut, OpenCut, Filmora 계열 편집기 기준으로 기능 존재 여부가 아니라 사용자가 마우스로 직접 조작 가능한지를 평가했다.</p>
+
+    <div class="meta">
+      <span class="pill">Date: 2026-06-19</span>
+      <span class="pill">Scope: Editor interaction audit</span>
+      <span class="pill">No code changes</span>
+      <span class="pill">Browser DOM smoke used</span>
+    </div>
+
+    <div class="summary">
+      <p><strong>핵심 결론:</strong> Timeline 쪽 직접 조작은 상용 편집기 기준에 꽤 가깝다. Program Monitor는 기능은 있으나 조건부 노출이며, 특히 scale/rotate handle은 노출은 되지만 실제 드래그 검증에서 변화가 없어 release UX 관점에서 blocker 후보이다.</p>
+    </div>
+
+    <h2>판정 기준</h2>
+    <ul>
+      <li><span class="implemented">구현됨</span>: 실제 화면에서 마우스로 조작 가능하고 상태 변화가 확인됨.</li>
+      <li><span class="partial">부분 구현</span>: UI 또는 로직은 있으나 조건부 노출, 일부 동작 실패, 또는 상용 편집기 기대치에 미달.</li>
+      <li><span class="missing">미구현</span>: 직접 조작 UI 또는 동작이 없음.</li>
+      <li><span class="hidden">구현됐지만 UI 노출 안 됨</span>: 코드상 구현은 있으나 일반 사용 경로에서 보이지 않음.</li>
+    </ul>
+
+    <h2>상호작용 감사 결과</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>항목</th>
+          <th>판정</th>
+          <th>실제 사용 기준 평가</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1. Program Monitor direct manipulation</td>
+          <td><span class="partial">부분 구현</span></td>
+          <td>위치 이동은 된다. 단, 기본 선택 클립 또는 keyframe 클립에서는 transform overlay가 안 뜬다. keyframe 없는 visual clip 구간에서는 overlay가 노출된다.</td>
+        </tr>
+        <tr>
+          <td>2. Clip edge trim interaction</td>
+          <td><span class="implemented">구현됨</span></td>
+          <td>Timeline clip 좌우 edge drag로 trim 가능하다. Playwright에서 clip width 변경을 확인했다.</td>
+        </tr>
+        <tr>
+          <td>3. Clip move interaction</td>
+          <td><span class="implemented">구현됨</span></td>
+          <td>Clip body drag로 timeline 이동 가능하다. Playwright에서 clip left 값 변경을 확인했다.</td>
+        </tr>
+        <tr>
+          <td>4. Timeline zoom interaction</td>
+          <td><span class="implemented">구현됨</span></td>
+          <td>Timeline <code>Zoom</code> range slider를 마우스로 드래그할 수 있다. <code>12 -&gt; 42</code> 변경을 확인했다.</td>
+        </tr>
+        <tr>
+          <td>5. Timeline scrub interaction</td>
+          <td><span class="implemented">구현됨</span></td>
+          <td>Ruler scrubber를 직접 드래그할 수 있다. <code>0 -&gt; 12.5</code>, <code>35</code> 이동을 확인했다.</td>
+        </tr>
+        <tr>
+          <td>6. Playhead interaction</td>
+          <td><span class="implemented">구현됨</span></td>
+          <td>Playhead range와 ruler scrubber 둘 다 있다.</td>
+        </tr>
+        <tr>
+          <td>7. Multi-select interaction</td>
+          <td><span class="implemented">구현됨</span></td>
+          <td>Lane drag box selection 가능하다. 실제로 1개 선택 상태에서 2개 clip 선택으로 변경되는 것을 확인했다.</td>
+        </tr>
+        <tr>
+          <td>8. Drag/drop interaction</td>
+          <td><span class="implemented">구현됨</span></td>
+          <td>Media Bin asset card는 <code>draggable</code>이고, timeline lane에는 <code>dragOver</code>, <code>drop</code> 구현이 있다.</td>
+        </tr>
+        <tr>
+          <td>9. Transform handles</td>
+          <td><span class="partial">부분 구현</span></td>
+          <td>Keyframe 없는 visual clip에서는 move, scale, rotate, crop handle이 노출된다. 다만 실제 smoke에서 move는 동작했지만 scale/rotate drag는 변화 확인에 실패했다.</td>
+        </tr>
+        <tr>
+          <td>10. Context actions</td>
+          <td><span class="implemented">구현됨</span></td>
+          <td>Timeline clip 우클릭 context menu 노출을 확인했다. Trim, Delete, Group, Audio, Transition 계열 액션이 있다.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>CapCut 기준 세부 평가</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>기준</th>
+          <th>판정</th>
+          <th>확인 내용</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1. 영상 클릭 후 transform handles 존재?</td>
+          <td><span class="partial">부분 구현</span></td>
+          <td>기본 0초 <code>Founder intro</code>는 keyframe 때문에 없다. 35초 <code>Workflow demo</code>는 transform overlay 1개, rotate 1개, scale 4개를 확인했다.</td>
+        </tr>
+        <tr>
+          <td>2. 마우스로 위치 이동 가능?</td>
+          <td><span class="implemented">구현됨</span></td>
+          <td>Program Monitor overlay drag 후 transform translate 변경을 확인했다.</td>
+        </tr>
+        <tr>
+          <td>3. 마우스로 크기 조절 가능?</td>
+          <td><span class="partial">부분 구현</span></td>
+          <td>Scale handle은 노출되지만 Playwright 실제 drag에서 크기 변경 확인에 실패했다.</td>
+        </tr>
+        <tr>
+          <td>4. 회전 핸들 존재?</td>
+          <td><span class="partial">부분 구현</span></td>
+          <td>Rotate handle은 노출된다. 다만 drag 변화 확인에 실패했다.</td>
+        </tr>
+        <tr>
+          <td>5. clip edge drag trim 가능?</td>
+          <td><span class="implemented">구현됨</span></td>
+          <td>Timeline clip edge drag 후 width 변경을 확인했다.</td>
+        </tr>
+        <tr>
+          <td>6. clip drag move 가능?</td>
+          <td><span class="implemented">구현됨</span></td>
+          <td>Timeline clip body drag 후 left 변경을 확인했다.</td>
+        </tr>
+        <tr>
+          <td>7. timeline zoom drag 가능?</td>
+          <td><span class="implemented">구현됨</span></td>
+          <td>Zoom slider drag 변경을 확인했다.</td>
+        </tr>
+        <tr>
+          <td>8. scrub 반응성?</td>
+          <td><span class="implemented">구현됨</span></td>
+          <td>Ruler drag 시 즉시 aria/value 변경을 확인했다.</td>
+        </tr>
+        <tr>
+          <td>9. preview 즉시 갱신?</td>
+          <td><span class="partial">부분 구현</span></td>
+          <td>Program Monitor direct move는 draft로 즉시 반영된다. Timeline move/trim은 timeline preview guide 중심이고 Program Monitor live preview까지는 제한적이다.</td>
+        </tr>
+        <tr>
+          <td>10. waveform interaction?</td>
+          <td><span class="missing">미구현</span></td>
+          <td>Waveform은 표시 전용이다. <code>pointer-events-none</code>이라 waveform 자체 드래그/편집은 불가능하다.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>실제 DOM / Smoke 확인값</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>확인 항목</th>
+          <th>결과</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Program Monitor</td>
+          <td><code>programMonitor: 1</code>, <code>programFrame: 1</code></td>
+        </tr>
+        <tr>
+          <td>기본 화면 transform overlay</td>
+          <td><code>transformOverlay: 0</code>, <code>rotateHandle: 0</code>, <code>scaleHandles: 0</code></td>
+        </tr>
+        <tr>
+          <td>35초 Workflow demo 선택 후 transform overlay</td>
+          <td><code>transformOverlay: 1</code>, <code>rotateHandle: 1</code>, <code>scaleHandles: 4</code>, <code>cropHandles: 4</code></td>
+        </tr>
+        <tr>
+          <td>Timeline clips</td>
+          <td><code>timelineClipButtons: 5</code></td>
+        </tr>
+        <tr>
+          <td>Timeline ruler / playhead / zoom</td>
+          <td><code>timelineRuler: 1</code>, <code>timelinePlayheadRange: 1</code>, <code>timelineZoomRange: 1</code></td>
+        </tr>
+        <tr>
+          <td>Waveform</td>
+          <td><code>waveforms: 1</code>, but display-only</td>
+        </tr>
+        <tr>
+          <td>Timeline scrub</td>
+          <td><code>0 -&gt; 12.5</code>, <code>35</code> 이동 확인</td>
+        </tr>
+        <tr>
+          <td>Timeline zoom</td>
+          <td><code>12 -&gt; 42</code> 변경 확인</td>
+        </tr>
+        <tr>
+          <td>Clip move</td>
+          <td><code>left: 0 -&gt; 35.004px</code> 변경 확인</td>
+        </tr>
+        <tr>
+          <td>Clip edge trim</td>
+          <td><code>width: 336px -&gt; 375.996px</code> 변경 확인</td>
+        </tr>
+        <tr>
+          <td>Multi-select</td>
+          <td><code>1 selected -&gt; 2 selected</code>, <code>Founder intro</code>, <code>Workflow demo</code> 선택 확인</td>
+        </tr>
+        <tr>
+          <td>Context menu</td>
+          <td><code>Trim head to playhead</code> menu visible 확인</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>근거 파일</h2>
+    <ul>
+      <li><code>src/electron/renderer/program-transform-crop-overlays.tsx</code></li>
+      <li><code>src/electron/renderer/program-composite-preview.tsx</code></li>
+      <li><code>src/electron/renderer/program-preview-stage.tsx</code></li>
+      <li><code>src/electron/renderer/timeline-clip-button.tsx</code></li>
+      <li><code>src/electron/renderer/timeline-transport-ruler.tsx</code></li>
+      <li><code>src/electron/renderer/timeline-track-row.tsx</code></li>
+      <li><code>src/electron/renderer/media-bin-panel.tsx</code></li>
+      <li><code>src/electron/renderer/timeline-context-menu.tsx</code></li>
+      <li><code>src/electron/renderer/selected-clip-capabilities.ts</code></li>
+      <li><code>src/electron/renderer/effect-workflow-helpers.ts</code></li>
+      <li><code>src/lib/editor/project.ts</code></li>
+    </ul>
+
+    <h2>Release UX blocker 후보</h2>
+    <ul>
+      <li>기본 진입 상태에서 Program Monitor transform handle이 보이지 않는다. 기본 선택이 <code>clip-ai-city</code>이고, 이 clip은 아직 생성 asset이 없는 <code>kind: ai</code> clip이다.</li>
+      <li>기본 0초 visual clip인 <code>Founder intro</code>도 scale keyframe이 있어 transform overlay가 막힌다.</li>
+      <li>Keyframe 없는 visual clip에서는 overlay가 뜨지만 scale/rotate drag smoke에서 실제 변화가 확인되지 않았다.</li>
+      <li>Waveform은 표시 전용이라 CapCut식 waveform 직접 편집 기대치에는 미달한다.</li>
+    </ul>
+
+    <p class="small">이 문서는 상호작용 감사 보고만 기록한다. ComfyUI, Automation hooks, Render Worker, Plugin/Extension, export validation semantics는 변경하지 않았다.</p>
+  </main>
+</body>
+</html>

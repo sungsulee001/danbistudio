@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="ko">
+<head>
+  <title>Danbi Studio Editor Core Priority</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style type="text/css">
+    :root {
+      color-scheme: dark;
+      --bg: #111111;
+      --panel: #1b1b1b;
+      --panel2: #242424;
+      --line: #333333;
+      --text: #eeeeee;
+      --muted: #aaaaaa;
+      --green: #42d392;
+      --amber: #e8b84e;
+      --red: #ff6b6b;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.55;
+    }
+
+    main {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 32px 24px 56px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      line-height: 1.2;
+    }
+
+    h2 {
+      margin: 32px 0 12px;
+      font-size: 20px;
+    }
+
+    p, li {
+      color: var(--muted);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 24px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+      text-align: left;
+      font-size: 14px;
+    }
+
+    th {
+      background: var(--panel2);
+      color: #ffffff;
+      white-space: nowrap;
+    }
+
+    code {
+      color: #e6edf3;
+      background: #252525;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 1px 4px;
+      font-family: Consolas, Monaco, monospace;
+      font-size: 0.92em;
+    }
+
+    .summary {
+      margin: 20px 0;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .good { color: var(--green); font-weight: 700; }
+    .warn { color: var(--amber); font-weight: 700; }
+    .bad { color: var(--red); font-weight: 700; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>편집기 우선 개선 판단 기록</h1>
+    <p>Shotcut 소스와 Danbi Studio 현재 Editor 상태를 비교한 뒤, 편집기 핵심 조작을 우선 끌어올려야 한다는 판단을 기록한다.</p>
+
+    <div class="summary">
+      <p><strong>결론:</strong> Danbi Studio는 AI orchestration, ComfyUI, Automation, Render Worker, Plugin 구조가 강점이지만, 순수 편집기 품질은 아직 Shotcut 수준이 아니다. 편집기 기능이 탄탄해야 나머지 AI/자동화/렌더 구조의 의미가 살아난다.</p>
+    </div>
+
+    <h2>Shotcut 대비 현재 수준</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>영역</th>
+          <th>Shotcut</th>
+          <th>Danbi 현재</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Timeline</td>
+          <td>QML 기반 전용 timeline, multitrack model, timeline commands</td>
+          <td>기본 clip move, trim, selection은 있으나 작업감과 안정성은 더 다듬어야 한다.</td>
+        </tr>
+        <tr>
+          <td>Monitor 조작</td>
+          <td>Filter VUI, crop, size-position, keyframe 연동 구조</td>
+          <td>Program Monitor 조작은 부분 구현 상태다. Move는 동작하지만 scale/rotate drag 검증이 실패했다.</td>
+        </tr>
+        <tr>
+          <td>Keyframes</td>
+          <td>별도 Keyframes dock/model과 filter keyframe 체계</td>
+          <td>Keyframe 기능은 있으나 상용 편집기 수준의 직접 조작 UX는 부족하다.</td>
+        </tr>
+        <tr>
+          <td>Filters</td>
+          <td>MLT filter metadata, Filters dock, QML filter UI 다수</td>
+          <td>Inspector effects는 있으나 필터 탐색/적용/조정 경험은 Shotcut보다 얕다.</td>
+        </tr>
+        <tr>
+          <td>Export / Jobs</td>
+          <td>Encode dock, Jobs dock, MLT 기반 안정성</td>
+          <td>Danbi도 render/export 구조는 있으나 Editor 조작 UX와의 통합 완성도가 더 필요하다.</td>
+        </tr>
+        <tr>
+          <td>편집기 UX</td>
+          <td>오래 사용된 NLE 구조</td>
+          <td>최근 재배치 단계이며 아직 “편집기 손맛”은 부족하다.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Shotcut 소스에서 확인한 대표 구조</h2>
+    <ul>
+      <li><code>E:\ai_tool\shotcut\src\qml\views\timeline\timeline.qml</code></li>
+      <li><code>E:\ai_tool\shotcut\src\qml\views\timeline\Clip.qml</code></li>
+      <li><code>E:\ai_tool\shotcut\src\models\multitrackmodel.cpp</code></li>
+      <li><code>E:\ai_tool\shotcut\src\commands\timelinecommands.cpp</code></li>
+      <li><code>E:\ai_tool\shotcut\src\docks\filtersdock.cpp</code></li>
+      <li><code>E:\ai_tool\shotcut\src\docks\keyframesdock.cpp</code></li>
+      <li><code>E:\ai_tool\shotcut\src\docks\encodedock.cpp</code></li>
+    </ul>
+
+    <h2>현재 blocker급 차이</h2>
+    <ul>
+      <li>Program Monitor transform handle 기본 노출이 약하다.</li>
+      <li>Scale/rotate handle은 보이지만 실제 drag 동작 검증에 실패했다.</li>
+      <li>Waveform 직접 편집이 없다.</li>
+      <li>Timeline은 가능하지만 작업감, 피드백, snap/ripple/trim UX를 더 끌어올려야 한다.</li>
+      <li>UI는 상용 편집기 형태로 가까워졌지만 실제 마우스 편집 감각은 아직 Shotcut급이 아니다.</li>
+    </ul>
+
+    <h2>우선순위 결정</h2>
+    <p>다음 구현 우선순위는 UI 장식이나 새 AI 기능이 아니라 편집기 핵심 조작이다.</p>
+    <ol>
+      <li>Program Monitor transform overlay 기본 노출과 직접 조작 안정화</li>
+      <li>Scale/rotate handle drag 실제 동작 보장</li>
+      <li>Timeline trim/move/scrub/zoom 피드백 강화</li>
+      <li>Keyframe이 있는 clip의 직접 조작 정책 정리</li>
+      <li>Waveform interaction 또는 최소한 waveform 기반 edit affordance 설계</li>
+    </ol>
+
+    <div class="summary">
+      <p><strong>작업 원칙:</strong> Danbi Studio는 AI 제작 플랫폼이지만, 편집기가 먼저 탄탄해야 한다. 편집이 불편하면 ComfyUI, Automation, Render Worker, Plugin 시스템의 체감 가치도 떨어진다.</p>
+    </div>
+  </main>
+</body>
+</html>

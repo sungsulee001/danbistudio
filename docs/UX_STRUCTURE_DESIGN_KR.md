@@ -743,6 +743,7 @@ Settings로 이동:
 목표:
 
 - Project Hub와 left rail 기반 top-level navigation을 만든다.
+- 상용 편집기처럼 top application menu, workspace tabs, compact tool rail을 사용한다.
 
 구현 범위:
 
@@ -750,6 +751,7 @@ Settings로 이동:
 - top bar
 - status bar
 - screen routing state
+- KOR/ENG menu language toggle
 
 ### Phase 2: Editor 정리
 
@@ -872,6 +874,8 @@ UX 구조 변경을 진행할 때는 다음 문서를 같이 갱신한다.
 - Project Hub first screen
 - top-level workspace routing
 - 운영 화면 skeleton
+- KOR/ENG menu language toggle
+- commercial editor style top menu and workspace tabs
 
 검증:
 
@@ -889,3 +893,37 @@ UX 구조 변경을 진행할 때는 다음 문서를 같이 갱신한다.
 - Extensions 화면이 실제 plugin manifest/signing/sandbox state를 직접 읽도록 연결
 - Settings 화면을 app shell 구조로 통합
 - Playwright screenshot 기반 desktop/mobile layout 검증
+
+## 18. Phase 1 UX 재조정 기록
+
+2026-06-19:
+
+- 단순 좌측 workspace 버튼 나열 방식이 상용 편집기 UX와 맞지 않아 shell 구조를 다시 잡았다.
+- app shell을 상단 application menu, workspace tab bar, compact tool rail, status bar 구조로 바꿨다.
+- 메뉴 언어 토글을 추가했다.
+  - `ENG`
+  - `KOR`
+- 언어 토글은 shell menu, workspace tab, status bar label에 적용된다.
+- Project Hub의 workspace list table을 제거했다.
+- Project Hub는 시작 action, 상용 편집기형 레이아웃 설명, runtime/release 상태 요약 중심으로 정리했다.
+
+구현 파일:
+
+- `src/app/danbi-app-shell.tsx`
+- `src/app/page.tsx`
+
+아직 남은 UX 구현:
+
+- 실제 Editor 화면 본문을 상용 편집기형 layout으로 재배치
+- Media Bin / Source Monitor / Program Monitor / Inspector / Timeline 영역을 고정 workspace grid로 정리
+- Editor 내부에 산재한 버튼을 menu group, toolbar group, contextual inspector action으로 재분류
+- KOR/ENG 범위를 shell menu에서 editor toolbar/inspector/action label까지 확장
+- Project Hub에 실제 recent project data 연결
+
+검증:
+
+- `git diff --check` 통과
+- `npm run build` 통과
+- `/`, `/ai-studio`, `/automation`, `/render-queue`, `/extensions` route 200 OK 확인
+- Playwright로 `KOR` 클릭 후 `파일` menu와 `편집` workspace tab 표시 확인
+- Playwright로 `ENG` 클릭 후 `File` menu 복귀 확인

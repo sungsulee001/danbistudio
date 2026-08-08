@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>파이프라인 컨트롤 센터 — UX 와이어프레임</title>
+<style>
+  :root{
+    --bg:#0e1015; --panel:#161a23; --panel2:#1c2130; --line:#2a3042; --wire:#3a4258;
+    --txt:#e8ebf2; --sub:#9aa3b5; --dim:#6b7488;
+    --vio:#8b7cf6; --cyan:#4ec9e0; --green:#4ade80; --amber:#fbbf24; --rose:#fb7185;
+    --grad:linear-gradient(135deg,#8b7cf6,#4ec9e0);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:'Segoe UI','Malgun Gothic',sans-serif;line-height:1.55;padding-bottom:80px}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+  h1,h2,h3{font-weight:700;letter-spacing:-.02em}
+
+  header{padding:48px 0 26px;border-bottom:1px solid var(--line);background:radial-gradient(ellipse 80% 60% at 50% -20%,rgba(139,124,246,.18),transparent)}
+  .badge{display:inline-block;font-size:12px;padding:3px 12px;border:1px solid var(--vio);border-radius:99px;color:var(--vio);margin-bottom:12px;letter-spacing:.05em}
+  header h1{font-size:clamp(21px,3.4vw,32px)}
+  header h1 em{font-style:normal;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  header p{color:var(--sub);margin-top:10px;max-width:800px;font-size:14px}
+
+  /* 범례 */
+  .legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px;font-size:11.5px}
+  .lg{display:flex;align-items:center;gap:6px;color:var(--sub)}
+  .dot{width:10px;height:10px;border-radius:3px}
+
+  /* 데이터 소스 칩 */
+  .src{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.06em;padding:1px 7px;border-radius:99px;vertical-align:middle;margin-left:6px}
+  .src.vault{background:#0f2b1a;color:var(--green);border:1px solid #1e6038}
+  .src.api{background:#0f2b33;color:var(--cyan);border:1px solid #1e5560}
+  .src.ext{background:#33121c;color:var(--rose);border:1px solid #6b2437}
+  .src.trg{background:#3a2f10;color:var(--amber);border:1px solid #6b5514}
+
+  /* ── 앱 크롬 목업 ── */
+  .app{margin-top:34px;border:1px solid var(--line);border-radius:18px;overflow:hidden;background:#0b0d12;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .modebar{display:flex;gap:4px;align-items:center;background:#12151d;border-bottom:1px solid var(--line);padding:10px 18px;font-size:12.5px}
+  .modebar .logo{font-weight:700;margin-right:14px;font-size:13px}
+  .modebar .logo em{font-style:normal;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .mode{padding:4px 16px;border-radius:8px;color:var(--dim)}
+  .mode.on{background:var(--panel2);color:var(--txt);border:1px solid var(--vio)}
+  .ctx{display:flex;flex-wrap:wrap;gap:14px;align-items:center;background:#10131b;border-bottom:1px solid var(--line);padding:10px 18px;font-size:12px}
+  .sel{border:1px dashed var(--wire);border-radius:8px;padding:5px 14px;color:var(--sub)}
+  .sel b{color:var(--txt)}
+  .stepper{display:flex;align-items:center;gap:0;flex:1;min-width:280px}
+  .sp{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--dim)}
+  .sp .c{width:16px;height:16px;border-radius:50%;border:2px solid var(--wire);display:flex;align-items:center;justify-content:center;font-size:8px}
+  .sp.done .c{background:var(--green);border-color:var(--green);color:#0b0d12}
+  .sp.cur .c{border-color:var(--amber);color:var(--amber)}
+  .sp.cur{color:var(--amber)}
+  .sln{width:22px;height:2px;background:var(--wire);margin:0 3px}
+  .sln.done{background:var(--green)}
+
+  /* 탭 바 */
+  .tabs{display:flex;background:#12151d;border-bottom:1px solid var(--line);padding:0 12px;overflow-x:auto}
+  .tab{padding:11px 18px;font-size:13px;color:var(--dim);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:.15s}
+  .tab:hover{color:var(--sub)}
+  .tab.on{color:var(--txt);border-bottom-color:var(--cyan)}
+  .tab .n{font-size:10px;color:var(--vio);margin-right:4px}
+
+  /* 화면 영역 */
+  .screen{padding:20px;min-height:430px;display:none}
+  .screen.on{display:block}
+  .sdesc{font-size:12px;color:var(--sub);margin-bottom:14px;padding:8px 14px;background:var(--panel);border-left:3px solid var(--vio);border-radius:0 8px 8px 0}
+
+  /* 와이어프레임 프리미티브 */
+  .wf{border:1.5px dashed var(--wire);border-radius:10px;padding:12px;background:rgba(255,255,255,.015)}
+  .wf .ttl{font-size:11px;color:var(--sub);letter-spacing:.08em;margin-bottom:8px;font-weight:600}
+  .row{display:grid;gap:10px;margin-bottom:10px}
+  .cols3{grid-template-columns:230px 1fr 250px}
+  .cols2{grid-template-columns:1fr 1fr}
+  .cols4{grid-template-columns:repeat(4,1fr)}
+  @media(max-width:860px){.cols3,.cols2,.cols4{grid-template-columns:1fr}}
+  .card{border:1px solid var(--wire);border-radius:8px;padding:9px 11px;font-size:12px;background:var(--panel);margin-bottom:7px}
+  .card:last-child{margin-bottom:0}
+  .card b{font-size:12.5px}
+  .card small{display:block;color:var(--dim);font-size:10.5px;margin-top:2px}
+  .card.hot{border-color:var(--amber);background:#221c0d}
+  .card.bad{border-color:var(--rose);background:#241016}
+  .card.ghost{border-style:dashed;color:var(--dim);text-align:center}
+  .bar{height:7px;border-radius:99px;background:#232a3d;overflow:hidden;margin-top:5px}
+  .bar i{display:block;height:100%;background:var(--grad)}
+  .gatebtn{display:block;width:100%;text-align:center;background:#0f3520;color:var(--green);border:1.5px solid var(--green);border-radius:9px;padding:9px;font-size:13px;font-weight:700;margin-bottom:4px}
+  .gatebtn.off{opacity:.45;border-style:dashed}
+  .gnote{font-size:10.5px;color:var(--dim);text-align:center;margin-bottom:10px}
+  .btn{display:inline-block;border:1px solid var(--wire);border-radius:7px;padding:5px 12px;font-size:11.5px;color:var(--sub);margin:2px 2px 2px 0}
+  .btn.warn{border-color:#6b2437;color:var(--rose)}
+  .btn.act{border-color:var(--cyan);color:var(--cyan)}
+  .thumb{background:#232a3d;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:20px}
+  .fl{display:flex;gap:10px}
+  .fl>*{flex:1}
+  .pill{display:inline-block;font-size:9.5px;padding:1px 8px;border-radius:99px;border:1px solid var(--wire);color:var(--sub);margin-left:5px}
+  .pill.g{color:var(--green);border-color:#1e6038}.pill.a{color:var(--amber);border-color:#6b5514}.pill.r{color:var(--rose);border-color:#6b2437}.pill.c{color:var(--cyan);border-color:#1e5560}
+
+  /* 하단 규약 */
+  section{margin-top:52px}
+  .sec-label{font-size:12px;color:var(--vio);letter-spacing:.15em;margin-bottom:6px}
+  section h2{font-size:22px;margin-bottom:14px}
+  .rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+  .rule{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .rule h4{font-size:14px;margin-bottom:6px;color:var(--amber)}
+  .rule p{font-size:12.5px;color:var(--sub)}
+  footer{margin-top:56px;padding-top:22px;border-top:1px solid var(--line);color:var(--dim);font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <span class="badge">2026-07-06 · UX 화면 구조 (와이어프레임)</span>
+    <h1>파이프라인 <em>컨트롤 센터</em> — Danbi Studio /production</h1>
+    <p>"한 곳에서 다 제어" — 시나리오 승인부터 업로드 현황까지 6개 탭. 각 요소에 데이터 출처를 표기했다(UI는 읽기·표시·상태 전이·트리거만 담당, 두뇌는 밖). <b style="color:var(--txt)">아래 탭을 클릭해 화면별 구조를 확인하세요.</b></p>
+    <div class="legend">
+      <span class="lg"><span class="dot" style="background:var(--green)"></span>VAULT — 마크다운 직접 읽기/쓰기</span>
+      <span class="lg"><span class="dot" style="background:var(--cyan)"></span>API — Danbi 자체 /api/editor/*</span>
+      <span class="lg"><span class="dot" style="background:var(--rose)"></span>EXT — 외부 모듈 상태 파일</span>
+      <span class="lg"><span class="dot" style="background:var(--amber)"></span>TRIGGER — 오케스트레이터 요청</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="app">
+    <!-- 모드 바 -->
+    <div class="modebar">
+      <span class="logo"><em>Danbi</em> Studio</span>
+      <span class="mode">Editor</span>
+      <span class="mode on">Production ★</span>
+      <span class="mode">AI Studio</span>
+      <span class="mode">Settings</span>
+    </div>
+    <!-- 글로벌 컨텍스트 바 -->
+    <div class="ctx">
+      <span class="sel">📁 <b>2026-07-05-석굴암</b> ▾</span>
+      <span class="sel" style="border-color:var(--green);color:var(--green)">+ 새 영상</span>
+      <div class="stepper">
+        <span class="sp done"><span class="c">✓</span>S1</span><span class="sln done"></span>
+        <span class="sp done"><span class="c">✓</span>S2</span><span class="sln done"></span>
+        <span class="sp cur"><span class="c">●</span>S3</span><span class="sln"></span>
+        <span class="sp"><span class="c"></span>S4·5</span><span class="sln"></span>
+        <span class="sp"><span class="c"></span>S6</span><span class="sln"></span>
+        <span class="sp"><span class="c"></span>S7</span>
+      </div>
+    </div>
+    <!-- 탭 바 -->
+    <div class="tabs" id="tabs">
+      <div class="tab on" data-s="0"><span class="n">0</span>🏠 오늘</div>
+      <div class="tab" data-s="1"><span class="n">1</span>📝 기획</div>
+      <div class="tab" data-s="2"><span class="n">2</span>🎞️ 콘티·에셋</div>
+      <div class="tab" data-s="3"><span class="n">3</span>⚡ 생성 큐</div>
+      <div class="tab" data-s="4"><span class="n">4</span>✂️ 편집</div>
+      <div class="tab" data-s="5"><span class="n">5</span>🚀 배포</div>
+    </div>
+
+    <!-- ═══ 탭 0: 오늘 ═══ -->
+    <div class="screen on" id="s0">
+      <div class="sdesc">기본 진입 화면 = <b>라우터</b>. 할 일 카드를 클릭하면 해당 프로덕션+탭으로 바로 이동. 탭을 순서대로 돌 필요가 없다.</div>
+      <div class="wf" style="margin-bottom:10px">
+        <div class="ttl">👤 승인 대기 — 가장 크게, 최상단 <span class="src vault">VAULT</span></div>
+        <div class="row cols4">
+          <div class="card hot"><b>📝 시나리오 2건</b><small>승인 대기 → 기획 탭</small></div>
+          <div class="card hot"><b>🎞️ 콘티 CUT 6개</b><small>검수 대기 → 콘티·에셋 탭</small></div>
+          <div class="card"><b>✂️ 편집본 1건</b><small>검수 대기 → 편집 탭</small></div>
+          <div class="card"><b>🚀 게시 승인 1건</b><small>배포 탭</small></div>
+        </div>
+      </div>
+      <div class="row cols2">
+        <div class="wf">
+          <div class="ttl">진행 중 잡 <span class="src api">API</span></div>
+          <div class="card">이미지 생성 4/10 <div class="bar"><i style="width:40%"></i></div></div>
+          <div class="card">렌더 1건 (쇼츠 프로파일) <div class="bar"><i style="width:72%"></i></div></div>
+          <div class="card bad"><b>⚠ blocked 1건</b><small>missing media — [다음 행동: 문서 열기]</small></div>
+        </div>
+        <div class="wf">
+          <div class="ttl">외부 대기 · 성과 · 시스템</div>
+          <div class="card ghost">EXTERNAL_PENDING: TikTok 감사 심사 중 <span class="src ext">EXT</span></div>
+          <div class="card">최근 게시 3편 성과 미니카드 (24h/7d) <span class="src vault">VAULT</span></div>
+          <div class="card">ComfyUI ● online · VRAM 18/24GB <span class="src api">API</span> · 오케스트레이터 ● 생존 <span class="src ext">EXT</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 탭 1: 기획 ═══ -->
+    <div class="screen" id="s1">
+      <div class="sdesc">S1 시나리오 · S2 대본의 읽기/승인/반려. 3열 — 문서 리스트 | 마크다운 뷰어 | 액션 패널(게이트).</div>
+      <div class="row cols3">
+        <div class="wf">
+          <div class="ttl">문서 리스트 <span class="src vault">VAULT</span></div>
+          <div class="card" style="border-color:var(--green);color:var(--green)">+ 새 영상 (채널·소재 입력 → S1 트리거) <span class="src trg">TRG</span></div>
+          <div class="card hot"><b>00-scenario.md</b> <span class="pill a">draft</span><small>석굴암의 비밀</small></div>
+          <div class="card"><b>01-script.md</b> <span class="pill">대기</span><small>시나리오 승인 후 생성</small></div>
+        </div>
+        <div class="wf">
+          <div class="ttl">뷰어 — 마크다운 렌더링 <span class="src vault">VAULT</span></div>
+          <div class="card"><b>frontmatter 카드 헤더</b><small>채널: 문화유산 · 목표 45s · 훅: 질문형 · 예상 43s</small></div>
+          <div class="card" style="min-height:110px">본문 렌더링<br><small>대본이면 장면 블록(N01~) 단위 카드 + 길이 합계 게이지</small><div class="bar"><i style="width:95%"></i></div></div>
+        </div>
+        <div class="wf">
+          <div class="ttl">액션 패널 (게이트 고정 위치)</div>
+          <span class="gatebtn">🔒 승인 (draft→approved)</span>
+          <div class="gnote">승인 시 "S2 대본 자동 시작" 안내 · log.md 기록 <span class="src vault">V</span></div>
+          <span class="btn warn">반려 — 사유 입력 → %%revise%% 기록</span>
+          <span class="btn">재생성 트리거 <span class="src trg">TRG</span></span>
+          <div class="card" style="margin-top:8px"><small>계보: [[문화유산채널]] · 참조 회고 2건</small></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 탭 2: 콘티·에셋 ═══ -->
+    <div class="screen" id="s2">
+      <div class="sdesc">S3~S5 검수 = <b>08 통합 빌더 흡수</b>. 컷 카드 | 후보 비교 프리뷰 | 인스펙터. 콘티 문서 승인은 전 컷 검토 후 활성화.</div>
+      <div class="row cols3">
+        <div class="wf">
+          <div class="ttl">컷 카드 리스트 <span class="src vault">VAULT</span></div>
+          <span class="gatebtn off">🔒 콘티 승인 (미검토 3컷)</span>
+          <div style="margin-bottom:8px"><span class="btn act">전체 이미지 생성</span><span class="btn act">전체 I2V</span><span class="btn">승인 컷만 편집으로</span></div>
+          <div class="card hot"><b>CUT-01</b> <span class="pill g">img✓</span><span class="pill a">i2v 대기</span><small>훅 — 석굴암 CU, N01</small></div>
+          <div class="card"><b>CUT-02</b> <span class="pill c">생성 중</span><small>본존불 WS, N02</small></div>
+          <div class="card"><b>CUT-03</b> <span class="pill r">반려</span><small>재생성 큐 대기</small></div>
+        </div>
+        <div class="wf">
+          <div class="ttl">프리뷰 — 후보 비교 (AI Result Review 패턴 재사용)</div>
+          <div class="fl" style="margin-bottom:8px">
+            <div class="thumb" style="height:110px">후보 A</div>
+            <div class="thumb" style="height:110px;border:1.5px solid var(--green)">후보 B ✓채택</div>
+          </div>
+          <div class="card"><small>나레이션 N01: "천 년을 버틴 돌의 비밀…" ▶ TTS 재생</small></div>
+        </div>
+        <div class="wf">
+          <div class="ttl">인스펙터</div>
+          <div class="card"><b>이미지 프롬프트</b><small>편집 가능 · gongnyang 게이트 통과 표시</small></div>
+          <div class="card"><b>파라미터</b><small>slot: local · seed 고정 · 9:16</small></div>
+          <span class="btn act">🔄 재생성 (잡 enqueue) <span class="src api">API</span></span>
+          <div style="margin-top:8px"><span class="btn">컷 승인 ✓</span><span class="btn warn">컷 반려</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 탭 3: 생성 큐 ═══ -->
+    <div class="screen" id="s3">
+      <div class="sdesc">= <b>09 ComfyUI 대시보드 흡수</b>. 데이터 전부 <span class="src api">API</span> — 상태 헤더 / 큐 보드 / 워크플로우 카탈로그 / 갤러리.</div>
+      <div class="wf" style="margin-bottom:10px">
+        <div class="ttl">상태 헤더</div>
+        <div class="fl">
+          <div class="card">ComfyUI ● online · VRAM 18/24GB</div>
+          <div class="card">readiness: <span class="pill g">WAN✓</span><span class="pill r">누락 노드 1</span> [원클릭 진단]</div>
+          <div class="card">동시성 1 · 우선순위 기본 0 [설정]</div>
+        </div>
+      </div>
+      <div class="row cols3" style="grid-template-columns:1.2fr 1fr 1fr">
+        <div class="wf">
+          <div class="ttl">큐 보드</div>
+          <div class="card">CUT-02 이미지 <div class="bar"><i style="width:55%"></i></div><small>KSampler 55% · [취소]</small></div>
+          <div class="card">CUT-07 i2v <span class="pill">대기 #2</span></div>
+          <div class="card bad">CUT-03 실패(OOM) <small>[재시도] [/free 언로드]</small></div>
+        </div>
+        <div class="wf">
+          <div class="ttl">워크플로우 카탈로그</div>
+          <div class="card"><b>wan_i2v</b> <span class="pill g">검증됨</span></div>
+          <div class="card"><b>broll_t2i</b> <span class="pill g">검증됨</span></div>
+          <div class="card ghost">+ 워크플로우 등록 마법사</div>
+        </div>
+        <div class="wf">
+          <div class="ttl">갤러리 (promptLineage 카드)</div>
+          <div class="fl"><div class="thumb" style="height:52px">🖼</div><div class="thumb" style="height:52px">🖼</div><div class="thumb" style="height:52px">🎬</div></div>
+          <div class="card" style="margin-top:8px"><small>seed·워크플로우·원 컷 추적 · 삭제=undo 가능</small></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 탭 4: 편집 ═══ -->
+    <div class="screen" id="s4">
+      <div class="sdesc">S6. 컴파일 → 기존 편집기 딥링크 → preflight → <b>검수 완료 게이트</b> → 렌더. 편집기 본체는 그대로 사용.</div>
+      <div class="row cols2">
+        <div>
+          <div class="wf" style="margin-bottom:10px">
+            <div class="ttl">① 컴파일 카드</div>
+            <span class="btn act">▶ 콘티→프로젝트 컴파일 실행</span>
+            <div class="card" style="margin-top:8px">결과: V2 트랙 · 클립 14 · 마커 3 · 경고 0 <small>컴파일러(경계 도구) 호출</small></div>
+          </div>
+          <div class="wf">
+            <div class="ttl">② 편집기 열기 + preflight <span class="src api">API</span></div>
+            <span class="btn act">✂️ 편집기에서 열기 (딥링크 /editor)</span>
+            <div class="card" style="margin-top:8px"><span class="pill g">해상도 짝수 ✓</span><span class="pill g">미디어 ✓</span><span class="pill a">warning 1: 자막 겹침</span></div>
+          </div>
+        </div>
+        <div>
+          <div class="wf" style="margin-bottom:10px">
+            <div class="ttl">③ 검수 완료 게이트</div>
+            <span class="gatebtn">🔒 검수 완료 · 렌더 시작</span>
+            <div class="gnote">= generated→edited 전이 <span class="src vault">V</span> + render-jobs enqueue <span class="src api">API</span> (단방향 1회)</div>
+          </div>
+          <div class="wf">
+            <div class="ttl">④ 렌더 진행 <span class="src api">API</span></div>
+            <div class="card">쇼츠 1080×1920 <div class="bar"><i style="width:30%"></i></div><small>NVENC · 예상 2분</small></div>
+            <div class="card ghost">완료 시 파일 경로 + [배포 탭으로]</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 탭 5: 배포 ═══ -->
+    <div class="screen" id="s5">
+      <div class="sdesc">S7. 산출물 확인 → 메타데이터 → 플랫폼 보드 → <b>게시 승인 게이트</b> → 성과·회고 환류.</div>
+      <div class="row cols2">
+        <div class="wf">
+          <div class="ttl">산출물 + 메타데이터</div>
+          <div class="fl">
+            <div class="thumb" style="height:120px;flex:0 0 76px">▶ 9:16</div>
+            <div style="flex:1">
+              <div class="card"><b>제목/설명/태그 편집 폼</b> <span class="src vault">VAULT</span><small>04-publish.md</small></div>
+              <div class="card"><small>챕터 미리보기 (마커→유튜브 챕터)</small></div>
+            </div>
+          </div>
+        </div>
+        <div class="wf">
+          <div class="ttl">게시 승인 게이트</div>
+          <span class="gatebtn">🔒 게시 승인 → 업로더 트리거</span>
+          <div class="gnote">초기엔 플랫폼별 개별 승인 <span class="src trg">TRG</span></div>
+          <div class="card"><small>YouTube 쿼터 잔량: 오늘 4/6편</small></div>
+        </div>
+      </div>
+      <div class="row cols3" style="grid-template-columns:1fr 1fr 1fr">
+        <div class="wf"><div class="ttl">YouTube <span class="src ext">EXT</span></div><div class="card"><span class="pill g">게시됨</span><small>URL · 조회 1.2k</small></div></div>
+        <div class="wf"><div class="ttl">TikTok <span class="src ext">EXT</span></div><div class="card"><span class="pill a">초안 업로드됨</span><small>앱에서 최종 게시 (반자동)</small></div></div>
+        <div class="wf"><div class="ttl">Instagram <span class="src ext">EXT</span></div><div class="card ghost">EXTERNAL_PENDING — 앱 리뷰 대기</div></div>
+      </div>
+      <div class="wf">
+        <div class="ttl">성과 · 회고 <span class="src vault">VAULT</span></div>
+        <div class="fl">
+          <div class="card">24h: 조회 1.2k · 유지율 62% · CTR 4.1%</div>
+          <div class="card">7d 예약 수집 대기</div>
+          <div class="card"><b>[회고 노트 열기]</b><small>retrospectives → 다음 S1이 읽는 환류</small></div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /app -->
+</div>
+
+<!-- 게이트 규약 -->
+<section>
+  <div class="wrap">
+    <div class="sec-label">INTERACTION RULES</div>
+    <h2>게이트 인터랙션 규약 (전 화면 통일)</h2>
+    <div class="rules">
+      <div class="rule"><h4>승인 버튼 위치·모양 통일</h4><p>우측 패널 최상단 고정, 초록+자물쇠. 비활성 사유를 버튼 아래 한 줄로 항상 표기("미검토 컷 3개").</p></div>
+      <div class="rule"><h4>승인은 되돌리지 않는다</h4><p>확인 다이얼로그(후속 자동 동작 명시) → status 전이 → log.md 기록. 재작업은 revise 코멘트로 — 상태 머신 역행 금지.</p></div>
+      <div class="rule"><h4>반려 = 사유 필수</h4><p>사유는 %%revise%% 코멘트로 문서에 기록되어 그대로 에이전트의 재작성 입력이 된다.</p></div>
+      <div class="rule"><h4>EXTERNAL_PENDING은 버튼이 아니다</h4><p>회색 배지 + 남은 절차 툴팁. 앱 안에서 할 수 있는 일이 없음을 명확히 표시.</p></div>
+      <div class="rule"><h4>실패는 홈으로 승격</h4><p>빨강 카드에는 항상 "다음 행동" 1개를 제시 — 재시도 / 문서 열기 / 로그 보기.</p></div>
+      <div class="rule"><h4>UI의 쓰기는 3종뿐</h4><p>status 전이 · revise 코멘트 · 트리거 요청. 이 원칙이 올인원(A안)으로 미끄러지는 것을 막는 가드레일.</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>파이프라인 컨트롤 센터 UX 와이어프레임 · 2026-07-06 · 상세 설계: platform/12_UX_CONTROL_CENTER_KR.md</footer>
+
+<script>
+document.getElementById('tabs').addEventListener('click',e=>{
+  const t=e.target.closest('.tab');if(!t)return;
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.screen').forEach(x=>x.classList.remove('on'));
+  t.classList.add('on');
+  document.getElementById('s'+t.dataset.s).classList.add('on');
+});
+</script>
+</body>
+</html>

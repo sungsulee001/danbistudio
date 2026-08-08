@@ -391,6 +391,92 @@ UX 구조 설계의 첫 구현 단계로 Project Hub와 top-level app shell을 �
 검증:
 
 ```text
+git diff --check
+npm run build
+/editor 200 OK
+Playwright editor-commercial-layout passed
+```
+
+## 18. 2026-06-19 OpenCut / Shotcut 참고 기반 Editor UI dock 재정리
+
+참고:
+
+- `third_party/source-mirrors/opencut-classic/apps/web/src/app/editor/[project_id]/page.tsx`
+- `third_party/source-mirrors/opencut-classic/apps/web/src/components/editor/panels/assets/index.tsx`
+- `third_party/source-mirrors/opencut-classic/apps/web/src/components/editor/panels/assets/tabbar.tsx`
+- `third_party/source-mirrors/opencut-classic/apps/web/src/components/editor/panels/properties/index.tsx`
+- `third_party/source-mirrors/shotcut/src/mainwindow.ui`
+- `third_party/source-mirrors/shotcut/src/defaultlayouts.h`
+
+변경 파일:
+
+- `src/app/editor/page.tsx`
+- `docs/UX_EDITOR_COMMERCIAL_RELAYOUT_KR.md`
+- `docs/POST_2026_06_17_23_CHANGELOG_KR.md`
+
+구현 내용:
+
+- 좌측 Asset Bay를 `Media`, `Project`, `Templates`, `Health` 세로 탭 구조로 변경
+- 우측 Inspector를 `Clip`, `Video`, `Audio`, `Effects`, `Text`, `Jobs`, `Export`, `Plugins` dock 탭 구조로 변경
+- Shotcut의 `Properties`, `Filters`, `Encode`, `Jobs` dock 분리와 `Editing`, `Effects`, `Color`, `Audio`, `Player` layout preset 구조를 참고해 Clip 탭 안의 패널 과밀을 줄임
+- 기본 노출은 Media + Clip로 맞춰 import, preview, timeline, inspector 흐름을 우선시
+- Export, Automation, Render Worker, Plugin 관련 패널은 제거하지 않고 dock 탭으로 이동
+- ComfyUI, AI Results, Automation Hooks, Render Worker, Fleet Discovery, Headless Render, Plugin/Extension, export validation semantics 변경 없음
+- 현재 세션 도구 목록에서 `OpenDesign` 이름의 플러그인은 확인되지 않았고, 사용 가능한 디자인 연동은 Figma/Canva로 확인됨
+
+검증:
+
+```text
+git diff --check
+npm run build
+Playwright editor-shotcut-opencut-docks passed
+```
+
+## 19. 2026-06-19 OpenDesign 설치 및 Editor workspace preset 적용
+
+OpenDesign repo:
+
+```text
+https://github.com/nexu-io/open-design
+```
+
+설치/연동:
+
+```text
+git clone --depth 1 https://github.com/nexu-io/open-design.git E:\ai_tool\open-design
+corepack pnpm install
+codex mcp add open-design -- node E:\ai_tool\open-design\apps\daemon\bin\od.mjs mcp --daemon-url http://127.0.0.1:7456
+node E:\ai_tool\open-design\apps\daemon\bin\od.mjs --port 7456 --host 127.0.0.1 --no-open
+```
+
+확인:
+
+```text
+OpenDesign health 200 {"ok":true,"version":"0.11.0"}
+Codex MCP server open-design enabled
+```
+
+Editor UI 반영:
+
+- OpenDesign `Neutral Modern` 원칙인 content-first, chrome-second를 참고
+- 중앙 `Edit Workspace` header에 workspace preset strip 추가
+- preset: `Edit`, `Effects`, `Audio`, `Text`, `Export`, `Plugins`
+- preset은 기존 좌측 Asset Bay 탭과 우측 Inspector dock 탭 조합만 전환
+- ComfyUI, Automation Hooks, Render Worker, Plugin/Extension, export validation semantics 변경 없음
+
+검증:
+
+```text
+git diff --check
+npm run build
+OpenDesign health 200
+codex mcp list -> open-design enabled
+Playwright editor-opendesign-presets passed
+```
+
+검증:
+
+```text
 npm run build
 ```
 
@@ -415,3 +501,80 @@ local dev server:
 ```text
 http://127.0.0.1:3000
 ```
+
+## 16. 2026-06-19 UX shell 상용 편집기형 재조정
+
+단순 workspace 버튼 나열 방식이 사용하기 어렵다는 피드백에 따라 shell 구조를 상용 영상 편집기형으로 재조정했다.
+
+변경 파일:
+
+- `src/app/danbi-app-shell.tsx`
+- `src/app/page.tsx`
+- `docs/UX_STRUCTURE_DESIGN_KR.md`
+- `docs/POST_2026_06_17_23_CHANGELOG_KR.md`
+
+구현 내용:
+
+- top application menu 추가
+- workspace tab bar 추가
+- compact tool rail로 좌측 navigation 축소
+- KOR/ENG menu language toggle 추가
+- Project Hub의 workspace table 제거
+- Project Hub를 시작 action, commercial editor layout summary, runtime/release status 중심으로 정리
+
+언어 토글 적용 범위:
+
+- top application menu
+- workspace tabs
+- tool rail labels
+- status bar labels
+
+아직 남은 범위:
+
+- Editor 본문 자체를 상용 편집기형 workspace로 재배치
+- Editor 내부 toolbar/inspector/timeline 메뉴 단추 재분류
+- KOR/ENG 적용 범위를 editor 내부 메뉴와 action label까지 확장
+
+검증:
+
+```text
+git diff --check
+npm run build
+/ 200 OK
+/ai-studio 200 OK
+/automation 200 OK
+/render-queue 200 OK
+/extensions 200 OK
+Playwright language-toggle passed
+```
+
+## 17. 2026-06-19 Editor 본문 상용 편집기형 재배치
+
+상세 설계 기록:
+
+```text
+docs/UX_EDITOR_COMMERCIAL_RELAYOUT_KR.md
+```
+
+변경 파일:
+
+- `src/app/editor/page.tsx`
+- `docs/UX_EDITOR_COMMERCIAL_RELAYOUT_KR.md`
+- `docs/POST_2026_06_17_23_CHANGELOG_KR.md`
+
+구현 내용:
+
+- Editor body를 좌측 Asset Bay, 중앙 Edit Workspace, 우측 Inspector / Properties의 3열 작업대로 재배치
+- Source Monitor, Program Monitor, Scene Readout, Timeline을 중앙 작업 흐름으로 정리
+- Timeline은 중앙 하단 주 작업 영역으로 유지
+- 우측 Inspector와 Export/Automation/Render/Plugin 패널은 기능 제거 없이 동일 레일 안에서 스크롤되도록 정리
+
+보존 조건:
+
+- ComfyUI integration 제거 없음
+- ComfyUI batch queue 제거 없음
+- AI Results workflow 제거 없음
+- Automation hooks 제거 없음
+- Render Worker / Daemon / Fleet Discovery / Headless Render 제거 없음
+- Plugin / Extension system 제거 없음
+- 기존 export validation semantics 변경 없음

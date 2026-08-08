@@ -1,0 +1,484 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="ko">
+<head>
+  <title>Danbi Studio UI Preview</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style type="text/css">
+    :root {
+      color-scheme: dark;
+      --bg: #0a0a0a;
+      --panel: #121212;
+      --panel2: #181818;
+      --line: #2a2a2a;
+      --muted: #8a8a8a;
+      --text: #f2f2f2;
+      --green: #34d399;
+      --cyan: #67e8f9;
+      --amber: #fbbf24;
+      --red: #f87171;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 64px minmax(0, 1fr);
+      grid-template-rows: 42px 54px minmax(0, 1fr) 36px;
+    }
+
+    .top {
+      grid-column: 1 / 3;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--line);
+      padding: 0 12px;
+      background: #080808;
+    }
+
+    .brand, .menu, .lang, .tabs, .rail, .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand {
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .logo {
+      display: inline-grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 4px;
+      background: var(--green);
+      color: #04110b;
+      font-size: 10px;
+    }
+
+    .menu span, .tab, .rail a, .pill, .button {
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+
+    .menu span {
+      padding: 6px 8px;
+      color: #c9c9c9;
+      font-size: 13px;
+    }
+
+    .lang span {
+      border: 1px solid var(--line);
+      padding: 4px 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .lang .on {
+      background: var(--green);
+      color: #04110b;
+      border-color: var(--green);
+      font-weight: 700;
+    }
+
+    .rail {
+      grid-row: 2 / 4;
+      flex-direction: column;
+      align-items: center;
+      border-right: 1px solid var(--line);
+      padding-top: 8px;
+      background: #080808;
+    }
+
+    .rail a {
+      display: grid;
+      place-items: center;
+      width: 40px;
+      height: 40px;
+      border: 1px solid transparent;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .rail a.active {
+      border-color: rgba(52, 211, 153, 0.55);
+      background: rgba(52, 211, 153, 0.14);
+      color: #d1fae5;
+    }
+
+    .tabs {
+      overflow-x: auto;
+      border-bottom: 1px solid var(--line);
+      padding: 0 16px;
+      background: #080808;
+    }
+
+    .tab {
+      padding: 10px 12px;
+      color: #bdbdbd;
+      font-size: 14px;
+      text-decoration: none;
+    }
+
+    .tab.active {
+      background: var(--panel);
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-bottom: 0;
+    }
+
+    .content {
+      overflow: auto;
+      padding: 16px;
+    }
+
+    h1 {
+      margin: 0 0 4px;
+      font-size: 18px;
+    }
+
+    .subtitle {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .screen {
+      margin-bottom: 28px;
+      border-bottom: 1px solid #1c1c1c;
+      padding-bottom: 24px;
+    }
+
+    .grid3 {
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr) 360px;
+      gap: 16px;
+    }
+
+    .grid2 {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 380px;
+      gap: 16px;
+    }
+
+    .editor-grid {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr) 340px;
+      grid-template-rows: 380px 260px;
+      gap: 12px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      background: rgba(24, 24, 24, 0.72);
+      border-radius: 4px;
+      min-width: 0;
+    }
+
+    .panel-head {
+      border-bottom: 1px solid var(--line);
+      background: var(--panel2);
+      padding: 12px;
+    }
+
+    .eyebrow {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+
+    .title {
+      margin-top: 3px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .panel-body {
+      padding: 12px;
+    }
+
+    .row, .metric {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid #242424;
+      padding: 8px 0;
+      color: #d8d8d8;
+      font-size: 13px;
+    }
+
+    .row:last-child { border-bottom: 0; }
+
+    .card {
+      border: 1px solid var(--line);
+      background: #0d0d0d;
+      border-radius: 4px;
+      padding: 10px;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 4px;
+    }
+
+    .pill {
+      border: 1px solid #555;
+      padding: 3px 7px;
+      color: #ddd;
+      font-size: 11px;
+      display: inline-flex;
+      gap: 6px;
+    }
+
+    .good { border-color: rgba(52, 211, 153, 0.45); color: #a7f3d0; }
+    .pending { border-color: rgba(103, 232, 249, 0.45); color: #a5f3fc; }
+    .warn { border-color: rgba(251, 191, 36, 0.45); color: #fde68a; }
+
+    .button {
+      display: inline-block;
+      border: 1px solid #3f3f46;
+      padding: 8px 10px;
+      margin: 4px 4px 0 0;
+      color: #e5e5e5;
+      font-size: 13px;
+    }
+
+    .monitor {
+      height: 100%;
+      display: grid;
+      place-items: center;
+      background:
+        linear-gradient(135deg, rgba(52, 211, 153, 0.12), transparent 40%),
+        linear-gradient(45deg, #111, #050505);
+      color: #d4d4d4;
+      font-size: 14px;
+    }
+
+    .timeline {
+      grid-column: 1 / 4;
+      display: grid;
+      grid-template-rows: repeat(4, 1fr);
+      gap: 8px;
+      padding: 12px;
+      background: #0d0d0d;
+    }
+
+    .track {
+      border: 1px solid var(--line);
+      background: #111;
+      position: relative;
+      min-height: 46px;
+    }
+
+    .clip {
+      position: absolute;
+      top: 8px;
+      height: 28px;
+      border-radius: 3px;
+      background: rgba(52, 211, 153, 0.3);
+      border: 1px solid rgba(52, 211, 153, 0.7);
+      padding: 6px;
+      font-size: 11px;
+    }
+
+    .status {
+      grid-column: 1 / 3;
+      overflow-x: auto;
+      border-top: 1px solid var(--line);
+      padding: 0 12px;
+      background: #080808;
+    }
+
+    @media (max-width: 1100px) {
+      .grid3, .grid2, .editor-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .timeline {
+        grid-column: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <div class="brand"><span class="logo">DB</span><span>Danbi Studio</span></div>
+      <nav class="menu">
+        <span>파일</span><span>편집</span><span>클립</span><span>타임라인</span>
+        <span>AI</span><span>자동화</span><span>렌더</span><span>보기</span>
+      </nav>
+      <div class="lang"><span>ENG</span><span class="on">KOR</span></div>
+    </header>
+
+    <aside class="rail">
+      <a class="active" href="#editor">E</a>
+      <a href="#ai">AI</a>
+      <a href="#automation">A</a>
+      <a href="#render">R</a>
+      <a href="#extensions">P</a>
+      <a href="#settings">S</a>
+    </aside>
+
+    <nav class="tabs">
+      <a class="tab active" href="#editor">편집</a>
+      <a class="tab" href="#ai">AI 스튜디오</a>
+      <a class="tab" href="#automation">자동화</a>
+      <a class="tab" href="#render">렌더</a>
+      <a class="tab" href="#extensions">플러그인</a>
+      <a class="tab" href="#settings">설정</a>
+    </nav>
+
+    <main class="content">
+      <section id="editor" class="screen">
+        <h1>Editor Workspace</h1>
+        <p class="subtitle">Media Bin / Source Monitor / Program Monitor / Inspector / Timeline</p>
+        <div class="editor-grid">
+          <div class="panel">
+            <div class="panel-head"><div class="eyebrow">Asset Bay</div><div class="title">Media</div></div>
+            <div class="panel-body">
+              <div class="card">Interview master take<div class="muted">video / renderPath ready</div></div>
+              <div class="card">Soft pulse bed<div class="muted">audio</div></div>
+              <div class="card">Launch title<div class="muted">text</div></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><div class="eyebrow">Edit Workspace</div><div class="title">Program Monitor</div></div>
+            <div class="monitor">Preview Stage / Source Monitor</div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><div class="eyebrow">Inspector</div><div class="title">Clip / Video / Audio / Effects / Text / Jobs / Export / Plugins</div></div>
+            <div class="panel-body">
+              <span class="button">Clip</span><span class="button">Video</span><span class="button">Audio</span>
+              <span class="button">Effects</span><span class="button">Export</span><span class="button">Plugins</span>
+              <div class="card">Contextual controls stay available while dedicated screens exist.</div>
+            </div>
+          </div>
+          <div class="panel timeline">
+            <div class="track"><div class="clip" style="left: 4%; width: 28%;">Founder intro</div><div class="clip" style="left: 40%; width: 34%;">Workflow demo</div></div>
+            <div class="track"><div class="clip" style="left: 22%; width: 12%; background: rgba(251,191,36,.28); border-color: rgba(251,191,36,.7);">AI B-roll</div></div>
+            <div class="track"><div class="clip" style="left: 8%; width: 16%; background: rgba(103,232,249,.22); border-color: rgba(103,232,249,.7);">Opening title</div></div>
+            <div class="track"><div class="clip" style="left: 2%; width: 92%; background: rgba(163,230,53,.22); border-color: rgba(163,230,53,.6);">Music bed</div></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="ai" class="screen">
+        <h1>AI Studio</h1>
+        <p class="subtitle">ComfyUI workflows, generation queue, AI Results, asset state actions</p>
+        <div class="grid3">
+          <div class="panel"><div class="panel-head"><div class="eyebrow">ComfyUI</div><div class="title">Workflow Browser</div></div><div class="panel-body">
+            <div class="card">B-roll I2V <span class="pill">nodes</span></div>
+            <div class="card">Style Transfer <span class="pill">workflow</span></div>
+            <div class="card">Upscale Restore <span class="pill">workflow</span></div>
+          </div></div>
+          <div class="panel"><div class="panel-head"><div class="eyebrow">Generation Queue</div><div class="title">ComfyUI Batch Queue</div></div><div class="panel-body">
+            <div class="row"><span>Pending generation</span><span class="pill pending">0</span></div>
+            <div class="row"><span>Generating</span><span class="pill pending">0</span></div>
+            <div class="row"><span>Generated</span><span class="pill good">history</span></div>
+            <div class="row"><span>Failed</span><span class="pill warn">recoverable</span></div>
+          </div></div>
+          <div class="panel"><div class="panel-head"><div class="eyebrow">Pending Assets</div><div class="title">Asset State Actions</div></div><div class="panel-body">
+            <span class="button">Generate now</span><span class="button">Skip this asset</span>
+            <span class="button">Replace with local media</span><span class="button">Exclude from current export</span>
+          </div></div>
+        </div>
+      </section>
+
+      <section id="automation" class="screen">
+        <h1>Automation</h1>
+        <p class="subtitle">Hooks, queue settings, ComfyUI job bridge, webhook boundary</p>
+        <div class="grid2">
+          <div class="panel"><div class="panel-head"><div class="eyebrow">Hooks</div><div class="title">Automation Hook Rules</div></div><div class="panel-body">
+            <span class="button">Prepare manual</span><span class="button">Prepare on-import</span>
+            <span class="button">Prepare before-export</span><span class="button">Prepare on-gap</span>
+            <div class="card">Last Hook Plan: local actions / ComfyUI jobs / webhook payloads</div>
+          </div></div>
+          <div class="panel"><div class="panel-head"><div class="eyebrow">Queue</div><div class="title">Worker Concurrency</div></div><div class="panel-body">
+            <div class="row"><span>Render workers</span><span class="pill">1</span></div>
+            <div class="row"><span>Comfy workers</span><span class="pill">1</span></div>
+            <div class="row"><span>Webhook allowlist</span><span class="pill pending">explicit</span></div>
+          </div></div>
+        </div>
+      </section>
+
+      <section id="render" class="screen">
+        <h1>Render Queue</h1>
+        <p class="subtitle">Render jobs, outputs, Render Worker, daemon, fleet discovery</p>
+        <div class="grid2">
+          <div class="panel"><div class="panel-head"><div class="eyebrow">Jobs</div><div class="title">Render Job List</div></div><div class="panel-body">
+            <div class="card">Queued / Running / Completed / Failed job cards<div class="muted">Cancel, retry, open output, reveal output</div></div>
+            <div class="card">Output MP4 path<div class="muted">ffprobe-readable output shown when available</div></div>
+          </div></div>
+          <div class="panel"><div class="panel-head"><div class="eyebrow">Workers</div><div class="title">Render Worker / Fleet</div></div><div class="panel-body">
+            <div class="row"><span>Render Worker</span><span class="pill pending">probe</span></div>
+            <div class="row"><span>Daemon</span><span class="pill pending">127.0.0.1:47683</span></div>
+            <div class="row"><span>Fleet Discovery</span><span class="pill pending">detected when daemon responds</span></div>
+            <div class="row"><span>Headless Render</span><span class="pill good">preserved</span></div>
+          </div></div>
+        </div>
+      </section>
+
+      <section id="extensions" class="screen">
+        <h1>Extensions</h1>
+        <p class="subtitle">Plugin manifests, sandbox, signing, permissions</p>
+        <div class="grid2">
+          <div class="panel"><div class="panel-head"><div class="eyebrow">Plugins</div><div class="title">Installed Plugin Manifests</div></div><div class="panel-body">
+            <div class="card">ComfyUI Bridge<div class="muted">network, comfyui, project / workflow</div></div>
+            <div class="card">FFmpeg Renderer<div class="muted">filesystem, render, project / exporter</div></div>
+          </div></div>
+          <div class="panel"><div class="panel-head"><div class="eyebrow">Trust</div><div class="title">Sandbox and Signing</div></div><div class="panel-body">
+            <div class="row"><span>Installed plugins</span><span class="pill good">2</span></div>
+            <div class="row"><span>Blocked plugins</span><span class="pill">0</span></div>
+            <div class="row"><span>Render hooks</span><span class="pill good">preserved</span></div>
+          </div></div>
+        </div>
+      </section>
+
+      <section id="settings" class="screen">
+        <h1>Settings and Diagnostics</h1>
+        <p class="subtitle">FFmpeg, storage/userData, ComfyUI endpoint, runtime diagnostics</p>
+        <div class="grid2">
+          <div class="panel"><div class="panel-head"><div class="eyebrow">Runtime</div><div class="title">Diagnostics</div></div><div class="panel-body">
+            <div class="row"><span>FFmpeg</span><span class="pill good">ready / check</span></div>
+            <div class="row"><span>Storage</span><span class="pill good">Electron userData</span></div>
+            <div class="row"><span>Program Files writes</span><span class="pill good">not expected</span></div>
+          </div></div>
+          <div class="panel"><div class="panel-head"><div class="eyebrow">ComfyUI</div><div class="title">Endpoint Settings</div></div><div class="panel-body">
+            <div class="row"><span>URL</span><span class="pill">http://localhost:8188</span></div>
+            <div class="row"><span>Default steps</span><span class="pill">24</span></div>
+            <div class="row"><span>External Fresh Windows QA</span><span class="pill pending">EXTERNAL_PENDING</span></div>
+          </div></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="status">
+      <span class="pill good">FFmpeg local</span>
+      <span class="pill good">Storage userData</span>
+      <span class="pill pending">ComfyUI check</span>
+      <span class="pill">Workers idle</span>
+      <span class="pill pending">External QA pending</span>
+    </footer>
+  </div>
+</body>
+</html>

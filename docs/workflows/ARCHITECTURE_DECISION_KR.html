@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>아키텍처 선택 — 올인원 vs 엔진 분리</title>
+<style>
+  :root{
+    --bg:#0e1015; --panel:#161a23; --panel2:#1c2130; --line:#2a3042;
+    --txt:#e8ebf2; --sub:#9aa3b5; --dim:#6b7488;
+    --vio:#8b7cf6; --cyan:#4ec9e0; --green:#4ade80; --amber:#fbbf24; --rose:#fb7185;
+    --grad:linear-gradient(135deg,#8b7cf6,#4ec9e0);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:'Segoe UI','Malgun Gothic',sans-serif;line-height:1.6;padding-bottom:80px}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+  h1,h2,h3{font-weight:700;letter-spacing:-.02em}
+
+  header{padding:52px 0 30px;border-bottom:1px solid var(--line);background:radial-gradient(ellipse 80% 60% at 50% -20%,rgba(139,124,246,.18),transparent)}
+  .badge{display:inline-block;font-size:12px;padding:3px 12px;border:1px solid var(--vio);border-radius:99px;color:var(--vio);margin-bottom:14px;letter-spacing:.05em}
+  header h1{font-size:clamp(22px,3.6vw,34px);line-height:1.3}
+  header h1 em{font-style:normal;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .concl{margin-top:20px;background:linear-gradient(135deg,rgba(74,222,128,.12),rgba(78,201,224,.08));border:1px solid #1e6038;border-radius:14px;padding:18px 22px;font-size:15px}
+  .concl b{color:var(--green)}
+
+  section{margin-top:56px}
+  .sec-label{font-size:12px;color:var(--vio);letter-spacing:.15em;margin-bottom:6px}
+  section>.wrap>h2{font-size:23px;margin-bottom:6px}
+  .sec-desc{color:var(--sub);font-size:14px;margin-bottom:24px;max-width:840px}
+
+  /* ── A vs B 비교 ── */
+  .vs{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media(max-width:900px){.vs{grid-template-columns:1fr}}
+  .opt{border-radius:16px;padding:22px;position:relative;border:1px solid var(--line);background:var(--panel)}
+  .opt.a{border-top:4px solid var(--rose)}
+  .opt.b{border-top:4px solid var(--green);box-shadow:0 0 0 1px rgba(74,222,128,.25)}
+  .opt h3{font-size:17px;margin-bottom:2px}
+  .opt .tag{font-size:12px;margin-bottom:16px;display:block}
+  .opt.a .tag{color:var(--rose)} .opt.b .tag{color:var(--green)}
+  .pick{position:absolute;top:-13px;right:16px;font-size:11.5px;font-weight:700;padding:3px 14px;border-radius:99px}
+  .pick.no{background:#3a1520;color:var(--rose);border:1px solid #6b2437}
+  .pick.yes{background:#0f3520;color:var(--green);border:1px solid #1e6038}
+
+  /* 다이어그램 공통 */
+  .diagram{background:#10131b;border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px;min-height:330px}
+  .box{border-radius:10px;padding:10px 12px;font-size:12.5px;text-align:center;border:1px solid var(--line)}
+  .box b{display:block;font-size:13px}
+  .box small{color:var(--sub);font-size:11px}
+  .bx-edit{background:#2a2410;border-color:#6b5514} .bx-edit b{color:var(--amber)}
+  .bx-gen{background:#0f2b33;border-color:#1e5560} .bx-gen b{color:var(--cyan)}
+  .bx-ai{background:#241d45;border-color:#4a3f8a} .bx-ai b{color:var(--vio)}
+  .bx-up{background:#33121c;border-color:#6b2437} .bx-up b{color:var(--rose)}
+  .bx-db{background:#0f2b1a;border-color:#1e6038} .bx-db b{color:var(--green)}
+  .bx-ui{background:#1c2130} .bx-ui b{color:var(--txt)}
+
+  /* A: 올인원 */
+  .mono{border:2px dashed var(--rose);border-radius:14px;padding:14px;position:relative}
+  .mono::before{content:'Danbi Studio.exe — 하나의 배포 단위';position:absolute;top:-11px;left:14px;background:#10131b;padding:0 8px;font-size:11.5px;color:var(--rose)}
+  .mono .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+  .strain{margin-top:10px;font-size:11.5px;color:var(--rose);text-align:center}
+
+  /* B: 분리 */
+  .zoneB{border:2px solid var(--line);border-radius:14px;padding:14px;position:relative;margin-bottom:14px}
+  .zoneB.core{border-color:#6b5514}
+  .zoneB.core::before{content:'Danbi Studio — 안정 배포 단위 (엔진+편집기+얇은 UI)';position:absolute;top:-11px;left:14px;background:#10131b;padding:0 8px;font-size:11.5px;color:var(--amber)}
+  .zoneB.out{border-style:dashed;border-color:#4a3f8a}
+  .zoneB.out::before{content:'외부 — 빨리 변하는 것들 (실험 속도)';position:absolute;top:-11px;left:14px;background:#10131b;padding:0 8px;font-size:11.5px;color:var(--vio)}
+  .zoneB .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+  .bridge{display:flex;justify-content:center;gap:10px;margin:2px 0 14px;flex-wrap:wrap}
+  .bridge span{font-size:11px;color:var(--cyan);border:1px dashed #1e5560;border-radius:99px;padding:2px 12px;background:#0d1a1f}
+
+  .plist{list-style:none;margin-top:4px}
+  .plist li{font-size:13px;padding:4px 0 4px 24px;position:relative;color:var(--sub)}
+  .plist li b{color:var(--txt);font-weight:600}
+  .plist.good li::before{content:'✓';position:absolute;left:2px;color:var(--green);font-weight:700}
+  .plist.bad li::before{content:'✕';position:absolute;left:2px;color:var(--rose);font-weight:700}
+  .plist.mix li::before{content:'—';position:absolute;left:2px;color:var(--dim)}
+
+  /* ── 추천 배치도 ── */
+  .place{display:grid;grid-template-columns:1fr 56px 1fr;gap:0;align-items:stretch}
+  @media(max-width:900px){.place{grid-template-columns:1fr}.pipe{display:none}}
+  .zone{border-radius:16px;border:1px solid var(--line);padding:20px}
+  .zone h3{font-size:15px;margin-bottom:3px}
+  .zone .zd{font-size:12px;color:var(--sub);margin-bottom:14px}
+  .zone.in{border-top:4px solid var(--amber)}
+  .zone.outz{border-top:4px solid var(--vio)}
+  .item{display:flex;gap:10px;align-items:flex-start;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:8px}
+  .item .em{font-size:17px;line-height:1.4}
+  .item b{font-size:13.5px;display:block}
+  .item small{font-size:12px;color:var(--sub)}
+  .item.newi{border-left:3px solid var(--green)}
+  .pipe{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:8px}
+  .pipe span{writing-mode:vertical-rl;font-size:10.5px;color:var(--cyan);letter-spacing:.15em}
+  .pipe .ln{width:2px;flex:1;background:repeating-linear-gradient(to bottom,var(--cyan) 0 6px,transparent 6px 12px);opacity:.5}
+  .bnote{grid-column:1/-1;margin-top:14px;background:var(--panel);border:1px dashed var(--line);border-radius:12px;padding:12px 18px;font-size:13px;color:var(--sub)}
+  .bnote b{color:var(--cyan)}
+
+  /* ── 이유 카드 ── */
+  .why{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
+  .wcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
+  .wcard .no{font-size:11px;color:var(--vio);letter-spacing:.1em}
+  .wcard h4{font-size:15px;margin:4px 0 8px}
+  .wcard p{font-size:13px;color:var(--sub)}
+  .wcard .fact{display:inline-block;margin-top:10px;font-size:10.5px;color:var(--green);border:1px solid #1e6038;border-radius:99px;padding:1px 10px}
+
+  /* ── 타임라인 ── */
+  .steps{display:flex;flex-direction:column;gap:0}
+  .step{display:grid;grid-template-columns:120px 1fr;gap:18px;padding:16px 0;border-bottom:1px dashed var(--line)}
+  .step:last-child{border-bottom:none}
+  .step .pno{font-weight:700;color:var(--vio);font-size:14px}
+  .step h4{font-size:15px;margin-bottom:3px}
+  .step p{font-size:13px;color:var(--sub)}
+  .step .warn{color:var(--amber);font-size:12.5px}
+
+  .oneline{margin-top:56px;background:linear-gradient(135deg,rgba(139,124,246,.14),rgba(78,201,224,.10));border:1px solid #3d3567;border-radius:16px;padding:24px 28px;text-align:center;font-size:16px}
+  .oneline b{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  footer{margin-top:56px;padding-top:22px;border-top:1px solid var(--line);color:var(--dim);font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <span class="badge">2026-07-05 · 아키텍처 결정</span>
+    <h1>파이프라인 기능, <em>전부 Danbi 안에?</em> vs <em>엔진 분리?</em></h1>
+    <div class="concl">✅ <b>추천: B — Danbi Studio는 엔진+편집기로 유지, 워크플로우 두뇌는 밖에.</b><br>
+    단, 순수 분리가 아닌 <b>하이브리드</b>: 기존 API만 소비하는 얇은 UI(통합 빌더·대시보드)는 Danbi 안 페이지로, 파이프라인 로직·업로더는 밖으로.</div>
+  </div>
+</header>
+
+<!-- ══════════ A vs B ══════════ -->
+<section>
+  <div class="wrap">
+    <div class="sec-label">COMPARISON</div>
+    <h2>두 가지 선택지</h2>
+    <div class="vs">
+
+      <!-- A안 -->
+      <div class="opt a">
+        <span class="pick no">비추천</span>
+        <h3>A안 — 올인원 프로그램</h3>
+        <span class="tag">워크플로우 예정 기능을 전부 Danbi Studio 안에 내장</span>
+        <div class="diagram">
+          <div class="mono">
+            <div class="grid">
+              <div class="box bx-edit"><b>🎬 편집기+렌더</b><small>안정 코드 · QA 17게이트</small></div>
+              <div class="box bx-ai"><b>🧠 시나리오·대본·콘티</b><small>LLM 에이전트 (매달 변함)</small></div>
+              <div class="box bx-gen"><b>⚡ 이미지·I2V·TTS</b><small>모델 실험 코드</small></div>
+              <div class="box bx-up"><b>🚀 업로더</b><small>클라우드 SDK · 플랫폼 심사</small></div>
+              <div class="box bx-db"><b>📚 지식 DB</b><small>vault 로직 내장</small></div>
+              <div class="box bx-ui"><b>🖥️ 워크플로우 UI</b><small>전 단계 화면</small></div>
+            </div>
+            <div class="strain">⚠ 안정 코드와 실험 코드가 한 배포 단위 — 프롬프트 하나 고쳐도 편집기 QA를 다시 진다</div>
+          </div>
+        </div>
+        <ul class="plist good">
+          <li><b>장점</b> — 화면 전환 없는 단일 UX, exe 하나로 배포</li>
+        </ul>
+        <ul class="plist bad">
+          <li>릴리스 게이트(17/17)·인스톨러 스모크를 <b>실험 코드까지 전부</b> 통과해야 함 → 반복 속도 급락</li>
+          <li>업로드 SDK·클라우드 API가 들어와 <b>라이선스 가드레일·localhost 보안 경계</b>가 복잡해짐</li>
+          <li>업로더 오류·모델 실험 실패가 <b>편집기 안정성까지 흔듦</b></li>
+          <li>"백엔드 엔진" 포지셔닝이라는 <b>Danbi 자체 설계 의도와 충돌</b> [사실]</li>
+        </ul>
+      </div>
+
+      <!-- B안 -->
+      <div class="opt b">
+        <span class="pick yes">✓ 추천 (하이브리드)</span>
+        <h3>B안 — 엔진 분리 + 매핑</h3>
+        <span class="tag">Danbi = 백엔드 엔진 & 편집기, 워크플로우는 밖에서 API로 매핑</span>
+        <div class="diagram">
+          <div class="zoneB out">
+            <div class="grid">
+              <div class="box bx-ai"><b>🧠 단계 에이전트</b><small>Claude Code 스킬 + LM Studio</small></div>
+              <div class="box bx-db"><b>📚 Obsidian vault</b><small>지식 DB · 승인 현황판</small></div>
+              <div class="box bx-up"><b>🚀 danbi-uploader</b><small>별도 프로세스</small></div>
+              <div class="box bx-gen"><b>⚡ ComfyUI</b><small>이미지·I2V·BGM (이미 외부)</small></div>
+            </div>
+          </div>
+          <div class="bridge"><span>REST API + 토큰</span><span>headless CLI</span><span>잡 스냅샷 폴링</span><span>project JSON</span></div>
+          <div class="zoneB core">
+            <div class="grid">
+              <div class="box bx-edit"><b>🎬 편집기+렌더+큐</b><small>기존 그대로 · 검증 완료</small></div>
+              <div class="box bx-ui"><b>🖥️ /builder · 대시보드</b><small>기존 API 위 얇은 UI만 추가</small></div>
+            </div>
+          </div>
+        </div>
+        <ul class="plist good">
+          <li>실험 코드를 고쳐도 <b>Danbi 릴리스는 그대로</b> — 두 속도가 독립</li>
+          <li>라이선스·보안 경계 유지 (AGPL 참고·SDK·토큰이 Danbi 밖) [사실]</li>
+          <li>업로더가 죽어도 <b>편집기는 멀쩡</b> — 장애 격리</li>
+          <li>EditorProject JSON 단일 계약 = <b>이미 이 구조를 위해 만들어진 것</b> [사실]</li>
+        </ul>
+        <ul class="plist mix">
+          <li>대가: 프로세스 2~3개 관리, 초기엔 화면이 통합돼 있지 않음 → 아래 하이브리드로 보완</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ 추천 배치도 ══════════ -->
+<section>
+  <div class="wrap">
+    <div class="sec-label">RECOMMENDED LAYOUT</div>
+    <h2>추천 하이브리드 — 무엇을 어디에 두나</h2>
+    <p class="sec-desc">기준은 딱 하나: <b style="color:var(--txt)">"안정적인 것과 빨리 변하는 것을 한 배포 단위에 묶지 않는다."</b> 얇은 UI는 로직이 아니므로 Danbi 안에 둬도 이 원칙을 깨지 않는다.</p>
+
+    <div class="place">
+      <div class="zone in">
+        <h3>🏠 Danbi Studio 안</h3>
+        <div class="zd">안정 배포 단위 — 릴리스 게이트의 보호를 받는 것들</div>
+        <div class="item"><span class="em">🎬</span><div><b>편집·렌더·ComfyUI 큐 (기존)</b><small>이미 완성·검증됨. 손대지 않음</small></div></div>
+        <div class="item newi"><span class="em">🎛️</span><div><b>통합 빌더 /builder (신규 페이지)</b><small>콘티·이미지·영상 한 화면 검수 — 기존 API 위 얇은 UI</small></div></div>
+        <div class="item newi"><span class="em">📊</span><div><b>ComfyUI 대시보드 (신규 페이지)</b><small>readiness·진행률·갤러리 — 역시 API 소비자일 뿐</small></div></div>
+        <div class="item"><span class="em">🧩</span><div><b>콘티→프로젝트 컴파일러 (경계·도구 영역)</b><small>Danbi 스키마에 결합되므로 가까이, 단 앱 코어 밖</small></div></div>
+      </div>
+
+      <div class="pipe"><div class="ln"></div><span>API · CLI · VAULT</span><div class="ln"></div></div>
+
+      <div class="zone outz">
+        <h3>🌐 Danbi 밖</h3>
+        <div class="zd">실험 속도로 움직이는 것들 — 편집기 QA와 무관하게 매일 수정</div>
+        <div class="item"><span class="em">🧠</span><div><b>시나리오·대본·콘티 에이전트</b><small>Claude Code 스킬(danbi-*) + LM Studio — 화면이 아니라 프로세스</small></div></div>
+        <div class="item"><span class="em">📚</span><div><b>Obsidian vault (지식 DB)</b><small>Bases 테이블 뷰가 공짜 현황판·승인 UI 역할</small></div></div>
+        <div class="item"><span class="em">🔀</span><div><b>오케스트레이터</b><small>status 상태 머신 감시 → 단계 기동 → Danbi API 폴링</small></div></div>
+        <div class="item"><span class="em">🚀</span><div><b>danbi-uploader (별도 프로세스)</b><small>OAuth 토큰·플랫폼 심사·SDK를 Danbi에서 격리</small></div></div>
+      </div>
+
+      <div class="bnote">🔌 <b>연결은 4개의 공식 통로만</b>: ① REST API(<code>/api/editor/*</code> + 토큰) ② headless 렌더 CLI ③ 잡 스냅샷 폴링 ④ EditorProject JSON / vault 파일 — 전부 이미 존재하거나 문서화된 계약이라, 새 결합을 발명할 필요가 없다.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ 이유 ══════════ -->
+<section>
+  <div class="wrap">
+    <div class="sec-label">WHY B</div>
+    <h2>B를 추천하는 4가지 근거</h2>
+    <div class="why">
+      <div class="wcard"><span class="no">01</span><h4>Danbi가 원래 그렇게 설계됨</h4><p>초기 문서부터 "n8n/Make의 백엔드 엔진" 포지셔닝. UI·렌더러·자동화 API가 같은 project JSON을 해석하는 구조 자체가 "외부에서 조종당하기 위한" 설계.</p><span class="fact">문서 근거 [사실]</span></div>
+      <div class="wcard"><span class="no">02</span><h4>릴리스 무게가 다름</h4><p>편집기 = 17/17 게이트의 안정 소프트웨어. 파이프라인 = 모델이 몇 달 단위로 바뀌는 실험 코드. 묶으면 실험할 때마다 편집기 QA 비용을 낸다.</p><span class="fact">반복 속도</span></div>
+      <div class="wcard"><span class="no">03</span><h4>라이선스·보안 격리</h4><p>업로드 SDK, 클라우드 API, AGPL 참고 코드가 Danbi에 들어오면 엄격하게 관리해온 라이선스 가드레일과 localhost 경계가 무너지기 시작한다.</p><span class="fact">가드레일 [사실]</span></div>
+      <div class="wcard"><span class="no">04</span><h4>파이프라인 절반은 UI가 아님</h4><p>시나리오·대본·콘티는 LLM 에이전트 + vault 작업 — Electron 화면이 아니라 프로세스/스킬. 승인 UI는 Obsidian Bases가 이미 공짜로 제공.</p><span class="fact">스택 정합</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ 진행 조언 ══════════ -->
+<section>
+  <div class="wrap">
+    <div class="sec-label">TIMING</div>
+    <h2>"프론트엔드 워크플로우 툴"은 언제 만드나</h2>
+    <div class="steps">
+      <div class="step"><div class="pno">지금 (Phase 1)</div><div><h4>새 프론트엔드를 만들지 않는다</h4><p>Claude Code(실행) + Obsidian Bases(현황판·승인) + Danbi /builder(컷 검수)가 이미 워크플로우 프론트엔드다.</p><span class="warn">⚠ 전용 툴 개발은 그 자체로 몇 주짜리 — 정작 영상이 안 나온다</span></div></div>
+      <div class="step"><div class="pno">파이프라인 가동 후</div><div><h4>실제 병목을 확인한다</h4><p>"vault 폴더 열고 status 바꾸는 게 번거롭다"가 반복 확인되면 그때가 전용 프론트엔드의 착수 신호.</p></div></div>
+      <div class="step"><div class="pno">그 다음</div><div><h4>전용 웹 대시보드를 밖에 만든다</h4><p>Danbi API + vault를 매핑하는 워크플로우 툴. 이 시점에도 Danbi 본체는 한 줄도 안 고친다 — 그게 B 구조의 진짜 이점.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<div class="wrap">
+  <div class="oneline">한 줄 요약 — <b>"안정적인 것(편집기)과 빨리 변하는 것(파이프라인)을 한 배포 단위에 묶지 마라."</b><br>
+  <span style="font-size:13.5px;color:var(--sub)">얇은 UI(빌더·대시보드)만 Danbi 안에, 두뇌(에이전트·오케스트레이터·업로더)는 밖에서 API로 매핑.</span></div>
+</div>
+
+<footer>Danbi Studio 아키텍처 결정 시각화 · 2026-07-05 · 함께 보기: PIPELINE_VISUALIZATION_KR.html (전체 파이프라인 구조)</footer>
+
+</body>
+</html>

@@ -1,0 +1,439 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>ComfyUI Viewer OpenReel Extension 분석 보고서</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f1117;
+      --panel: #171a22;
+      --panel-2: #202432;
+      --text: #e7eaf0;
+      --muted: #a8b0c3;
+      --line: #34394a;
+      --accent: #19d3c5;
+      --warn: #f0bf4f;
+      --bad: #ff6b7a;
+      --good: #63d471;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", "Malgun Gothic", Arial, sans-serif;
+      line-height: 1.62;
+    }
+
+    main {
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 40px 32px 72px;
+    }
+
+    h1, h2, h3 {
+      line-height: 1.25;
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 32px;
+      margin-bottom: 10px;
+    }
+
+    h2 {
+      font-size: 22px;
+      margin-top: 34px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+    }
+
+    h3 {
+      font-size: 17px;
+      margin-top: 22px;
+      color: var(--accent);
+    }
+
+    p {
+      margin: 10px 0;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    code {
+      color: #d8e6ff;
+      background: #10131b;
+      border: 1px solid #2c3242;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 0.94em;
+    }
+
+    .meta,
+    .summary,
+    .callout {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px 18px;
+      margin: 18px 0;
+    }
+
+    .meta {
+      color: var(--muted);
+    }
+
+    .summary strong,
+    .good {
+      color: var(--good);
+    }
+
+    .warn {
+      color: var(--warn);
+    }
+
+    .bad {
+      color: var(--bad);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 22px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      background: var(--panel-2);
+      color: #ffffff;
+      font-weight: 650;
+    }
+
+    ul,
+    ol {
+      padding-left: 22px;
+    }
+
+    li {
+      margin: 6px 0;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>ComfyUI Viewer OpenReel Extension 분석 보고서</h1>
+    <div class="meta">
+      <p>작성일: 2026-06-19</p>
+      <p>분석 대상: <a href="https://github.com/WASasquatch/ComfyUI_Viewer_OpenReel_Extension">WASasquatch/ComfyUI_Viewer_OpenReel_Extension</a>, <a href="https://github.com/WASasquatch/openreel-video-comfyui">WASasquatch/openreel-video-comfyui</a></p>
+      <p>로컬 참조 경로: <code>E:\ai_tool\ComfyUI_Viewer_OpenReel_Extension-ref</code>, <code>E:\ai_tool\openreel-video-comfyui-ref</code></p>
+    </div>
+
+    <section class="summary">
+      <h2>결론</h2>
+      <p><strong>이 확장은 Danbi Studio가 참고할 가치가 크다.</strong> 특히 ComfyUI 결과물을 편집기로 넘기고, 편집 결과를 다시 ComfyUI 워크플로에 돌려보내는 연결 방식이 잘 설계되어 있다.</p>
+      <p>다만 그대로 이식할 대상은 아니다. 이 프로젝트는 ComfyUI 내부 확장과 브라우저 기반 OpenReel fork를 결합한 구조이며, Danbi의 Electron 패키징, <code>userData</code> 저장 규칙, Render Worker, AI Results, 플러그인 보안 모델과는 운영 조건이 다르다.</p>
+      <p>Danbi에는 전체 마이그레이션이 아니라 <span class="good">편집기 상호작용 모델</span>, <span class="good">AI 결과 번들 전달 방식</span>, <span class="good">안정적인 iframe/postMessage 브리지</span>, <span class="good">Send to Output 흐름</span>만 선별 적용하는 편이 맞다.</p>
+    </section>
+
+    <h2>1. 프로젝트의 실제 역할</h2>
+    <p><code>ComfyUI_Viewer_OpenReel_Extension</code>은 ComfyUI Viewer 안에 수정된 OpenReel Video 편집기를 삽입한다. ComfyUI 노드에서 생성된 이미지, 영상, 오디오를 OpenReel 타임라인으로 보내고, 사용자가 편집한 결과를 다시 ComfyUI 노드 출력으로 받을 수 있게 한다.</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>구성 요소</th>
+          <th>역할</th>
+          <th>Danbi 관점 평가</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>ComfyUI custom nodes</td>
+          <td>IMAGE, AUDIO, 외부 video를 OpenReel이 읽을 수 있는 tagged JSON 번들로 변환</td>
+          <td>AI Results 번들 모델로 참고 가능</td>
+        </tr>
+        <tr>
+          <td>Parser</td>
+          <td><code>$WAS_OPENREEL_VIDEO$</code>, <code>$WAS_OPENREEL_VIDEO_OUTPUT$</code> 태그를 감지하고 Content Viewer용 데이터로 변환</td>
+          <td>Danbi의 AI asset manifest 또는 job result manifest 설계 참고 가능</td>
+        </tr>
+        <tr>
+          <td>Viewer view</td>
+          <td>OpenReel 앱을 iframe으로 유지하고 postMessage로 새 미디어를 주입</td>
+          <td>iframe reload loop를 피하는 좋은 패턴</td>
+        </tr>
+        <tr>
+          <td>Routes</td>
+          <td>ComfyUI temp/input 파일 serving, backend FFmpeg render, export marker 저장</td>
+          <td>경로 보안 검사는 참고 가능하지만 Danbi는 <code>userData</code>와 Render Worker 경로를 써야 함</td>
+        </tr>
+        <tr>
+          <td>OpenReel fork</td>
+          <td>타임라인, 프리뷰, 인스펙터, keyframe, export UI를 포함한 브라우저 편집기</td>
+          <td>상호작용 품질 기준으로 참고 가치가 큼</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>2. ComfyUI 연동 흐름</h2>
+    <ol>
+      <li>ComfyUI 노드가 이미지 프레임, 오디오, 외부 영상을 temp session 폴더에 파일로 만든다.</li>
+      <li>노드는 <code>$WAS_OPENREEL_VIDEO$</code>가 붙은 JSON 문자열을 출력한다.</li>
+      <li>Parser가 tagged JSON을 감지하고, Viewer iframe이 사용할 video/audio/image URL을 만든다.</li>
+      <li>Viewer는 OpenReel 앱을 iframe으로 한 번 로드한 뒤, <code>postMessage</code>로 media bundle을 주입한다.</li>
+      <li>사용자는 OpenReel에서 편집하고 Browser FFmpeg.wasm 또는 Backend Native FFmpeg로 export한다.</li>
+      <li>OpenReel이 <code>openreel-video-output</code> 메시지를 Viewer에 보내고, Viewer는 output filename을 Content Viewer 상태에 기록한다.</li>
+      <li><code>CV OpenReel Unpack</code> 노드가 output filename을 받아 IMAGE frames, AUDIO, fps로 다시 풀어 downstream node에 넘긴다.</li>
+    </ol>
+
+    <div class="callout">
+      <p><strong>핵심 장점:</strong> ComfyUI 생성물과 편집기를 느슨하게 연결한다. 편집기는 독립 앱처럼 동작하고, ComfyUI 쪽은 tagged JSON과 output marker만 이해하면 된다.</p>
+      <p><strong>주의점:</strong> output marker 파일 방식은 단순하지만 전역 상태와 stale output 문제가 생길 수 있다. Danbi에서는 job id, asset id, render id를 가진 명시적 manifest가 필요하다.</p>
+    </div>
+
+    <h2>3. 노드별 기능 정리</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>노드</th>
+          <th>기능</th>
+          <th>Danbi에 대응되는 개념</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>CV OpenReel Bundle Video</code></td>
+          <td>ComfyUI IMAGE batch와 optional AUDIO를 임시 MP4로 묶는다.</td>
+          <td>AI video result를 timeline-ready media로 등록</td>
+        </tr>
+        <tr>
+          <td><code>CV OpenReel Bundle Images</code></td>
+          <td>IMAGE tensor들을 개별 PNG clip으로 만든다.</td>
+          <td>AI image batch를 media bin 또는 timeline clip set으로 등록</td>
+        </tr>
+        <tr>
+          <td><code>CV OpenReel Bundle Audio</code></td>
+          <td>AUDIO를 WAV로 저장해 편집기에 넘긴다.</td>
+          <td>AI/audio result asset 등록</td>
+        </tr>
+        <tr>
+          <td><code>CV OpenReel Bundle Combine</code></td>
+          <td>최대 4개의 bundle을 하나의 OpenReel import payload로 합친다.</td>
+          <td>Danbi AI Results multi-asset bundle</td>
+        </tr>
+        <tr>
+          <td><code>CV OpenReel Import Video</code></td>
+          <td>ComfyUI input 폴더의 외부 영상을 session asset으로 복사하고 metadata를 만든다.</td>
+          <td>media import 및 packaged app storage 정책과 연결 필요</td>
+        </tr>
+        <tr>
+          <td><code>CV OpenReel Unpack</code></td>
+          <td>OpenReel export 결과를 이미지 프레임, 오디오, fps로 다시 풀어낸다.</td>
+          <td>render result를 downstream automation/AI pipeline에 연결</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>4. 편집기 UI/UX 품질</h2>
+    <p>OpenReel fork는 단순 미리보기 창이 아니라 상용 편집기와 가까운 구조를 갖고 있다. 화면 구조는 좌측 Assets, 중앙 Preview, 우측 Inspector, 하단 Timeline이며, 사용자가 마우스로 직접 조작하는 편집 플로우가 구현되어 있다.</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>영역</th>
+          <th>확인된 상호작용</th>
+          <th>Danbi 개선 기준</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Timeline</td>
+          <td>clip drag move, edge trim, track reorder, box selection, playhead scrub, zoom, add track, split/delete, keyframe diamond drag</td>
+          <td>Danbi timeline은 이 수준의 직접 조작을 우선 목표로 삼아야 함</td>
+        </tr>
+        <tr>
+          <td>Clip</td>
+          <td>drag threshold, auto-scroll, track type validation, snapping, trim handle hover, video thumbnail, audio waveform</td>
+          <td>버튼 중심이 아니라 clip 자체가 조작 대상이어야 함</td>
+        </tr>
+        <tr>
+          <td>Preview</td>
+          <td>canvas/native video preview, transform/crop/motion path, fullscreen/maximize, live transform state</td>
+          <td>Program Monitor direct manipulation을 실제 기능으로 연결해야 함</td>
+        </tr>
+        <tr>
+          <td>Inspector</td>
+          <td>clip transform, video/audio/text/effects/keyframes/crop/speed/motion 등 속성 패널</td>
+          <td>선택 clip의 속성과 미리보기 조작이 양방향 동기화되어야 함</td>
+        </tr>
+        <tr>
+          <td>Export</td>
+          <td>Browser FFmpeg.wasm과 Backend Native FFmpeg 선택</td>
+          <td>Danbi는 Render Worker와 local preview/render path를 명확히 구분해야 함</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>5. 구현에서 특히 좋은 부분</h2>
+    <h3>5.1 iframe을 재로딩하지 않는 bridge</h3>
+    <p>Viewer는 OpenReel iframe URL을 session별로 계속 바꾸지 않고 안정적으로 유지한다. 새 media/session 정보는 <code>postMessage</code>로 보낸다. 이 방식은 iframe reload loop, editor state loss, embedded app 재초기화 문제를 줄인다.</p>
+
+    <h3>5.2 ComfyUI 결과를 편집 가능한 bundle로 만드는 방식</h3>
+    <p>영상, 이미지, 오디오를 각각 bundle node로 만들고 combine node로 합칠 수 있다. Danbi의 AI Results에서도 단일 파일이 아니라 여러 asset과 metadata를 가진 result bundle 개념이 필요하다.</p>
+
+    <h3>5.3 editor shell과 panel isolation</h3>
+    <p>OpenReel fork는 AssetsPanel, Preview, InspectorPanel, Timeline을 분리하고 각 panel에 error boundary를 둔다. Danbi처럼 AI/Automation/Render/Extension이 붙는 앱에서는 개별 panel 장애가 전체 editor를 멈추지 않도록 이 분리가 중요하다.</p>
+
+    <h3>5.4 직접 조작 중심의 timeline</h3>
+    <p>clip은 버튼으로만 조작하지 않는다. clip edge를 잡아 trim하고, clip body를 잡아 이동하고, ruler를 드래그해 scrub하고, keyframe diamond를 움직인다. 사용자가 기대하는 편집기 경험은 이쪽에 가깝다.</p>
+
+    <h2>6. Danbi에 그대로 복사하면 안 되는 부분</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>항목</th>
+          <th>문제</th>
+          <th>Danbi 방향</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Pause node 기반 workflow</td>
+          <td>사용자가 ComfyUI 실행을 멈추고 편집 후 cancel/rerun하는 흐름은 일반 사용자에게 어렵다.</td>
+          <td>AI job state와 result state를 명시적으로 보여준다.</td>
+        </tr>
+        <tr>
+          <td>global output marker</td>
+          <td>마지막 export 파일 marker는 stale result나 session 충돌 위험이 있다.</td>
+          <td>job id, asset id, render id가 있는 result manifest를 쓴다.</td>
+        </tr>
+        <tr>
+          <td>ComfyUI temp/input path 의존</td>
+          <td>Danbi packaged Electron에서는 Program Files 쓰기 금지와 <code>userData</code> 저장 규칙이 우선이다.</td>
+          <td>imports/cache/projects/renders/outputs/temp는 Electron <code>app.getPath("userData")</code> 아래로 고정한다.</td>
+        </tr>
+        <tr>
+          <td>JPEG frame upload render</td>
+          <td>간단하지만 품질 손실과 대용량 전송 비용이 생길 수 있다.</td>
+          <td>Render Worker가 timeline model과 source media를 직접 렌더하는 경로를 우선한다.</td>
+        </tr>
+        <tr>
+          <td>iframe sandbox만으로 plugin 격리</td>
+          <td>ComfyUI local extension 전제에서는 충분할 수 있으나 Danbi plugin 보안 모델로는 부족하다.</td>
+          <td>Danbi Extension/Plugin manifest, permission, IPC boundary를 유지한다.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>7. Danbi 적용 가능 영역</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>이식 가능 영역</th>
+          <th>적용 방식</th>
+          <th>우선순위</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Stable embedded editor bridge</td>
+          <td>AI Results 또는 plugin panel을 iframe/webview로 띄울 때 URL reload 대신 postMessage/IPC payload로 media를 전달</td>
+          <td>높음</td>
+        </tr>
+        <tr>
+          <td>AI result bundle</td>
+          <td>generated video/image/audio/text를 하나의 editable bundle로 묶고 timeline insert/replace/export candidate를 제공</td>
+          <td>높음</td>
+        </tr>
+        <tr>
+          <td>Direct timeline interaction</td>
+          <td>clip drag move, edge trim, playhead scrub, zoom, multi-select, drag/drop을 버튼보다 먼저 구현</td>
+          <td>높음</td>
+        </tr>
+        <tr>
+          <td>Program Monitor direct manipulation</td>
+          <td>선택 clip transform handles, move, scale, rotate, crop을 실제 clip state와 연결</td>
+          <td>높음</td>
+        </tr>
+        <tr>
+          <td>Send to Output semantics</td>
+          <td>편집 결과를 AI workflow output 또는 render queue candidate로 명시적으로 보냄</td>
+          <td>중간</td>
+        </tr>
+        <tr>
+          <td>Browser/backend render 선택</td>
+          <td>Danbi에서는 preview render와 Render Worker render를 분리해 사용자에게 상태를 명확히 표시</td>
+          <td>중간</td>
+        </tr>
+        <tr>
+          <td>Panel error boundary</td>
+          <td>Editor/AI/Automation/Render/Extension panel 장애를 분리해 editor 사용성을 유지</td>
+          <td>중간</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>8. Danbi 기존 아키텍처와 충돌하지 않게 적용하는 원칙</h2>
+    <ul>
+      <li>ComfyUI integration은 제거하거나 optional로 낮추지 않는다. Pending, generating, generated, failed 상태를 명확히 노출한다.</li>
+      <li>AI Results workflow는 OpenReel식 bundle 전달을 참고하되 Danbi job/result manifest로 저장한다.</li>
+      <li>Render Worker, Render Worker Daemon, Fleet Discovery, Headless Render는 유지한다. OpenReel backend render는 참고 구현일 뿐 대체 대상이 아니다.</li>
+      <li>Extension/Plugin system은 유지한다. iframe bridge 패턴은 plugin runtime 내부의 한 옵션으로만 검토한다.</li>
+      <li>Export validation semantics는 유지한다. ComfyUI asset이 export를 막아야 하는 상태라면 기존 blocker 의미를 바꾸지 않는다.</li>
+      <li>Packaged Electron에서는 모든 import/cache/render/output/temp 경로가 <code>userData</code> 아래에 있어야 한다.</li>
+    </ul>
+
+    <h2>9. Danbi 편집기 개선에 대한 판단</h2>
+    <p>현재 Danbi 편집기 개선의 핵심은 화면 모양이 아니라 <strong>조작 대상과 상태 연결</strong>이다. OpenReel fork가 잘 보이는 이유는 패널 배치 때문만이 아니라 사용자가 clip, playhead, preview object, keyframe을 직접 잡고 움직일 수 있기 때문이다.</p>
+    <p>따라서 Danbi의 다음 구현 순서는 다음과 같이 잡는 것이 맞다.</p>
+    <ol>
+      <li>media bin에서 timeline으로 drag/drop 삽입</li>
+      <li>timeline clip body drag move와 edge trim</li>
+      <li>playhead drag scrub과 preview 즉시 갱신</li>
+      <li>program monitor transform handles를 실제 clip transform state와 연결</li>
+      <li>inspector transform 값과 program monitor 조작의 양방향 동기화</li>
+      <li>AI Results에서 generated asset bundle을 timeline에 insert/replace하는 흐름</li>
+      <li>Render Worker 경로로 export preflight와 render queue 연결</li>
+    </ol>
+
+    <h2>10. 종합 권고</h2>
+    <div class="callout">
+      <p><strong>OpenReel 전체를 Danbi 편집기로 교체하는 것은 권장하지 않는다.</strong> Danbi는 ComfyUI, Automation, Render Worker, Extension/Plugin, installed-app storage 규칙을 가진 오케스트레이션 플랫폼이다. OpenReel extension은 이 중 편집기 interaction과 ComfyUI bridge의 좋은 참고 사례다.</p>
+      <p>실제 적용은 “OpenReel을 가져온다”가 아니라 “OpenReel에서 검증된 편집기 조작 패턴과 AI 결과 전달 패턴을 Danbi의 기존 구조에 맞게 흡수한다”가 되어야 한다.</p>
+    </div>
+
+    <h2>11. 참조 파일</h2>
+    <ul>
+      <li><code>ComfyUI_Viewer_OpenReel_Extension-ref\nodes\openreel_video_nodes.py</code></li>
+      <li><code>ComfyUI_Viewer_OpenReel_Extension-ref\routes\openreel_video_routes.py</code></li>
+      <li><code>ComfyUI_Viewer_OpenReel_Extension-ref\modules\parsers\openreel_video_parser.py</code></li>
+      <li><code>ComfyUI_Viewer_OpenReel_Extension-ref\web\views\openreel_video.js</code></li>
+      <li><code>openreel-video-comfyui-ref\COMFYUI_CHANGES.md</code></li>
+      <li><code>openreel-video-comfyui-ref\apps\web\src\components\editor\EditorInterface.tsx</code></li>
+      <li><code>openreel-video-comfyui-ref\apps\web\src\components\editor\Timeline.tsx</code></li>
+      <li><code>openreel-video-comfyui-ref\apps\web\src\components\editor\timeline\ClipComponent.tsx</code></li>
+      <li><code>openreel-video-comfyui-ref\apps\web\src\components\editor\Preview.tsx</code></li>
+      <li><code>openreel-video-comfyui-ref\apps\web\src\components\editor\InspectorPanel.tsx</code></li>
+      <li><code>openreel-video-comfyui-ref\apps\web\src\components\editor\Toolbar.tsx</code></li>
+      <li><code>openreel-video-comfyui-ref\packages\core\src\export\backend-export-engine.ts</code></li>
+    </ul>
+  </main>
+</body>
+</html>

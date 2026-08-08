@@ -13,6 +13,8 @@ Danbi Studio 편집기의 "완성"을 명확히 정의한다. 기능을 끝없�
 - 그래도 영상 편집기로서의 기본 조작, 미리보기, 타임라인, 자막, 오디오, 효과, 내보내기 품질은 경쟁 제품급이어야 한다.
 - ComfyUI, 자동화, extension API는 기본 편집기를 대체하지 않고 완성된 편집기 위에 붙는 확장 레이어다.
 
+기본골격 완료 기준은 이 완성품 기준보다 낮은 별도 단계로 관리한다. 현재 판단근거와 local 기준의 기본골격 판정은 `docs/EDITOR_BASE_SKELETON_COMPLETION_DEFINITION_KR.md`를 따른다. 이 참조는 외부 Fresh Windows QA, final release approval, 상용 편집기 체감 품질 판단을 완료로 대체하지 않는다.
+
 ## 2. 벤치마크 기준
 
 2026-06-14 기준 확인한 공식/1차 자료:

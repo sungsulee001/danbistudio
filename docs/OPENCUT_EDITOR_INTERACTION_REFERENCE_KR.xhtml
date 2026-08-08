@@ -1,0 +1,485 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="ko">
+<head>
+  <title>OpenCut Editor Interaction Reference</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style type="text/css">
+    :root {
+      color-scheme: dark;
+      --bg: #101010;
+      --panel: #1a1a1a;
+      --panel2: #242424;
+      --line: #343434;
+      --text: #eeeeee;
+      --muted: #b8b8b8;
+      --dim: #858585;
+      --green: #42d392;
+      --amber: #e8b84e;
+      --red: #ff6b6b;
+      --blue: #52a8ff;
+      --violet: #9b8cff;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.55;
+    }
+
+    main {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 32px 24px 60px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      line-height: 1.2;
+    }
+
+    h2 {
+      margin: 34px 0 12px;
+      font-size: 20px;
+    }
+
+    h3 {
+      margin: 22px 0 8px;
+      font-size: 16px;
+      color: #ffffff;
+    }
+
+    p, li {
+      color: var(--muted);
+    }
+
+    p {
+      margin: 8px 0;
+    }
+
+    a {
+      color: var(--blue);
+    }
+
+    code {
+      color: #e6edf3;
+      background: #0b0b0b;
+      border: 1px solid #2e2e2e;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.92em;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 24px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+    }
+
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+      text-align: left;
+      font-size: 14px;
+    }
+
+    th {
+      background: var(--panel2);
+      color: #ffffff;
+      white-space: nowrap;
+    }
+
+    ul {
+      margin: 8px 0 18px;
+      padding-left: 22px;
+    }
+
+    .meta {
+      color: var(--dim);
+      margin-bottom: 20px;
+    }
+
+    .notice {
+      border: 1px solid var(--line);
+      background: #151515;
+      padding: 14px 16px;
+      border-radius: 8px;
+      margin: 18px 0 24px;
+    }
+
+    .ok { color: var(--green); font-weight: 700; }
+    .warn { color: var(--amber); font-weight: 700; }
+    .stop { color: var(--red); font-weight: 700; }
+    .ref { color: var(--violet); font-weight: 700; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>OpenCut Editor Interaction Reference</h1>
+    <p class="meta">작성일: 2026-06-19 | 목적: OpenCut을 의존 대상이 아니라 Editor Interaction Reference로 분석하고 Danbi와 비교한다.</p>
+
+    <section class="notice">
+      <p><span class="stop">금지 범위:</span> OpenCut 전체 migration, OpenCut을 런타임 의존성으로 추가, OpenCut 데이터 모델로 Danbi 프로젝트를 교체, OpenCut 렌더러로 Danbi Render Worker/Daemon/Headless Render를 교체하는 작업은 금지한다.</p>
+      <p><span class="ok">허용 범위:</span> 타임라인, 클립, 모니터, 드래그/드롭, 트림, 선택 상호작용에서 재사용 가능한 컨트롤러 패턴과 순수 계산 로직만 Danbi 구조에 맞게 재구현한다.</p>
+    </section>
+
+    <h2>1. 참조 소스</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>구분</th>
+          <th>참조 위치</th>
+          <th>판단</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>OpenCut current</td>
+          <td><a href="https://github.com/opencut-app/opencut">https://github.com/opencut-app/opencut</a><br /><code>E:\ai_tool\opencut-ref</code></td>
+          <td>README 기준으로 rewrite 진행 중이다. 향후 Editor API, plugin-first, headless, scripting 방향은 참고하되 현재 interaction 구현 참고 자료로는 제한적이다.</td>
+        </tr>
+        <tr>
+          <td>OpenCut classic</td>
+          <td><a href="https://github.com/opencut-app/opencut-classic">https://github.com/opencut-app/opencut-classic</a><br /><code>E:\ai_tool\opencut-classic-ref</code></td>
+          <td>현재 사용 가능한 editor interaction 구현의 주 참조 대상이다. MIT 라이선스 파일은 있으나 Danbi 반영 시 source register/NOTICE 검토가 선행되어야 한다.</td>
+        </tr>
+        <tr>
+          <td>Danbi current</td>
+          <td><code>E:\ai_tool\Danbi_Studio</code></td>
+          <td>이미 타임라인 이동/트림 helper와 Program Monitor overlay가 존재한다. 문제는 UI 배치보다 마우스 세션, hit-test, preview/commit 흐름이 컴포넌트에 흩어져 있다는 점이다.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>2. 7개 상호작용 비교</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>항목</th>
+          <th>OpenCut classic 구조</th>
+          <th>Danbi 현재 구조</th>
+          <th>차이</th>
+          <th>이식 가능 영역</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Timeline interaction</td>
+          <td><code>timeline/components/index.tsx</code>가 zoom, resize, seek, drag/drop, playhead, box select, snap indicator를 조립한다. 실제 동작은 <code>ZoomController</code>, <code>SeekController</code>, <code>PlayheadController</code>, <code>ElementInteractionController</code>, <code>ResizeController</code>로 분리된다.</td>
+          <td><code>timeline-track-row.tsx</code>와 page-level handler가 lane 이벤트, overlay, drop preview, track header UI를 함께 다룬다. <code>timeline-edit-preview-helpers.ts</code>에 순수 계산 helper는 있으나 pointer session 단위 컨트롤러는 약하다.</td>
+          <td>OpenCut은 timeline surface와 gesture controller의 책임이 분리되어 있다. Danbi는 계산 로직은 있으나 이벤트 흐름이 UI 컴포넌트에 더 많이 묶여 있다.</td>
+          <td><span class="ok">가능:</span> pointer session controller, wheel/zoom controller, playhead scrub controller, snap indicator 흐름.<br /><span class="stop">금지:</span> OpenCut timeline DOM 전체 교체.</td>
+        </tr>
+        <tr>
+          <td>Clip interaction</td>
+          <td><code>ElementInteractionController</code>가 idle/pending/dragging 세션을 갖고 drag threshold 이후 이동을 시작한다. 선택 상태, drop target, frame snap, group move resolve가 controller 안에서 연결된다.</td>
+          <td><code>resolveTimelineClipDragPreviewState</code>, <code>resolveTimelineClipDragCommitState</code> 등은 존재한다. 하지만 사용자가 직접 드래그하는 감각을 만드는 pointer capture, threshold, preview discard/commit 흐름은 페이지 구현에 흩어져 있다.</td>
+          <td>Danbi는 핵심 계산은 보유했지만 “클릭 - 대기 - 드래그 - preview - commit/cancel” 상태 머신이 OpenCut보다 덜 명확하다.</td>
+          <td><span class="ok">가능:</span> idle/pending/dragging 세션 모델, 선택 클립이 아니면 단일 클립만 이동하는 규칙, move preview와 commit 분리.</td>
+        </tr>
+        <tr>
+          <td>Monitor interaction</td>
+          <td><code>PreviewInteractionController</code>와 <code>TransformHandleController</code>가 preview viewport, input, scene, selection, timeline adapter를 주입받아 hit-test, move, scale, rotate를 처리한다. overlay는 렌더 결과 위에 별도 레이어로 존재한다.</td>
+          <td><code>program-transform-crop-overlays.tsx</code>의 <code>ProgramTransformOverlay</code>, <code>ProgramCropOverlay</code>, <code>ProgramLayerSelectionTargets</code>가 직접 pointer 이벤트를 처리한다. <code>buildProgramLayerBox</code>는 있으나 텍스트/미디어 bounds 정확도와 hit-test 추상화가 제한적이다.</td>
+          <td>OpenCut은 Program Monitor 조작을 controller와 bounds/hit-test 모듈로 분리한다. Danbi는 화면에 핸들은 있으나 상호작용 책임이 overlay 컴포넌트에 집중되어 있다.</td>
+          <td><span class="ok">가능:</span> monitor hit-test/bounds 모듈, transform handle controller, move/scale/rotate preview/commit 분리.<br /><span class="stop">금지:</span> OpenCut compositor/canvas renderer로 즉시 교체.</td>
+        </tr>
+        <tr>
+          <td>Preview architecture</td>
+          <td><code>PreviewCanvas</code>가 scene build와 compositor output canvas를 연결하고, interaction overlay는 렌더 canvas 위에서 독립적으로 작동한다. preview update는 <code>previewElements</code>, <code>discardPreview</code>, <code>commitPreview</code>로 구분된다.</td>
+          <td><code>program-composite-preview.tsx</code>는 DOM 기반 composite stack이다. <code>usePreviewWorkerController</code>는 preview frame/cache 쪽 역할을 갖지만 전체 scene render tree를 단일 compositor로 통합하지는 않는다.</td>
+          <td>OpenCut은 “렌더 결과”와 “상호작용 overlay”의 경계가 더 명확하다. Danbi는 DOM layer, diagnostics, overlay, control bar가 한 컴포넌트 주변에 밀집해 있다.</td>
+          <td><span class="ok">가능:</span> preview/commit/discard 상태 API, overlay 경계 정리, viewport coordinate 변환 모듈.<br /><span class="warn">주의:</span> Danbi Render Worker와 Electron/FFmpeg export 구조는 유지해야 한다.</td>
+        </tr>
+        <tr>
+          <td>Drag/drop model</td>
+          <td><code>DragDropController</code>가 internal drag source와 external file drop을 분리한다. <code>computeDropTarget</code>, <code>resolveTrackPlacement</code>, command execution을 통해 실제 mutation을 한 곳으로 모은다.</td>
+          <td>Danbi도 media import, clip drop preview, new track drop helper가 있다. 다만 native HTML drag와 pointer drag가 화면마다 다르게 연결되어 사용자가 “미디어를 타임라인에 끌어놓는” 경로가 일관되지 않다.</td>
+          <td>OpenCut은 drag source, drop target, placement, command commit 경계가 선명하다. Danbi는 계산 helper는 있으나 drag source registry와 drop controller 추상화가 부족하다.</td>
+          <td><span class="ok">가능:</span> central drag source store, external file/internal asset 구분, drop target resolver, command 기반 commit.</td>
+        </tr>
+        <tr>
+          <td>Trim model</td>
+          <td><code>ResizeController</code>가 left/right edge resize 세션을 관리한다. <code>group-resize/compute-resize.ts</code>는 최소 duration, neighbor bounds, source duration, retime, snap delta를 순수 계산으로 처리한다.</td>
+          <td><code>resolveTimelineClipTrimPreview</code>, <code>resolveTimelineClipSlipPreview</code>, <code>resolveTimelineClipSlidePreview</code>, <code>resolveTimelineClipRollTrimPreview</code>가 존재한다. 시각 피드백과 pointer capture는 controller 형태보다 UI 이벤트에 가깝다.</td>
+          <td>Danbi는 트림 종류별 계산은 보유하지만 edge drag session과 preview/commit/cancel 모델을 더 명확히 묶어야 한다.</td>
+          <td><span class="ok">가능:</span> ResizeController 패턴, resize member 구성, drag 중 preview update, mouseup commit, escape/cancel discard.</td>
+        </tr>
+        <tr>
+          <td>Selection model</td>
+          <td><code>SelectionManager</code>가 elements, keyframes, mask points의 active selection kind를 중앙에서 관리한다. <code>useBoxSelect</code>는 rectangle hit-test를 외부 주입받는 generic hook이다.</td>
+          <td>Danbi는 selected clip/layer/effect 상태가 page, monitor, inspector, timeline 동작에 분산되어 있다. Box select와 multi-select 경험은 화면별로 체감이 다르다.</td>
+          <td>OpenCut은 선택 상태의 충돌을 중앙에서 정리한다. Danbi는 “현재 무엇이 선택되었고 어떤 조작이 가능한지”가 Inspector/Monitor/Timeline 사이에서 더 느슨하다.</td>
+          <td><span class="ok">가능:</span> active selection kind, selection snapshot/restore, generic box select resolver, click/toggle/add/remove semantics.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3. 코드 이식 가능 영역만 추출</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>우선순위</th>
+          <th>이식 후보</th>
+          <th>OpenCut 참조 파일</th>
+          <th>Danbi 대상</th>
+          <th>적용 방식</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>P1</td>
+          <td>Timeline pointer session controller</td>
+          <td><code>apps/web/src/timeline/controllers/element-interaction-controller.ts</code></td>
+          <td><code>src/electron/renderer/timeline-edit-preview-helpers.ts</code>, timeline page handlers</td>
+          <td>Danbi helper를 그대로 쓰되 이벤트 흐름을 idle/pending/dragging controller로 감싼다.</td>
+        </tr>
+        <tr>
+          <td>P1</td>
+          <td>Clip drag/drop controller</td>
+          <td><code>apps/web/src/timeline/controllers/drag-drop-controller.ts</code>, <code>timeline/placement/resolve.ts</code></td>
+          <td>media bin drag, timeline drop, import-to-timeline flow</td>
+          <td>central drag source와 drop target resolver를 Danbi native 타입으로 만든다.</td>
+        </tr>
+        <tr>
+          <td>P1</td>
+          <td>Trim/resize session controller</td>
+          <td><code>apps/web/src/timeline/controllers/resize-controller.ts</code>, <code>timeline/group-resize/compute-resize.ts</code></td>
+          <td><code>resolveTimelineClipTrimPreview</code> 계열 helper</td>
+          <td>edge drag 중 preview update, mouseup commit, cancel discard를 controller로 분리한다.</td>
+        </tr>
+        <tr>
+          <td>P1</td>
+          <td>Monitor hit-test와 transform handle controller</td>
+          <td><code>apps/web/src/preview/controllers/preview-interaction-controller.ts</code>, <code>preview/controllers/transform-handle-controller.ts</code>, <code>preview/element-bounds.ts</code>, <code>preview/hit-test.ts</code></td>
+          <td><code>program-transform-crop-overlays.tsx</code>, <code>program-composite-preview.tsx</code></td>
+          <td>현재 DOM overlay는 유지하고 bounds/hit-test/gesture state만 분리한다.</td>
+        </tr>
+        <tr>
+          <td>P2</td>
+          <td>Preview update transaction</td>
+          <td><code>previewElements</code>, <code>discardPreview</code>, <code>commitPreview</code> 호출 흐름</td>
+          <td>timeline preview edit, monitor transform, crop interaction</td>
+          <td>드래그 중 임시 상태와 최종 command commit을 분리한다.</td>
+        </tr>
+        <tr>
+          <td>P2</td>
+          <td>Central selection manager</td>
+          <td><code>apps/web/src/core/managers/selection-manager.ts</code>, <code>selection/hooks/use-box-select.ts</code></td>
+          <td>timeline selection, monitor layer selection, inspector active target</td>
+          <td>elements/layers/text/effects 선택 충돌을 중앙에서 정리한다.</td>
+        </tr>
+        <tr>
+          <td>P2</td>
+          <td>Viewport coordinate conversion</td>
+          <td><code>preview/preview-coords.ts</code>, <code>preview/zoom.ts</code></td>
+          <td>Program Monitor zoom, fullscreen, aspect ratio, transform handles</td>
+          <td>screen/client 좌표를 stage/canvas/media 좌표로 변환하는 Danbi 전용 모듈을 만든다.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>4. 이식 금지 또는 비권장 영역</h2>
+    <ul>
+      <li><span class="stop">OpenCut 전체 migration 금지:</span> Danbi 프로젝트 모델, Electron main/preload, Render Worker, Render Worker Daemon, Fleet Discovery, Headless Render, Extension/Plugin 시스템을 OpenCut 구조로 교체하지 않는다.</li>
+      <li><span class="stop">Compositor 교체 금지:</span> OpenCut의 canvas/compositor 구조는 참고 가능하지만 Danbi의 FFmpeg/Electron export, render worker orchestration을 우회하지 않는다.</li>
+      <li><span class="stop">UI 복붙 금지:</span> CapCut/OpenCut처럼 보이게 하는 목적의 surface copy가 아니라 직접 조작 가능한 상호작용 모델만 가져온다.</li>
+      <li><span class="warn">라이선스 확인 필요:</span> OpenCut classic은 MIT 라이선스 파일이 있으나, 실제 코드 복사/수정 복사 시 Danbi의 third-party source register와 NOTICE 갱신이 필요하다.</li>
+      <li><span class="warn">데이터 모델 변환 주의:</span> OpenCut의 scene tracks/elements를 Danbi의 project/timeline clip schema로 그대로 바꾸지 않는다. resolver의 입력/출력만 Danbi 타입에 맞춘다.</li>
+    </ul>
+
+    <h2>5. Danbi 적용 설계안</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>단계</th>
+          <th>목표</th>
+          <th>작업 범위</th>
+          <th>검증 범위</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>Interaction controller 뼈대</td>
+          <td>timeline clip move/trim, monitor transform에 공통 session 타입을 도입한다. 기존 helper와 command는 유지한다.</td>
+          <td>controller 단위 unit test만 실행한다.</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>Timeline direct manipulation</td>
+          <td>clip drag move, edge drag trim, scrub, zoom을 controller에 연결한다. 기존 track row UI는 최소 변경한다.</td>
+          <td>timeline interaction 관련 test와 Electron smoke 중 편집 화면만 확인한다.</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>Program Monitor direct manipulation</td>
+          <td>bounds/hit-test/transform handle controller를 분리한다. DOM overlay와 preview worker 구조는 유지한다.</td>
+          <td>monitor transform/crop 관련 unit test와 수동 포인터 확인만 수행한다.</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>Selection 통합</td>
+          <td>timeline clip, program layer, inspector target의 active selection kind를 정리한다.</td>
+          <td>selection manager와 affected UI path만 확인한다.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>6. 2차 검토: 실제 조작 관점 추가 비교</h2>
+    <p>1차 비교는 큰 구조를 중심으로 정리했다. 2차 검토에서는 사용자가 실제로 마우스로 조작할 때 끊기는 지점을 기준으로 다시 비교한다.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>추가 비교 축</th>
+          <th>OpenCut classic 관찰</th>
+          <th>Danbi 현재 관찰</th>
+          <th>사용자 체감 차이</th>
+          <th>Danbi에 가져올 수 있는 코드 단위</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>이벤트 소유권</td>
+          <td><code>usePreviewInteraction</code>, <code>useTransformHandles</code>, <code>useTimelineDragDrop</code>, <code>useTimelineResize</code>가 controller를 생성하고 React 컴포넌트는 이벤트를 전달한다. hook은 editor state adapter만 제공한다.</td>
+          <td><code>page.tsx</code>가 많은 timeline callback을 조립하고, <code>program-transform-crop-overlays.tsx</code>는 overlay 내부에서 <code>window.addEventListener</code>로 pointermove/pointerup을 직접 붙인다.</td>
+          <td>Danbi는 기능 함수가 있어도 조작 흐름이 화면 단위로 흩어져 있어, 사용자가 드래그를 시작했을 때 어떤 상태가 active인지 추적하기 어렵다.</td>
+          <td><span class="ok">가능:</span> Danbi 전용 <code>TimelineInteractionController</code>, <code>ProgramMonitorInteractionController</code>를 만들고 기존 helper를 adapter로 연결한다.</td>
+        </tr>
+        <tr>
+          <td>드래그 취소/완료 경계</td>
+          <td>OpenCut controller는 active 상태일 때 canceller를 등록하고, 드래그 중에는 preview를 만들며 pointer up에서 commit 또는 discard를 결정한다.</td>
+          <td>Danbi도 motion/crop draft와 timeline preview helper가 있으나, cancel/commit/discard 규칙이 timeline, monitor, crop, transform마다 별개로 보인다.</td>
+          <td>핸들은 보여도 드래그가 실패하거나 중간 상태가 남는 것처럼 느껴질 수 있다. 특히 모니터 조작과 inspector 값 반영 사이가 한 흐름으로 보이지 않는다.</td>
+          <td><span class="ok">가능:</span> 공통 <code>beginPreview</code>, <code>updatePreview</code>, <code>commitPreview</code>, <code>discardPreview</code> 계약을 Danbi 타입으로 정의한다.</td>
+        </tr>
+        <tr>
+          <td>Monitor hit-test와 z-order</td>
+          <td><code>PreviewInteractionController</code>는 현재 시간의 visible element bounds를 계산하고 topmost hit와 selected hit를 구분한다. transform handle controller도 selected bounds를 별도로 계산한다.</td>
+          <td><code>ProgramLayerSelectionTargets</code>와 <code>buildProgramLayerBox</code>가 있지만 text/media bounds가 간소화되어 있고, 선택 target과 transform overlay의 hit-test 책임이 분리된 모듈로 고정되어 있지 않다.</td>
+          <td>영상 위를 클릭했을 때 선택, 이동, 크기 조절, 회전으로 이어지는 직접 조작 감각이 약하다. 화면에 박스가 있어도 실제 clip/layer 선택과 연결이 느슨하게 느껴진다.</td>
+          <td><span class="ok">가능:</span> <code>program-monitor-bounds</code>, <code>program-monitor-hit-test</code>, <code>resolvePreferredProgramHit</code> 순수 모듈.</td>
+        </tr>
+        <tr>
+          <td>미디어 drag/drop</td>
+          <td><code>DragDropController</code>가 internal drag source와 external file drop을 분리하고, drop target 계산 뒤 command로 commit한다.</td>
+          <td>Danbi는 import와 drop preview 계산은 있으나, media grid에서 timeline까지 이어지는 drag source registry가 OpenCut처럼 중앙화되어 있지 않다.</td>
+          <td>사용자는 “파일은 들어왔지만 타임라인에 드래그로 올릴 수 없다” 또는 “어디로 놓아야 하는지 모르겠다”고 느낀다.</td>
+          <td><span class="ok">가능:</span> <code>EditorDragSource</code> store, <code>resolveAssetDropTarget</code>, <code>commitAssetDropCommand</code>.</td>
+        </tr>
+        <tr>
+          <td>Timeline trim 노출</td>
+          <td><code>ResizeController</code>는 edge handle에서 시작해 selected group resize, snap point, neighbor bounds, source duration clamp를 하나의 resize session으로 처리한다.</td>
+          <td>Danbi에는 <code>resolveTimelineClipTrimPreview</code>, slip, slide, roll trim helper가 있으나 edge drag interaction의 controller 경계가 약하다.</td>
+          <td>트림 기능이 코드상 존재해도 사용자는 clip edge를 잡아 늘리는 편집기식 조작으로 체감하지 못할 수 있다.</td>
+          <td><span class="ok">가능:</span> 기존 trim helper를 유지한 채 edge hit zone, resize session, snap feedback, commit plan만 묶는다.</td>
+        </tr>
+        <tr>
+          <td>Playhead/seek/scrub</td>
+          <td><code>SeekController</code>, <code>PlayheadController</code>, <code>ZoomController</code>가 scroll, zoom, playhead position, seek를 분리해서 유지한다.</td>
+          <td>Danbi는 <code>timeline-viewport-helpers</code>와 ruler/panel 조합이 있으나, timeline scrub과 preview update의 체감 연결을 더 좁게 만들어야 한다.</td>
+          <td>타임라인을 문질렀을 때 preview가 즉시 따라오는 편집기 감각이 약하면 전체 앱이 느리거나 껍데기처럼 보인다.</td>
+          <td><span class="ok">가능:</span> scrub session 중 rAF 기반 preview update, final seek commit, zoom anchor 보존 로직.</td>
+        </tr>
+        <tr>
+          <td>진단 overlay와 편집 surface</td>
+          <td>OpenCut은 preview render canvas와 interaction overlay의 역할을 나눈다. 상호작용 overlay는 선택/조작에 필요한 정보만 유지한다.</td>
+          <td>Danbi의 <code>ProgramCompositePreview</code>는 diagnostics, video scope, audio analyzer, meter, transform/crop overlay, control bar가 한 영역에 밀집한다. 코드상 diagnostics 기본값은 false지만 켜진 상태에서는 편집 화면을 크게 가릴 수 있다.</td>
+          <td>사용자는 프리뷰가 아니라 분석/상태 텍스트를 편집하고 있는 느낌을 받는다. CapCut식 편집 surface와 달리 작업 대상이 시각적으로 선명하지 않다.</td>
+          <td><span class="ok">가능:</span> diagnostics를 developer/inspect mode로 격리하고, 기본 program monitor에는 선택 박스, transform handle, playhead/time만 남기는 정책.</td>
+        </tr>
+        <tr>
+          <td>선택 상태의 단일 출처</td>
+          <td><code>SelectionManager</code>가 elements, keyframes, mask points 중 active selection kind를 정리한다. box select도 generic resolver로 동작한다.</td>
+          <td>Danbi는 timeline selected clips, program selected layer, inspector active panel, ComfyUI binding 등 선택 결과가 여러 UI에 흩어진다.</td>
+          <td>무엇을 선택해야 오른쪽 패널이 바뀌고, 무엇을 선택해야 프리뷰 핸들이 움직이는지 사용자가 예측하기 어렵다.</td>
+          <td><span class="ok">가능:</span> Danbi 전용 <code>EditorSelectionState</code>를 두고 clip/layer/effect/source asset 선택의 우선순위를 명시한다.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>7. 2차 결론: 구현 우선순위 재정렬</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>우선순위</th>
+          <th>문제</th>
+          <th>이유</th>
+          <th>구현 기준</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>Program Monitor 직접 조작</td>
+          <td>사용자가 가장 먼저 “영상 화면을 클릭해서 움직일 수 있는가”로 편집기 완성도를 판단한다.</td>
+          <td>클릭 선택, move, scale, rotate, crop이 같은 pointer session 모델로 동작해야 한다.</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>Media grid에서 timeline으로 drag/drop</td>
+          <td>import가 성공해도 타임라인에 끌어놓지 못하면 편집 워크플로우가 시작되지 않는다.</td>
+          <td>media asset card drag start, drop preview, track placement, command commit이 하나의 흐름이어야 한다.</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>Clip edge trim</td>
+          <td>상용 편집기 감각은 clip edge를 잡아 trimming하는 interaction에서 바로 드러난다.</td>
+          <td>edge hit zone, trim preview, snap feedback, mouseup commit, escape discard가 필요하다.</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>Timeline scrub/playhead 반응성</td>
+          <td>preview가 scrub을 따라오지 않으면 편집기는 정적인 관리 화면처럼 느껴진다.</td>
+          <td>drag 중 rAF update, preview worker/cache 연동, final seek commit을 분리한다.</td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td>선택 상태 통합</td>
+          <td>Timeline, Program Monitor, Inspector가 같은 대상을 바라봐야 조작 결과가 이해된다.</td>
+          <td>active selection kind와 target priority를 문서화하고 reducer/store로 고정한다.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>8. 결론</h2>
+    <p>OpenCut classic에서 Danbi가 가져올 수 있는 핵심은 UI 모양이 아니라 <span class="ref">gesture session controller, pure resolver, preview/commit transaction, hit-test/bounds abstraction, central selection manager</span>이다.</p>
+    <p>Danbi는 이미 이동/트림 계산 helper와 Program Monitor overlay를 갖고 있으므로, OpenCut을 의존성으로 붙이는 것보다 기존 Danbi 로직 위에 controller 계층을 올리는 방식이 안전하다.</p>
+    <p>이 문서는 구현 지시가 아니라 비교/추출 문서다. 구현 시에도 ComfyUI, Automation hooks, Render Worker, Render Worker Daemon, Fleet Discovery, Headless Render, Plugin/Extension architecture는 건드리지 않는다.</p>
+    <h2>9. 2026-06-19 구현 반영 기록</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>반영 항목</th>
+          <th>수정 파일</th>
+          <th>내용</th>
+          <th>검증</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Program Monitor direct drag</td>
+          <td><code>src/electron/renderer/program-transform-crop-overlays.tsx</code><br /><code>src/electron/renderer/program-composite-preview.tsx</code></td>
+          <td>비선택 preview layer를 클릭한 상태에서 바로 drag하면 clip 선택, motion draft, guide 표시, commit이 같은 pointer session 안에서 이어지도록 연결했다. 기존 DOM preview, motion effect commit, render worker 구조는 유지했다.</td>
+          <td><code>npx eslint</code> 변경 파일 통과<br /><code>npm run test:e2e -- tests/e2e/editor-program-monitor-direct-manipulation.spec.ts</code> 10개 통과</td>
+        </tr>
+        <tr>
+          <td>Media card drag start 영역 확장</td>
+          <td><code>src/electron/renderer/media-bin-panel.tsx</code></td>
+          <td>thumbnail/handle 중심이던 pointer drag 시작을 media card의 비상호작용 영역 전체로 확장했다. 버튼, details, summary, input 등은 drag 시작 대상에서 제외해 기존 actions와 충돌하지 않게 했다.</td>
+          <td><code>supports direct media bin drag drop onto timeline</code> 통과</td>
+        </tr>
+      </tbody>
+    </table>
+  </main>
+</body>
+</html>

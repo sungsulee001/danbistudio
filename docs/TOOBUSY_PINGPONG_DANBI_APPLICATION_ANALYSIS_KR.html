@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>toobusy_pingpong Danbi 적용 분석</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0d1017;
+      --panel: #151a24;
+      --panel-2: #1c2330;
+      --line: #313947;
+      --text: #edf1f7;
+      --muted: #aab4c5;
+      --accent: #37d6bd;
+      --good: #7be28f;
+      --warn: #ffd36a;
+      --bad: #ff7a8a;
+      --code: #101520;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", "Malgun Gothic", Arial, sans-serif;
+      line-height: 1.65;
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 42px 28px 80px;
+    }
+
+    h1, h2, h3 {
+      line-height: 1.25;
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 34px;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin-top: 36px;
+      padding-top: 24px;
+      border-top: 1px solid var(--line);
+      font-size: 23px;
+    }
+
+    h3 {
+      margin-top: 24px;
+      color: var(--accent);
+      font-size: 18px;
+    }
+
+    p {
+      margin: 10px 0;
+    }
+
+    code {
+      display: inline-block;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      color: #dce8ff;
+      background: var(--code);
+      border: 1px solid #2b3342;
+      border-radius: 5px;
+      padding: 1px 6px;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 0.94em;
+    }
+
+    pre {
+      overflow-x: auto;
+      background: var(--code);
+      border: 1px solid #2b3342;
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    pre code {
+      display: block;
+      border: 0;
+      padding: 0;
+      background: transparent;
+    }
+
+    ul, ol {
+      padding-left: 22px;
+    }
+
+    li {
+      margin: 5px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 24px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    th, td {
+      border: 1px solid var(--line);
+      padding: 11px 12px;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th {
+      background: var(--panel-2);
+      color: #f7f9fc;
+      font-weight: 700;
+    }
+
+    td {
+      color: #dce2ed;
+    }
+
+    .meta,
+    .summary,
+    .callout {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 16px 18px;
+      margin: 18px 0;
+    }
+
+    .meta {
+      color: var(--muted);
+    }
+
+    .summary {
+      border-color: #2f6d65;
+      background: #10201f;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin: 18px 0;
+    }
+
+    .card {
+      min-height: 132px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 15px;
+    }
+
+    .card strong {
+      display: block;
+      color: var(--accent);
+      margin-bottom: 7px;
+    }
+
+    .pill {
+      display: inline-block;
+      border: 1px solid #3c4657;
+      border-radius: 999px;
+      padding: 2px 8px;
+      margin: 2px 4px 2px 0;
+      color: var(--muted);
+      background: #121824;
+      font-size: 12px;
+    }
+
+    .p1 {
+      color: var(--good);
+      font-weight: 700;
+    }
+
+    .p2 {
+      color: var(--warn);
+      font-weight: 700;
+    }
+
+    .p4 {
+      color: var(--bad);
+      font-weight: 700;
+    }
+
+    @media (max-width: 860px) {
+      main {
+        padding: 28px 16px 60px;
+      }
+
+      h1 {
+        font-size: 27px;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      table {
+        display: block;
+        overflow-x: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>toobusy_pingpong Danbi 적용 분석</h1>
+
+  <section class="meta">
+    <p><strong>작성일:</strong> 2026-07-03</p>
+    <p><strong>대상 저장소:</strong> https://github.com/nicekriss/toobusy_pingpong</p>
+    <p><strong>분석 기준 커밋:</strong> <code>7e073584b0bef5a84443897ae8b944a75a19c212</code> (<code>2026-06-29 18:10:12 +0900</code>)</p>
+    <p><strong>Danbi 기준 위치:</strong> <code>E:\ai_tool\Danbi_Studio</code></p>
+    <p><strong>요청 조건:</strong> 텔레그램 관련 기능은 후순위</p>
+  </section>
+
+  <section class="summary">
+    <h2>핵심 결론</h2>
+    <p><code>toobusy_pingpong</code>은 영상 편집기가 아니라 Telegram, LM Studio, ComfyUI, 로컬 대시보드를 묶은 로컬 AI 생성 오케스트레이터다. Danbi에는 이미 ComfyUI client, workflow loader, queue, AI Studio가 있으므로 통째 이식보다 안정성/진단/워크플로우 등록 기능을 흡수하는 방식이 맞다.</p>
+    <p>가장 먼저 적용할 부분은 <strong>ComfyUI readiness</strong>, <strong>WebSocket 진행률</strong>, <strong>interrupt/free memory</strong>, <strong>workflow analyzer</strong>, <strong>결과 파일 fallback</strong>이다. Telegram 봇은 제품 핵심 흐름과 거리가 있어 후순위로 둔다.</p>
+  </section>
+
+  <div>
+    <span class="pill">P1 readiness</span>
+    <span class="pill">P1 progress</span>
+    <span class="pill">P1 result fallback</span>
+    <span class="pill">P2 workflow import</span>
+    <span class="pill">P2 LM Studio</span>
+    <span class="pill">P4 Telegram</span>
+  </div>
+
+  <h2>프로그램 구조</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>파일</th>
+        <th>역할</th>
+        <th>Danbi 적용 관점</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>pingpong.py</code></td>
+        <td>Telegram 메시지 처리, LM Studio load/unload, ComfyUI 실행, WebSocket 진행률, 결과 수집</td>
+        <td>Telegram 제외. ComfyUI 실행 안정성, 진행률, 결과 fallback, 프롬프트 보강 참고</td>
+      </tr>
+      <tr>
+        <td><code>dashboard.py</code></td>
+        <td>로컬 HTTP 대시보드, 갤러리, 생성 큐, 상태 API, 모델 누락 검사, reference preset</td>
+        <td><code>/ai-studio</code>와 <code>/automation</code>에 적용 가능</td>
+      </tr>
+      <tr>
+        <td><code>healthcheck.py</code></td>
+        <td>config, ComfyUI, LM Studio, workflow 파일, custom node, model 존재 확인</td>
+        <td>Danbi ComfyUI readiness API로 재구성</td>
+      </tr>
+      <tr>
+        <td><code>register_workflow.py</code></td>
+        <td>API-format workflow JSON에서 prompt/seed/image/output/ratio/dimension 노드 추정</td>
+        <td>Danbi workflow import wizard와 preset metadata 보강에 유용</td>
+      </tr>
+      <tr>
+        <td><code>config.example.json</code></td>
+        <td>ComfyUI/LM Studio/Telegram/API 경로, 모델명, custom workflow spec</td>
+        <td>Danbi workflow binding spec 설계 참고</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Danbi 매칭 지점</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Danbi 위치</th>
+        <th>현재 역할</th>
+        <th>보강 가능점</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>src/lib/comfyui-client.ts</code></td>
+        <td><code>/prompt</code>, <code>/upload/image</code>, <code>/history</code>, health</td>
+        <td><code>/queue</code>, <code>/interrupt</code>, <code>/free</code>, <code>/object_info</code>, <code>/view</code>, <code>/ws</code></td>
+      </tr>
+      <tr>
+        <td><code>src/lib/workflow-loader.ts</code></td>
+        <td>workflow JSON 로드와 단순 parameter key 주입</td>
+        <td>node ID 기반 prompt/negative/seed/image/output/ratio/dimension spec</td>
+      </tr>
+      <tr>
+        <td><code>src/lib/editor/comfyui-queue.ts</code></td>
+        <td>priority, concurrency, persistent snapshot, cancel/retry</td>
+        <td>실행 stage, current node, sampling %, interrupt/free, result fallback</td>
+      </tr>
+      <tr>
+        <td><code>src/app/ai-studio/page.tsx</code></td>
+        <td>workflow browser, queue, AI result history</td>
+        <td>readiness badge, missing node/model list, live progress, interrupt/free controls</td>
+      </tr>
+      <tr>
+        <td><code>src/lib/result-handler.ts</code></td>
+        <td>ComfyUI output reference를 Danbi output storage로 복사</td>
+        <td>파일 누락 시 ComfyUI <code>/view</code> 다운로드 fallback</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>우선순위</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>우선순위</th>
+        <th>적용 항목</th>
+        <th>기대 효과</th>
+        <th>비고</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="p1">P1</td>
+        <td>ComfyUI readiness API</td>
+        <td>실행 전에 missing node/model/경로 문제를 표시</td>
+        <td><code>healthcheck.py</code>, <code>dashboard.py</code> 패턴 참고</td>
+      </tr>
+      <tr>
+        <td class="p1">P1</td>
+        <td>WebSocket 진행률</td>
+        <td>AI Studio queue에서 sampling %, current node 표시</td>
+        <td><code>/ws?clientId=...</code> 이벤트 사용</td>
+      </tr>
+      <tr>
+        <td class="p1">P1</td>
+        <td><code>/interrupt</code>, <code>/free</code></td>
+        <td>긴 생성 중단과 VRAM 해제</td>
+        <td>사용자 명시 액션으로만 제공</td>
+      </tr>
+      <tr>
+        <td class="p1">P1</td>
+        <td>결과 <code>/view</code> fallback</td>
+        <td>output 경로가 달라도 결과 회수 가능</td>
+        <td>Danbi path safety 유지 필수</td>
+      </tr>
+      <tr>
+        <td class="p2">P2</td>
+        <td>workflow import/analyzer</td>
+        <td>ComfyUI API workflow를 Danbi preset으로 등록</td>
+        <td>Python 코드는 복사하지 말고 TS로 재구현</td>
+      </tr>
+      <tr>
+        <td class="p2">P2</td>
+        <td>AI Studio gallery/metadata</td>
+        <td>요청 프롬프트, 실제 프롬프트, workflow, seed 비교</td>
+        <td>AI Results와 연결</td>
+      </tr>
+      <tr>
+        <td class="p2">P2</td>
+        <td>LM Studio 프롬프트 보강</td>
+        <td>짧은 문장을 이미지/영상 생성용 프롬프트로 정리</td>
+        <td>선택 기능. VRAM 정책 필요</td>
+      </tr>
+      <tr>
+        <td class="p4">P4</td>
+        <td>Telegram 봇</td>
+        <td>모바일 원격 생성/알림</td>
+        <td>요청 조건상 후순위. 별도 plugin이 적합</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>적용 설계 카드</h2>
+  <section class="grid">
+    <article class="card">
+      <strong>1. Readiness</strong>
+      <p><code>/system_stats</code>, <code>/object_info</code>, workflow JSON class/model reference를 검사해 AI Studio에서 Ready/Missing을 표시한다.</p>
+    </article>
+    <article class="card">
+      <strong>2. Progress</strong>
+      <p>ComfyUI WebSocket 이벤트를 queue snapshot에 저장해 sampling %, executing node, error message를 보여준다.</p>
+    </article>
+    <article class="card">
+      <strong>3. Result Fallback</strong>
+      <p>로컬 output path 복사가 실패하면 ComfyUI <code>/view</code>로 bytes를 받아 Danbi output storage에 저장한다.</p>
+    </article>
+    <article class="card">
+      <strong>4. Workflow Analyzer</strong>
+      <p>API-format JSON에서 prompt, seed, image, output, ratio, dimension 후보를 추정해 preset metadata로 저장한다.</p>
+    </article>
+    <article class="card">
+      <strong>5. Prompt Enhancer</strong>
+      <p>LM Studio OpenAI-compatible API를 선택 기능으로 연결하되, 모델 load/unload와 VRAM 해제는 명시적 설정으로 둔다.</p>
+    </article>
+    <article class="card">
+      <strong>6. Telegram Later</strong>
+      <p>Telegram state machine과 file send는 본체보다 webhook 또는 remote-control plugin 후보로 남긴다.</p>
+    </article>
+  </section>
+
+  <h2>구현 로드맵</h2>
+  <ol>
+    <li><strong>1단계:</strong> <code>ComfyUIClient</code>에 <code>/object_info</code>, <code>/queue</code>, <code>/interrupt</code>, <code>/free</code>, <code>/view</code> 메서드 추가. readiness API와 AI Studio 상태 표시 추가.</li>
+    <li><strong>2단계:</strong> queue 실행 시 WebSocket progress 수신. polling fallback 유지. snapshot에 stage/current node/progress 저장.</li>
+    <li><strong>3단계:</strong> workflow JSON analyzer 추가. prompt/negative/seed/output/model/ratio 후보 추정 테스트 작성.</li>
+    <li><strong>4단계:</strong> AI Studio에 readiness badge, model override, result metadata 비교, 안전한 asset state action 추가.</li>
+    <li><strong>5단계:</strong> LM Studio와 Telegram은 선택 기능 또는 plugin으로 분리 검토.</li>
+  </ol>
+
+  <h2>라이선스와 경계</h2>
+  <section class="callout">
+    <p>대상 저장소에 <code>LICENSE</code> 파일이 없으므로 직접 코드 복사와 workflow JSON 번들링은 피해야 한다. 구현이 필요하면 동작 요구사항만 참고하고 Danbi의 TypeScript/Next/Electron 구조 안에서 clean-room 방식으로 다시 작성한다.</p>
+    <p>실제 구현 단계에서 이 분석을 계속 참조한다면 <code>docs/THIRD_PARTY_SOURCE_REGISTER_KR.md</code> 또는 source reuse audit에 reference-only 항목을 추가하는 것이 안전하다.</p>
+  </section>
+
+  <h2>최종 판단</h2>
+  <p>Danbi에 가장 유용한 부분은 Telegram 봇이 아니라 운영 안정성이다. 실행 전 진단, 실행 중 진행률, 실패 시 결과 회수, workflow 등록 자동화, 선택형 프롬프트 보강을 먼저 적용하고 Telegram은 후순위 remote adapter로 분리하는 것이 맞다.</p>
+</main>
+</body>
+</html>

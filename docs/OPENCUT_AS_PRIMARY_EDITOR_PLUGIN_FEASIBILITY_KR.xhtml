@@ -1,0 +1,765 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>OpenCut 주 편집기 전환 및 Danbi 플러그인화 가능성 점검</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0d10;
+        --panel: #15181d;
+        --panel-2: #101317;
+        --line: #2a3038;
+        --text: #f2f5f8;
+        --muted: #a7b0bd;
+        --accent: #22d3ee;
+        --ok: #34d399;
+        --warn: #fbbf24;
+        --bad: #fb7185;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Segoe UI", "Noto Sans KR", Arial, sans-serif;
+        line-height: 1.62;
+      }
+
+      main {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 36px 28px 56px;
+      }
+
+      h1,
+      h2,
+      h3 {
+        line-height: 1.25;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 31px;
+      }
+
+      h2 {
+        margin: 34px 0 12px;
+        padding-top: 6px;
+        border-top: 1px solid var(--line);
+        font-size: 22px;
+      }
+
+      h3 {
+        margin: 24px 0 10px;
+        font-size: 17px;
+      }
+
+      p {
+        margin: 8px 0;
+      }
+
+      a {
+        color: var(--accent);
+      }
+
+      code {
+        padding: 1px 5px;
+        border-radius: 5px;
+        background: #07090c;
+        color: #dbeafe;
+        font-family: "Cascadia Mono", Consolas, monospace;
+        font-size: 0.92em;
+      }
+
+      .meta,
+      .note {
+        color: var(--muted);
+      }
+
+      .summary {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin: 22px 0;
+      }
+
+      .card {
+        min-height: 118px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        padding: 16px;
+      }
+
+      .card strong {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--text);
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 8px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #0d1014;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .status.ok {
+        border-color: rgba(52, 211, 153, 0.45);
+        color: var(--ok);
+      }
+
+      .status.warn {
+        border-color: rgba(251, 191, 36, 0.45);
+        color: var(--warn);
+      }
+
+      .status.bad {
+        border-color: rgba(251, 113, 133, 0.45);
+        color: var(--bad);
+      }
+
+      table {
+        width: 100%;
+        margin: 14px 0 24px;
+        border-collapse: collapse;
+        border: 1px solid var(--line);
+        background: var(--panel-2);
+      }
+
+      th,
+      td {
+        border: 1px solid var(--line);
+        padding: 10px 12px;
+        vertical-align: top;
+      }
+
+      th {
+        background: #1c2128;
+        color: #e5e7eb;
+        text-align: left;
+      }
+
+      ul,
+      ol {
+        padding-left: 24px;
+      }
+
+      li {
+        margin: 5px 0;
+      }
+
+      .decision {
+        border-left: 4px solid var(--warn);
+        background: #17140a;
+        padding: 14px 16px;
+      }
+
+      .safe {
+        border-left: 4px solid var(--ok);
+        background: #07150f;
+        padding: 14px 16px;
+      }
+
+      .danger {
+        border-left: 4px solid var(--bad);
+        background: #180a0f;
+        padding: 14px 16px;
+      }
+
+      @media (max-width: 920px) {
+        main {
+          padding: 24px 16px 44px;
+        }
+
+        .summary {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>OpenCut 주 편집기 전환 및 Danbi 플러그인화 가능성 점검</h1>
+      <p class="meta">작성일: 2026-06-19 / 범위: 문서 검토만 수행, 코드 구현 없음</p>
+      <p>
+        요청 내용은 OpenCut을 Danbi Studio의 주 편집기로 사용하고, Danbi의 AI Studio,
+        Automation, Render Queue, Extension, Settings, ComfyUI, 렌더 워커 계열 기능을
+        플러그인 또는 외부 기능 형태로 얹을 수 있는지 점검하는 것이다.
+      </p>
+
+      <div class="summary">
+        <section class="card">
+          <strong>최종 판단</strong>
+          <span class="status warn">조건부 가능</span>
+          <p>기술적으로는 가능하지만 현재 릴리즈 후보의 즉시 전환 대상으로는 부적합하다.</p>
+        </section>
+        <section class="card">
+          <strong>단기 권장안</strong>
+          <span class="status ok">Reference-only</span>
+          <p>OpenCut은 편집기 상호작용 참고 대상으로 사용하고 Danbi 편집기를 개선한다.</p>
+        </section>
+        <section class="card">
+          <strong>장기 가능안</strong>
+          <span class="status warn">Adapter spike</span>
+          <p>별도 브랜치에서 OpenCut 어댑터와 Danbi Bridge API를 검증한다.</p>
+        </section>
+        <section class="card">
+          <strong>금지선</strong>
+          <span class="status bad">No migration</span>
+          <p>OpenCut 전체 migration이나 Danbi 오케스트레이션 축소는 이번 범위가 아니다.</p>
+        </section>
+      </div>
+
+      <h2>외부 상태 확인</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>대상</th>
+            <th>확인 내용</th>
+            <th>판단</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>OpenCut main</td>
+            <td>
+              공개 README 기준으로 OpenCut main은 ground-up rewrite 중이다. 예정 항목은
+              Editor API, first-class third party plugins, Rust core 기반 desktop/mobile/browser,
+              MCP server, headless mode, scripting tab이다.
+            </td>
+            <td>
+              <span class="status warn">미성숙</span>
+              플러그인-first 방향은 Danbi와 맞지만 아직 당장 붙일 안정 API로 보기는 어렵다.
+            </td>
+          </tr>
+          <tr>
+            <td>OpenCut classic</td>
+            <td>
+              기존 앱 코드이며 README는 original codebase이고 archived/no longer maintained라고 명시한다.
+              GitHub 저장소도 2026-05-17 archive/read-only 상태다.
+            </td>
+            <td>
+              <span class="status warn">참고 가능</span>
+              편집기 상호작용 참조에는 유용하지만 Danbi의 장기 의존 호스트로 삼기에는 유지보수 위험이 크다.
+            </td>
+          </tr>
+          <tr>
+            <td>라이선스</td>
+            <td>OpenCut main/classic 모두 MIT 라이선스다.</td>
+            <td>
+              <span class="status ok">사용 가능</span>
+              라이선스 자체는 통합을 막지 않는다. 단, NOTICE/출처/변경사항 표기는 필요하다.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>결론</h2>
+      <div class="decision">
+        <p>
+          OpenCut을 Danbi Studio의 주 편집기로 직접 교체하고 Danbi의 나머지 기능을 전부
+          OpenCut 플러그인으로 옮기는 것은 <strong>기술적으로 불가능하지는 않지만 제품 재플랫폼 수준</strong>이다.
+          특히 Danbi의 ComfyUI 배치 큐, AI Results, Automation Hooks, Render Worker,
+          Render Worker Daemon, Fleet Discovery, Headless Render, Extension/Plugin system은 단순 UI 플러그인이 아니라
+          프로젝트 스키마, 렌더 preflight, 저장 경로, 작업 큐, 보안 서명, 외부 프로세스 실행 경계에 결합되어 있다.
+        </p>
+        <p>
+          단기 방향은 OpenCut classic의 timeline/monitor interaction 패턴을 참고하여 Danbi editor core를 끌어올리는 것이다.
+          중장기 방향은 OpenCut main의 Editor API와 plugin-first 구조가 실제로 안정화된 후,
+          별도 브랜치에서 Danbi Bridge API를 통해 제한된 통합 spike를 검증하는 것이다.
+        </p>
+      </div>
+
+      <h2>통합 모델별 판단</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>모델</th>
+            <th>설명</th>
+            <th>가능성</th>
+            <th>주요 리스크</th>
+            <th>권장 여부</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1. Reference-only</td>
+            <td>
+              OpenCut을 실행 의존성으로 두지 않고 timeline, trim, drag/drop, preview overlay, transform handle 구조를
+              Danbi 구현에 참고한다.
+            </td>
+            <td><span class="status ok">높음</span></td>
+            <td>Danbi 쪽 상호작용 구현 품질을 계속 직접 개선해야 한다.</td>
+            <td><strong>단기 권장</strong></td>
+          </tr>
+          <tr>
+            <td>2. OpenCut classic embed</td>
+            <td>
+              OpenCut classic의 web editor를 Danbi Electron 내부 route/webview로 넣고 Danbi 기능을 IPC/HTTP bridge로 호출한다.
+            </td>
+            <td><span class="status warn">가능하지만 고비용</span></td>
+            <td>
+              classic은 archive/read-only이며 Danbi 플러그인 호스트로 설계되어 있지 않다.
+              Electron 보안, 파일 접근, 프로젝트 저장, export preflight를 새로 맞춰야 한다.
+            </td>
+            <td>제품 릴리즈 후보에는 비권장</td>
+          </tr>
+          <tr>
+            <td>3. OpenCut main 기반 장기 전환</td>
+            <td>
+              OpenCut main rewrite의 Editor API/plugin-first 구조가 안정화된 뒤 Danbi 기능을 OpenCut 플러그인 또는 extension으로 제공한다.
+            </td>
+            <td><span class="status warn">미래 조건부</span></td>
+            <td>
+              현재 API가 예정 상태라 실제 플러그인 계약, 렌더 계약, asset 계약을 확인할 수 없다.
+              지금 의존하면 Danbi 릴리즈 일정이 OpenCut rewrite 일정에 묶인다.
+            </td>
+            <td>장기 관찰 및 spike 후보</td>
+          </tr>
+          <tr>
+            <td>4. Danbi editor 완전 제거 후 OpenCut 교체</td>
+            <td>
+              Danbi 편집 UI와 project/timeline runtime을 OpenCut으로 대체하고 Danbi 기능을 전부 외부 플러그인으로 분리한다.
+            </td>
+            <td><span class="status bad">고위험</span></td>
+            <td>
+              Danbi의 스키마, preflight, render worker, ComfyUI state, plugin signing, local installed-app acceptance를 모두 재검증해야 한다.
+            </td>
+            <td><strong>금지에 가까움</strong></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Danbi 기능을 플러그인화할 수 있는가</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Danbi 기능</th>
+            <th>OpenCut 호스트에서 플러그인화 가능성</th>
+            <th>필수 조건</th>
+            <th>판정</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>ComfyUI integration</td>
+            <td>
+              가능은 하다. 다만 단순 메뉴 플러그인이 아니라 asset 생성, pending/generating/generated/failed 상태,
+              timeline replacement, effect pass, 결과 검수 UI가 필요하다.
+            </td>
+            <td>
+              OpenCut이 media asset 등록, timeline insert/replace, clip generation metadata, job status panel, render preflight hook을 노출해야 한다.
+            </td>
+            <td><span class="status warn">조건부 가능</span></td>
+          </tr>
+          <tr>
+            <td>ComfyUI batch queue</td>
+            <td>
+              Danbi 쪽 큐를 외부 worker/service로 유지하고 OpenCut UI가 bridge API를 호출하는 구조가 현실적이다.
+            </td>
+            <td>queue snapshot, cancel/retry, priority, concurrency, result asset import 계약이 필요하다.</td>
+            <td><span class="status warn">Danbi-side 유지 권장</span></td>
+          </tr>
+          <tr>
+            <td>AI Results workflow</td>
+            <td>
+              후보 asset review와 apply/replace/effect-pass 작업은 plugin panel로 가능하다.
+            </td>
+            <td>OpenCut 선택 clip과 Danbi result lineage를 연결하는 clip identity mapping이 필요하다.</td>
+            <td><span class="status warn">어댑터 필요</span></td>
+          </tr>
+          <tr>
+            <td>Automation hooks</td>
+            <td>
+              외부 automation plugin으로 가능하다. 단, hook event가 OpenCut timeline event와 Danbi automation event를 동시에 이해해야 한다.
+            </td>
+            <td>manual, on-import, before-export, on-gap 이벤트와 payload schema bridge가 필요하다.</td>
+            <td><span class="status warn">어댑터 필요</span></td>
+          </tr>
+          <tr>
+            <td>Render Worker / Daemon / Fleet Discovery</td>
+            <td>
+              OpenCut 내부 플러그인으로 옮기는 것보다 Danbi render service로 두고 OpenCut editor가 render request만 보내는 구조가 낫다.
+            </td>
+            <td>OpenCut scene snapshot을 Danbi render graph 또는 공통 intermediate timeline으로 변환해야 한다.</td>
+            <td><span class="status warn">외부 서비스 유지</span></td>
+          </tr>
+          <tr>
+            <td>Headless Render</td>
+            <td>
+              Danbi headless pipeline을 유지하고 OpenCut 쪽은 export plan provider 역할만 하는 것이 안전하다.
+            </td>
+            <td>headless에서 UI 없이 동일 timeline/effect/motion 결과를 재현하는 render parity 계약이 필요하다.</td>
+            <td><span class="status warn">강한 계약 필요</span></td>
+          </tr>
+          <tr>
+            <td>Extension / Plugin system</td>
+            <td>
+              Danbi는 이미 manifest, permission, contribution, signature, reviewed command API, exporter writer trust를 가진다.
+              이를 OpenCut 내부 plugin API로 그대로 이식하려면 이중 플러그인 호스트가 된다.
+            </td>
+            <td>Danbi plugin은 Danbi host에서 실행하고 OpenCut은 bridge client로 제한하는 것이 보안상 안전하다.</td>
+            <td><span class="status ok">Danbi host 유지 권장</span></td>
+          </tr>
+          <tr>
+            <td>Export validation semantics</td>
+            <td>
+              단순 플러그인화 위험이 가장 크다. ComfyUI pending asset, renderPath, missing media, output path, codec/container 검증이 모두 보존되어야 한다.
+            </td>
+            <td>OpenCut export UI가 Danbi preflight result를 그대로 표시하고, blocked/warning semantics를 변경하지 않아야 한다.</td>
+            <td><span class="status bad">직접 이식 비권장</span></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>Danbi와 OpenCut 스키마 차이</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>항목</th>
+            <th>Danbi</th>
+            <th>OpenCut classic</th>
+            <th>통합 영향</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>프로젝트 구조</td>
+            <td>
+              <code>EditorProject</code>가 assets, tracks, captions, markers, automation, plugins, exportProfiles를 직접 포함한다.
+            </td>
+            <td>
+              scene 중심 구조다. <code>SceneTracks</code>는 overlay, main, audio로 분리되고 각 track이 elements를 가진다.
+            </td>
+            <td>
+              1:1 교체가 아니라 bidirectional mapper가 필요하다. Danbi tracks와 OpenCut overlay/main/audio의 의미가 다르다.
+            </td>
+          </tr>
+          <tr>
+            <td>클립/엘리먼트</td>
+            <td>
+              <code>TimelineClip</code>은 kind, start, duration, sourceIn, speed, volume, opacity, blendMode,
+              automationTags, effects, keyframes, transition, generation을 가진다.
+            </td>
+            <td>
+              <code>TimelineElement</code>는 type, startTime, duration, trimStart, trimEnd, params, animations, effects, masks를 가진다.
+            </td>
+            <td>
+              sourceIn/trimStart, keyframes/animations, generation metadata의 변환 규칙을 만들어야 한다.
+            </td>
+          </tr>
+          <tr>
+            <td>미디어 경로</td>
+            <td>
+              packaged Electron에서는 import/cache/projects/packages/jobs/stt/autosave/renders/outputs/temp가 userData 아래여야 한다.
+              asset은 preview용 source와 FFmpeg용 renderPath를 분리한다.
+            </td>
+            <td>
+              web app 중심 구조라 file/import/storage 계약이 Danbi Electron userData 정책과 다르다.
+            </td>
+            <td>
+              OpenCut을 쓰더라도 Danbi storage provider가 authoritative해야 한다. Program Files 쓰기 금지는 Danbi bridge가 보장해야 한다.
+            </td>
+          </tr>
+          <tr>
+            <td>렌더</td>
+            <td>
+              FFmpeg render graph, render preflight, render worker, queued/headless/fleet flow가 존재한다.
+            </td>
+            <td>
+              classic은 web editor와 renderer service/WASM 방향의 자체 구조가 있다.
+            </td>
+            <td>
+              미리보기 엔진을 가져와도 최종 export는 Danbi render graph와 parity를 맞추지 않으면 릴리즈 blocker가 된다.
+            </td>
+          </tr>
+          <tr>
+            <td>플러그인 보안</td>
+            <td>
+              Danbi extension API는 filesystem/network/comfyui/render/project permission과 manifest signature/trust 정책을 가진다.
+            </td>
+            <td>
+              classic에는 Danbi와 호환되는 plugin sandbox boundary가 없다.
+            </td>
+            <td>
+              OpenCut 내부에서 Danbi plugin을 직접 실행하지 말고 Danbi main process/extension runtime으로 우회해야 한다.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>OpenCut에서 코드 이식 가능한 영역</h2>
+      <p>
+        OpenCut 전체 migration은 금지한다. 아래는 Danbi editor core 품질 향상을 위해 참고 또는 부분 이식 가능한 영역이다.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>영역</th>
+            <th>OpenCut classic 참조 파일</th>
+            <th>Danbi 적용 방식</th>
+            <th>주의점</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Timeline drag/move</td>
+            <td>
+              <code>timeline/controllers/element-interaction-controller.ts</code>,
+              <code>timeline/group-move/*</code>,
+              <code>timeline/components/drop-target.ts</code>
+            </td>
+            <td>
+              drag threshold, selected group move, snap, drop target, new track fallback 패턴을 Danbi timeline controller로 재해석한다.
+            </td>
+            <td>OpenCut의 <code>MediaTime</code>/track model을 그대로 가져오면 Danbi seconds 기반 timeline과 충돌한다.</td>
+          </tr>
+          <tr>
+            <td>Timeline drag/drop import</td>
+            <td>
+              <code>timeline/controllers/drag-drop-controller.ts</code>,
+              <code>timeline/hooks/use-timeline-drag-drop.ts</code>
+            </td>
+            <td>
+              media bin에서 timeline으로 바로 끌어놓는 interaction model을 참고한다.
+            </td>
+            <td>Danbi packaged Electron import는 반드시 userData 저장 경로와 renderPath rewrite를 거쳐야 한다.</td>
+          </tr>
+          <tr>
+            <td>Transform direct manipulation</td>
+            <td>
+              <code>preview/controllers/preview-interaction-controller.ts</code>,
+              <code>preview/controllers/transform-handle-controller.ts</code>,
+              <code>preview/hooks/use-preview-interaction.ts</code>
+            </td>
+            <td>
+              preview hit-test, move preview, commit/discard, scale/rotate handles, snap line 구조를 Danbi Program Monitor에 맞춘다.
+            </td>
+            <td>Danbi render parity를 위해 motion effect/keyframe 저장 방식과 FFmpeg output이 같이 맞아야 한다.</td>
+          </tr>
+          <tr>
+            <td>Preview overlay commit model</td>
+            <td>
+              <code>core/managers/timeline-manager.ts</code>의 <code>previewElements</code>,
+              <code>commitPreview</code>, <code>discardPreview</code>
+            </td>
+            <td>
+              드래그 중에는 draft overlay로 즉시 미리보기하고 pointer up 때 undo 가능한 command로 commit하는 패턴을 유지한다.
+            </td>
+            <td>Danbi의 undo/redo, autosave, render preflight dirty state와 연결해야 한다.</td>
+          </tr>
+          <tr>
+            <td>Command pattern</td>
+            <td>
+              <code>commands/base-command.ts</code>,
+              <code>commands/timeline/element/*.ts</code>
+            </td>
+            <td>
+              split, move, insert, duplicate, update-effects 같은 편집 action을 command 단위로 정리하는 참고 자료로 쓴다.
+            </td>
+            <td>Danbi의 automationTags, generation binding, plugin metadata를 command가 보존해야 한다.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>필수 선행 계약</h2>
+      <p>
+        OpenCut을 실제 편집기로 사용하려면 UI부터 바꾸면 안 된다. 아래 계약이 먼저 있어야 Danbi 기능을 플러그인 또는 bridge로 붙일 수 있다.
+      </p>
+      <ol>
+        <li>
+          <strong>Project/timeline interchange contract:</strong>
+          OpenCut <code>SceneTracks</code>/<code>TimelineElement</code>와 Danbi <code>EditorProject</code>/<code>TimelineClip</code>의 왕복 변환.
+        </li>
+        <li>
+          <strong>Asset registry contract:</strong>
+          source, renderPath, thumbnail/proxy/waveform cache, missing media relink, packaged userData 저장 정책.
+        </li>
+        <li>
+          <strong>Editor command bridge:</strong>
+          insert, trim, split, move, select, replace, apply effect, apply transition, apply caption, apply marker.
+        </li>
+        <li>
+          <strong>Preview/render parity contract:</strong>
+          preview에서 보이는 motion/crop/effect/caption/mask 결과가 Danbi FFmpeg render와 일치해야 한다.
+        </li>
+        <li>
+          <strong>Job bridge contract:</strong>
+          ComfyUI, STT, media cache, render queue, headless render job의 status/event/cancel/retry/update payload.
+        </li>
+        <li>
+          <strong>Plugin host boundary:</strong>
+          Danbi plugin은 Danbi signed runtime에서 실행하고 OpenCut은 command client로만 접근한다.
+        </li>
+        <li>
+          <strong>Export validation contract:</strong>
+          Danbi preflight의 blocker/warning semantics를 OpenCut export UI가 변경 없이 표시하고 차단해야 한다.
+        </li>
+        <li>
+          <strong>Installed app storage contract:</strong>
+          packaged Electron에서는 Program Files 내부 쓰기가 없어야 하며 모든 mutable storage는 userData/AppData 아래여야 한다.
+        </li>
+      </ol>
+
+      <h2>프로토타입을 한다면</h2>
+      <div class="safe">
+        <p>
+          프로토타입은 제품 브랜치가 아니라 별도 spike에서 제한적으로 해야 한다.
+          목표는 OpenCut으로 Danbi 전체 기능을 옮기는 것이 아니라 bridge 계약의 성립 여부를 확인하는 것이다.
+        </p>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>단계</th>
+            <th>범위</th>
+            <th>완료 기준</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1. Schema mapper</td>
+            <td>video/audio/image/text clip, sourceIn/trim, basic transform만 왕복 변환한다.</td>
+            <td>Danbi sample project 일부를 OpenCut view model로 변환하고 다시 Danbi project로 돌아와 차이가 설명 가능하다.</td>
+          </tr>
+          <tr>
+            <td>2. Storage bridge</td>
+            <td>OpenCut import 요청을 Danbi Electron main의 import/storage path로 통과시킨다.</td>
+            <td>Program Files 쓰기 없이 userData 아래에 import/cache/renderPath가 생성된다.</td>
+          </tr>
+          <tr>
+            <td>3. Basic timeline edit bridge</td>
+            <td>insert, move, trim, split, select만 연결한다.</td>
+            <td>OpenCut UI 조작이 Danbi EditorProject 변경으로 반영되고 undo/redo가 깨지지 않는다.</td>
+          </tr>
+          <tr>
+            <td>4. Render bridge</td>
+            <td>OpenCut 편집 결과를 Danbi export preflight와 FFmpeg render로 넘긴다.</td>
+            <td>MP4 render가 생성되고 ffprobe-readable이며 preview/render 차이가 추적 가능하다.</td>
+          </tr>
+          <tr>
+            <td>5. AI/automation bridge</td>
+            <td>ComfyUI generate now, batch queue, AI Results apply, before-export hook을 bridge로 호출한다.</td>
+            <td>기존 Danbi ComfyUI/export validation semantics가 변경되지 않는다.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>명확한 비권장 사항</h2>
+      <div class="danger">
+        <ul>
+          <li>OpenCut classic을 Danbi의 장기 편집기 호스트로 직접 fork하는 것.</li>
+          <li>OpenCut main rewrite API가 안정화되기 전에 Danbi 릴리즈 후보를 그쪽에 묶는 것.</li>
+          <li>Danbi의 ComfyUI, Automation, Render Worker, Headless Render, Extension 시스템을 OpenCut UI 플러그인으로 축소하는 것.</li>
+          <li>Export preflight나 ComfyUI pending/generating/generated/failed 의미를 OpenCut 편집 편의성 때문에 완화하는 것.</li>
+          <li>OpenCut 편집 결과를 FFmpeg renderPath/userData/storage 정책 없이 바로 Danbi render에 넣는 것.</li>
+        </ul>
+      </div>
+
+      <h2>권장 로드맵</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>시점</th>
+            <th>권장 작업</th>
+            <th>이유</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>단기</td>
+            <td>Danbi editor core의 direct manipulation, timeline drag/drop, trim, media bin UX를 OpenCut/CapCut류 패턴으로 개선한다.</td>
+            <td>릴리즈 후보의 저장/렌더/ComfyUI 검증 범위를 유지하면서 편집 품질을 올릴 수 있다.</td>
+          </tr>
+          <tr>
+            <td>단기</td>
+            <td><code>Danbi Editor Bridge API</code> 문서를 먼저 만든다.</td>
+            <td>OpenCut뿐 아니라 향후 다른 편집 shell도 Danbi orchestration에 안전하게 붙일 수 있다.</td>
+          </tr>
+          <tr>
+            <td>중기</td>
+            <td>별도 branch에서 OpenCut classic adapter spike를 제한 기능으로만 검증한다.</td>
+            <td>actual dependency가 아니라 schema/interaction feasibility 확인용이다.</td>
+          </tr>
+          <tr>
+            <td>장기</td>
+            <td>OpenCut main의 Editor API/plugin-first가 안정화되면 다시 평가한다.</td>
+            <td>현재 예정된 plugin-first 구조가 실제 contract로 공개되면 Danbi plugin bridge 가능성이 커진다.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>최종 판정</h2>
+      <table>
+        <tbody>
+          <tr>
+            <th>OpenCut을 주 편집기로 바로 사용</th>
+            <td><span class="status bad">비권장</span> 제품 릴리즈 후보 범위에서는 위험이 너무 크다.</td>
+          </tr>
+          <tr>
+            <th>Danbi 기능을 모두 OpenCut 플러그인으로 이전</th>
+            <td><span class="status bad">비권장</span> 단순 플러그인화가 아니라 오케스트레이션 재설계다.</td>
+          </tr>
+          <tr>
+            <th>OpenCut 상호작용 구조를 Danbi에 참고/부분 이식</th>
+            <td><span class="status ok">권장</span> 현재 편집기 품질 개선에 가장 현실적이다.</td>
+          </tr>
+          <tr>
+            <th>OpenCut adapter spike</th>
+            <td><span class="status warn">조건부 권장</span> 별도 브랜치, 제한 기능, Danbi Bridge API 선행 조건에서만 진행한다.</td>
+          </tr>
+          <tr>
+            <th>Danbi 오케스트레이션 보존</th>
+            <td><span class="status ok">필수</span> ComfyUI, automation, render worker, headless, extension runtime은 Danbi 측 authoritative system으로 유지해야 한다.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>참조</h2>
+      <ul>
+        <li>
+          OpenCut main README:
+          <a href="https://github.com/opencut-app/opencut">https://github.com/opencut-app/opencut</a>
+        </li>
+        <li>
+          OpenCut classic repository:
+          <a href="https://github.com/opencut-app/opencut-classic">https://github.com/opencut-app/opencut-classic</a>
+        </li>
+        <li>
+          로컬 OpenCut classic source:
+          <code>E:\ai_tool\opencut-classic-ref</code>
+        </li>
+        <li>
+          로컬 OpenCut rewrite source:
+          <code>E:\ai_tool\opencut-ref</code>
+        </li>
+        <li>
+          Danbi extension API:
+          <code>src/electron/shared/extension-api.ts</code>
+        </li>
+        <li>
+          Danbi editor types:
+          <code>src/lib/editor/types.ts</code>
+        </li>
+        <li>
+          기존 OpenCut interaction reference:
+          <code>docs/OPENCUT_EDITOR_INTERACTION_REFERENCE_KR.xhtml</code>
+        </li>
+      </ul>
+    </main>
+  </body>
+</html>
