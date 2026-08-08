@@ -364,6 +364,193 @@ export function formatDuration(sec) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// 예약 공개(status.publishAt) 시각 계산
+//
+// YouTube Data API v3 규약:
+//   · status.publishAt 은 RFC 3339 타임스탬프여야 한다 (오프셋 포함).
+//   · status.privacyStatus 가 반드시 private 이어야 한다. public/unlisted 와
+//     함께 보내면 무시되거나 거부된다.
+//   · 과거 시각은 거부되거나 즉시 공개로 이어질 수 있다.
+//
+// 여기서는 호스트 타임존에 의존하지 않는다. 문자열을 부품으로 뜯어
+// Date.UTC + 오프셋으로 epoch 를 직접 만든다. (new Date("2026-08-08T18:12:01")
+// 은 호스트 로컬 타임존으로 해석되므로 쓰지 않는다.)
+// ─────────────────────────────────────────────────────────────
+
+/** 기본 타임존 — KST(+09:00) */
+export const DEFAULT_TZ = '+09:00';
+
+const TZ_ALIASES = { KST: 540, UTC: 0, Z: 0, GMT: 0 };
+const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토'];
+
+/** 분 단위 오프셋 → "+09:00" */
+export function formatOffsetLabel(minutes) {
+  const sign = minutes < 0 ? '-' : '+';
+  const abs = Math.abs(minutes);
+  return `${sign}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`;
+}
+
+/** 분 단위 오프셋 → 표시용 존 이름 */
+export function zoneName(minutes) {
+  if (minutes === 540) return 'KST';
+  if (minutes === 0) return 'UTC';
+  return `UTC${formatOffsetLabel(minutes)}`;
+}
+
+/** "+09:00" | "+0900" | "+9" | "Z" | "UTC" | "KST" → { minutes, label } */
+export function parseTimezoneOffset(tz) {
+  if (tz === undefined || tz === null || String(tz).trim() === '') {
+    return parseTimezoneOffset(DEFAULT_TZ);
+  }
+  const t = String(tz).trim();
+  const alias = TZ_ALIASES[t.toUpperCase()];
+  if (alias !== undefined) return { minutes: alias, label: formatOffsetLabel(alias) };
+  const m = /^([+-])(\d{1,2}):?(\d{2})?$/.exec(t);
+  if (!m) {
+    throw new DanbiError(
+      E.USAGE,
+      `타임존 오프셋을 해석할 수 없다: "${tz}"`,
+      '형식: +09:00 / -05:00 / +0900 / +9 / Z / UTC / KST  (IANA 지역명(Asia/Seoul)과 서머타임은 지원하지 않는다)'
+    );
+  }
+  const hh = Number(m[2]);
+  const mm = Number(m[3] ?? 0);
+  if (hh > 14 || mm > 59) throw new DanbiError(E.USAGE, `타임존 오프셋 범위를 벗어났다: "${tz}"`);
+  const minutes = (m[1] === '-' ? -1 : 1) * (hh * 60 + mm);
+  return { minutes, label: formatOffsetLabel(minutes) };
+}
+
+const ABS_TIME_RE =
+  /^(\d{4})-(\d{2})-(\d{2})[T ](\d{1,2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?[ \t]*(Z|z|[+-]\d{1,2}:?\d{2}|[+-]\d{1,2})?$/;
+
+/**
+ * 절대 시각 문자열 → { epochMs, offsetMinutes, offsetLabel, explicitOffset }
+ * 오프셋이 생략되면 tzDefault(기본 KST)로 해석한다.
+ */
+export function parsePublishAtInput(input, tzDefault = DEFAULT_TZ) {
+  const raw = String(input ?? '').trim();
+  const m = ABS_TIME_RE.exec(raw);
+  if (!m) {
+    throw new DanbiError(
+      E.USAGE,
+      `--publish-at 값을 해석할 수 없다: "${raw}"`,
+      [
+        'RFC 3339 형식이어야 한다. 예: 2026-08-08T18:12:01+09:00',
+        `오프셋을 생략하면 --timezone(기본 ${DEFAULT_TZ})으로 해석한다. 예: "2026-08-08 18:12"`,
+        '날짜만(2026-08-08) 주는 것은 허용하지 않는다 — 시각이 모호해진다.',
+      ].join('\n         ')
+    );
+  }
+  const [, Y, Mo, D, H, Mi, S, off] = m;
+  const tz = parseTimezoneOffset(off ? (/^[Zz]$/.test(off) ? 'Z' : off) : tzDefault);
+  const y = +Y, mo = +Mo, d = +D, h = +H, mi = +Mi, s = S ? +S : 0;
+  if (mo < 1 || mo > 12 || d < 1 || d > 31 || h > 23 || mi > 59 || s > 59) {
+    throw new DanbiError(E.USAGE, `--publish-at 값의 날짜·시각 범위가 잘못됐다: "${raw}"`);
+  }
+  const localMs = Date.UTC(y, mo - 1, d, h, mi, s);
+  const chk = new Date(localMs);
+  if (chk.getUTCFullYear() !== y || chk.getUTCMonth() !== mo - 1 || chk.getUTCDate() !== d) {
+    throw new DanbiError(E.USAGE, `--publish-at 값이 달력에 없는 날짜다: "${raw}"`);
+  }
+  return {
+    epochMs: localMs - tz.minutes * 60_000,
+    offsetMinutes: tz.minutes,
+    offsetLabel: tz.label,
+    explicitOffset: Boolean(off),
+  };
+}
+
+/** "6h" | "30m" | "2d" | "1d6h30m" → 밀리초 */
+export function parseRelativeDuration(input) {
+  const raw = String(input ?? '').trim().toLowerCase().replace(/\s+/g, '');
+  const m = /^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/.exec(raw);
+  if (!m || !m.slice(1).some((g) => g !== undefined)) {
+    throw new DanbiError(
+      E.USAGE,
+      `--publish-in 값을 해석할 수 없다: "${input}"`,
+      '형식: 6h / 30m / 2d / 1d6h30m  (d=일, h=시간, m=분, s=초). 단위 없는 숫자는 허용하지 않는다.'
+    );
+  }
+  const ms =
+    Number(m[1] ?? 0) * 86_400_000 +
+    Number(m[2] ?? 0) * 3_600_000 +
+    Number(m[3] ?? 0) * 60_000 +
+    Number(m[4] ?? 0) * 1000;
+  if (ms <= 0) {
+    throw new DanbiError(E.USAGE, `--publish-in 값이 0이다: "${input}"`, '예약 시각은 반드시 미래여야 한다.');
+  }
+  return ms;
+}
+
+/** epoch → 지정 오프셋의 RFC 3339 문자열 ("2026-08-08T18:12:01+09:00") */
+export function formatOffsetIso(epochMs, offsetMinutes) {
+  const d = new Date(epochMs + offsetMinutes * 60_000);
+  const p = (n) => String(n).padStart(2, '0');
+  return (
+    `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}` +
+    `T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}` +
+    formatOffsetLabel(offsetMinutes)
+  );
+}
+
+/** epoch → "2026년 8월 8일(토) 오후 6시 12분" */
+export function formatKoreanTime(epochMs, offsetMinutes) {
+  const d = new Date(epochMs + offsetMinutes * 60_000);
+  const h24 = d.getUTCHours();
+  const ampm = h24 < 12 ? '오전' : '오후';
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return (
+    `${d.getUTCFullYear()}년 ${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일` +
+    `(${WEEKDAY_KO[d.getUTCDay()]}) ${ampm} ${h12}시 ${String(d.getUTCMinutes()).padStart(2, '0')}분`
+  );
+}
+
+/** 밀리초 간격 → "5시간 59분" */
+export function formatRemaining(ms) {
+  if (ms < 0) return `${formatRemaining(-ms)} 전(이미 지남)`;
+  const s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const parts = [];
+  if (d) parts.push(`${d}일`);
+  if (h) parts.push(`${h}시간`);
+  if (m || parts.length === 0) parts.push(`${m}분`);
+  return parts.join(' ');
+}
+
+/** 예약 시각 1건을 사람이 읽는 형태로 묶어 반환 */
+export function describePublishAt(epochMs, offsetMinutes) {
+  return {
+    epochMs,
+    iso: formatOffsetIso(epochMs, offsetMinutes),
+    human: formatKoreanTime(epochMs, offsetMinutes),
+    zone: zoneName(offsetMinutes),
+    utcIso: new Date(epochMs).toISOString(),
+  };
+}
+
+/** 예약 시각이 미래인지 확인. 아니면 DanbiError(USAGE). */
+export function assertFuturePublishAt(epochMs, offsetMinutes, { nowMs = Date.now(), minLeadMs = 60_000, where = '--publish-at' } = {}) {
+  const d = describePublishAt(epochMs, offsetMinutes);
+  if (epochMs <= nowMs) {
+    throw new DanbiError(
+      E.USAGE,
+      `${where} 값이 과거다: ${d.iso} (= ${d.human} ${d.zone})`,
+      `지금은 ${formatOffsetIso(nowMs, offsetMinutes)} 다. YouTube는 과거 publishAt을 거부하거나 즉시 공개해 버린다.`
+    );
+  }
+  if (epochMs < nowMs + minLeadMs) {
+    throw new DanbiError(
+      E.USAGE,
+      `${where} 값이 너무 임박했다: ${d.iso} (남은 시간 ${Math.round((epochMs - nowMs) / 1000)}초)`,
+      `업로드가 끝나기 전에 시각이 지나면 즉시 공개된다. 최소 ${Math.round(minLeadMs / 1000)}초 뒤로 잡아라.`
+    );
+  }
+  return d;
+}
+
+// ─────────────────────────────────────────────────────────────
 // OAuth — 클라이언트 시크릿 / 토큰
 // ─────────────────────────────────────────────────────────────
 
@@ -509,11 +696,19 @@ export function writeBackPublishResult(publishPath, result) {
   let fm = text.slice(0, fmEnd);
   const rest = text.slice(fmEnd);
 
+  // 예약 공개가 실제로 걸렸으면 state는 published가 아니라 scheduled다.
+  const sch = result.schedule ?? null;
+  const scheduled = Boolean(sch?.applied);
+  const ytFields = [
+    `state: ${scheduled ? 'scheduled' : 'published'}`,
+    `url: "${result.url}"`,
+    `published_at: "${result.publishedAt}"`,
+    `visibility: ${result.visibility}`,
+    ...(sch ? [`publish_at: "${scheduled ? sch.iso : ''}"`] : []),
+  ];
+
   fm = fm.replace(/^video_id:.*$/m, `video_id: "${result.videoId}"`);
-  fm = fm.replace(
-    /^([ \t]*youtube:).*$/m,
-    `$1 { state: published, url: "${result.url}", published_at: "${result.publishedAt}", visibility: ${result.visibility} }`
-  );
+  fm = fm.replace(/^([ \t]*youtube:).*$/m, `$1 { ${ytFields.join(', ')} }`);
   fm = fm.replace(/^updated:.*$/m, `updated: ${result.publishedAt.slice(0, 10)}`);
 
   text = fm + rest;
@@ -528,6 +723,15 @@ export function writeBackPublishResult(publishPath, result) {
     `| URL | ${result.url} |`,
     `| 공개 범위 | ${result.visibility} |`,
     `| 게시 시각 | ${result.publishedAt} |`,
+    ...(sch
+      ? [
+          `| 예약 공개 요청 | ${sch.iso} = ${sch.human} ${sch.zone} |`,
+          `| 예약 기준 | ${sch.basis} |`,
+          `| 예약 적용 | ${scheduled
+            ? `✅ 적용됨 — API 재조회 확인: status.privacyStatus=\`${sch.actualPrivacyStatus}\`, status.publishAt=\`${sch.actualPublishAt}\``
+            : `❌ 미적용 (${sch.reason}) — 영상은 \`${result.visibility}\` 상태로 남아 있다. 스튜디오에서 수동 예약 필요`} |`,
+        ]
+      : []),
     `| 업로드 주체 | \`scripts/publish/upload.mjs\` (YouTube Data API v3, resumable) |`,
     `| 제목 | ${result.title} |`,
     `| 태그 수 | ${result.tagCount}개 |`,
@@ -542,6 +746,46 @@ export function writeBackPublishResult(publishPath, result) {
   ].join(eol);
 
   atomicWrite(publishPath, text.replace(/\s*$/, eol) + section + eol);
+}
+
+/**
+ * 이미 업로드된 영상에 예약 공개만 건 경우(--schedule-only)의 기록.
+ * 게시 결과표는 건드리지 않고 frontmatter의 youtube 상태와 짧은 절만 덧붙인다.
+ */
+export function writeBackScheduleResult(publishPath, sch) {
+  const raw = fs.readFileSync(publishPath, 'utf8');
+  const eol = raw.includes('\r\n') ? '\r\n' : '\n';
+  const fmEnd = raw.indexOf('\n---', 4);
+  if (fmEnd < 0) throw new DanbiError(E.PARSE, 'frontmatter 종료(---)를 찾을 수 없다.');
+  let fm = raw.slice(0, fmEnd);
+  const rest = raw.slice(fmEnd);
+
+  if (sch.applied) {
+    fm = fm.replace(/^([ \t]*youtube:)[ \t]*\{([^}]*)\}[ \t]*$/m, (_all, key, inner) => {
+      let body = inner
+        .replace(/state:[ \t]*[A-Za-z_]+/, 'state: scheduled')
+        .replace(/publish_at:[ \t]*"[^"]*"[,]?[ \t]*/, '');
+      body = body.trim().replace(/,$/, '');
+      return `${key} { ${body}, publish_at: "${sch.iso}" }`;
+    });
+  }
+
+  const section = [
+    '',
+    `## 예약 공개 설정 — 자동 기입 (upload.mjs --schedule-only, ${sch.recordedAt})`,
+    '',
+    '| 항목 | 값 |',
+    '|---|---|',
+    `| video_id | \`${sch.videoId}\` |`,
+    `| 예약 공개 요청 | ${sch.iso} = ${sch.human} ${sch.zone} |`,
+    `| 예약 기준 | ${sch.basis} |`,
+    `| 예약 적용 | ${sch.applied
+      ? `✅ 적용됨 — API 재조회 확인: status.privacyStatus=\`${sch.actualPrivacyStatus}\`, status.publishAt=\`${sch.actualPublishAt}\``
+      : `❌ 미적용 (${sch.reason})`} |`,
+    '',
+  ].join(eol);
+
+  atomicWrite(publishPath, (fm + rest).replace(/\s*$/, eol) + section + eol);
 }
 
 export function ensureDir(p) {

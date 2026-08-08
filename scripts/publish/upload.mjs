@@ -14,33 +14,56 @@
  *   --restart                기존 resumable 세션을 버리고 처음부터 다시 업로드
  *   --no-writeback           04-publish.md 자동 기입 생략
  *   --set-visibility <v>     업로드하지 않고 기존 video_id의 공개 범위만 변경
- *   --video-id <id>          --set-visibility와 함께 사용 (미지정 시 frontmatter의 video_id)
+ *   --video-id <id>          --set-visibility / --schedule-only와 함께 사용 (미지정 시 frontmatter의 video_id)
+ *
+ * 예약 공개 (status.publishAt) — 기본값은 "예약 없음". 아래 인자를 명시할 때만 켜진다.
+ *   --publish-at <RFC3339>   절대 시각으로 예약. 예: --publish-at "2026-08-08T18:12:01+09:00"
+ *                            오프셋을 생략하면 --timezone(기본 +09:00 KST)으로 해석한다.
+ *   --publish-in <기간>       업로드 "완료" 시각 기준 상대 예약. 예: --publish-in 6h / 30m / 1d6h
+ *                            완료 순간에 시스템 시각을 읽어 확정한다(미리 계산하지 않는다).
+ *   --timezone <오프셋>       표기·해석 기준 타임존. 기본 +09:00. 예: +09:00 / Z / UTC / KST
+ *   --schedule-only          업로드하지 않고 기존 video_id에 예약만 건다(--video-id 필요).
  *
  * 안전 기본값
  *   · 공개 범위 기본 private. public은 --visibility public 명시가 있어야만.
+ *   · 예약 공개는 기본 꺼짐. --publish-at / --publish-in 을 준 경우에만 설정된다.
+ *   · 예약 공개 시 privacyStatus는 private로 강제된다(YouTube 규약).
+ *     --visibility public|unlisted 와 함께 주면 에러로 막는다.
+ *   · 과거·임박 시각은 거부한다. 업로드 후에도 다시 검사해, 이미 지났으면 예약을
+ *     걸지 않고 private로 남긴다(즉시 공개 방지).
  *   · §0 블록 형식이 어긋나면 추측하지 않고 즉시 중단(ep1 설명란 사고 재발 방지).
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
-  E, DanbiError, LIMITS, CATEGORIES, SESSION_DIR,
+  E, DanbiError, LIMITS, CATEGORIES, SESSION_DIR, DEFAULT_TZ,
   parsePublishDoc, resolvePublishPath, probeVideo,
-  getAccessToken, classifyApiError, writeBackPublishResult, ensureDir,
+  getAccessToken, classifyApiError, writeBackPublishResult, writeBackScheduleResult, ensureDir,
+  parseTimezoneOffset, parsePublishAtInput, parseRelativeDuration,
+  formatOffsetIso, describePublishAt, formatRemaining, assertFuturePublishAt,
 } from './lib.mjs';
 
 const CHUNK = 16 * 1024 * 1024;     // 16MiB — 256KiB의 배수여야 한다
 const MAX_RETRY = 6;
 
+/** 예약 시각 최소 여유 — 이보다 임박하면 인자 단계에서 거부한다 */
+const MIN_LEAD_MS = 60_000;
+/** 업로드 완료 후 예약을 걸 때 요구하는 최소 여유 — 이보다 임박하면 예약을 걸지 않는다 */
+const APPLY_LEAD_MS = 30_000;
+
 // ─────────────────────────────────────────────────────────────
 // 인자
 // ─────────────────────────────────────────────────────────────
 
-function parseArgs(argv) {
+export function parseArgs(argv, { nowMs = Date.now() } = {}) {
   const o = {
     target: null, dryRun: false, visibility: 'private', thumbnail: undefined,
     noThumbnail: false, playlist: null, category: null, restart: false,
     writeback: true, setVisibility: null, videoId: null,
+    publishAt: null, publishIn: null, timezone: null, scheduleOnly: false,
+    visibilityExplicit: false, schedule: null,
   };
   const VIS = ['private', 'unlisted', 'public'];
   for (let i = 0; i < argv.length; i++) {
@@ -52,7 +75,7 @@ function parseArgs(argv) {
     };
     switch (a) {
       case '--dry-run': o.dryRun = true; break;
-      case '--visibility': o.visibility = need(); break;
+      case '--visibility': o.visibility = need(); o.visibilityExplicit = true; break;
       case '--thumbnail': o.thumbnail = need(); break;
       case '--no-thumbnail': o.noThumbnail = true; break;
       case '--playlist': o.playlist = need(); break;
@@ -61,6 +84,10 @@ function parseArgs(argv) {
       case '--no-writeback': o.writeback = false; break;
       case '--set-visibility': o.setVisibility = need(); break;
       case '--video-id': o.videoId = need(); break;
+      case '--publish-at': o.publishAt = need(); break;
+      case '--publish-in': o.publishIn = need(); break;
+      case '--timezone': case '--tz': o.timezone = need(); break;
+      case '--schedule-only': o.scheduleOnly = true; break;
       case '-h': case '--help': o.help = true; break;
       default:
         if (a.startsWith('--')) throw new DanbiError(E.USAGE, `알 수 없는 옵션: ${a}`);
@@ -70,6 +97,67 @@ function parseArgs(argv) {
   }
   for (const [k, v] of [['--visibility', o.visibility], ['--set-visibility', o.setVisibility]]) {
     if (v !== null && !VIS.includes(v)) throw new DanbiError(E.USAGE, `${k} 값은 ${VIS.join('|')} 중 하나여야 한다 (받은 값: ${v})`);
+  }
+  if (o.help) return o;
+
+  // ── 예약 공개
+  if (o.publishAt !== null && o.publishIn !== null) {
+    throw new DanbiError(E.USAGE, '--publish-at 과 --publish-in 은 함께 쓸 수 없다.', '절대 시각(--publish-at) 또는 업로드 완료 기준 상대 시각(--publish-in) 중 하나만 지정하라.');
+  }
+  const wantsSchedule = o.publishAt !== null || o.publishIn !== null;
+
+  if (o.scheduleOnly && !wantsSchedule) {
+    throw new DanbiError(E.USAGE, '--schedule-only 에는 --publish-at 또는 --publish-in 이 필요하다.');
+  }
+  if (o.timezone !== null && !wantsSchedule) {
+    throw new DanbiError(E.USAGE, '--timezone 은 --publish-at / --publish-in 과 함께 써야 한다.');
+  }
+
+  if (wantsSchedule) {
+    // YouTube 규약: publishAt은 privacyStatus=private 과만 유효하다.
+    if (o.visibilityExplicit && o.visibility !== 'private') {
+      throw new DanbiError(
+        E.USAGE,
+        `예약 공개(--publish-${o.publishAt !== null ? 'at' : 'in'})와 --visibility ${o.visibility} 는 함께 쓸 수 없다.`,
+        'YouTube Data API v3는 status.publishAt을 privacyStatus=private 일 때만 적용한다. public/unlisted와 함께 보내면 무시되거나 거부된다.\n         → --visibility 를 빼거나 --visibility private 로 두어라. 예약 시각이 되면 YouTube가 알아서 public으로 전환한다.'
+      );
+    }
+    if (o.setVisibility !== null) {
+      if (o.setVisibility !== 'private') {
+        throw new DanbiError(
+          E.USAGE,
+          `예약 공개와 --set-visibility ${o.setVisibility} 는 함께 쓸 수 없다.`,
+          '예약 공개는 privacyStatus=private 을 요구한다.'
+        );
+      }
+      // --set-visibility 경로는 예약을 적용하지 않는다. 조용히 무시하지 말고 막는다.
+      throw new DanbiError(
+        E.USAGE,
+        '--set-visibility 는 예약 공개를 설정하지 않는다.',
+        '이미 올라간 영상에 예약만 걸려면 --schedule-only 를 쓰라. 예: --schedule-only --video-id <id> --publish-in 6h'
+      );
+    }
+    o.visibility = 'private';   // 강제
+
+    const tz = parseTimezoneOffset(o.timezone ?? DEFAULT_TZ);
+    if (o.publishAt !== null) {
+      const p = parsePublishAtInput(o.publishAt, o.timezone ?? DEFAULT_TZ);
+      assertFuturePublishAt(p.epochMs, p.offsetMinutes, { nowMs, minLeadMs: MIN_LEAD_MS, where: '--publish-at' });
+      o.schedule = {
+        mode: 'absolute',
+        raw: o.publishAt,
+        epochMs: p.epochMs,
+        offsetMinutes: p.offsetMinutes,
+        explicitOffset: p.explicitOffset,
+      };
+    } else {
+      o.schedule = {
+        mode: 'relative',
+        raw: o.publishIn,
+        deltaMs: parseRelativeDuration(o.publishIn),
+        offsetMinutes: tz.minutes,
+      };
+    }
   }
   return o;
 }
@@ -137,7 +225,7 @@ function clearSession(pid) {
 // 업로드
 // ─────────────────────────────────────────────────────────────
 
-function buildBody(meta, visibility, withSynthetic) {
+export function buildStatus(meta, visibility, withSynthetic, publishAtIso) {
   const status = {
     privacyStatus: visibility,
     selfDeclaredMadeForKids: false,   // 아동용 아님
@@ -146,6 +234,18 @@ function buildBody(meta, visibility, withSynthetic) {
     publicStatsViewable: true,
   };
   if (withSynthetic && meta.containsSyntheticMedia) status.containsSyntheticMedia = true;
+  // publishAt은 privacyStatus=private 일 때만 유효하다 — 호출부가 이미 강제하지만 여기서도 막는다.
+  if (publishAtIso) {
+    if (visibility !== 'private') {
+      throw new DanbiError(E.USAGE, `status.publishAt은 privacyStatus=private 일 때만 보낼 수 있다 (받은 값: ${visibility}).`);
+    }
+    status.publishAt = publishAtIso;
+  }
+  return status;
+}
+
+function buildBody(meta, visibility, withSynthetic) {
+  const status = buildStatus(meta, visibility, withSynthetic);
   return {
     snippet: {
       title: meta.title,
@@ -302,6 +402,115 @@ async function patchVisibility(token, videoId, visibility) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// 예약 공개
+//
+// publishAt은 업로드 insert 본문에 넣지 않고 업로드 "완료 후" videos.update로
+// 적용한다. 이유 3가지:
+//   1) --publish-in 은 완료 시각 기준이어야 한다. insert 시점에 계산하면
+//      업로드 소요 시간(수 분~수십 분)만큼 어긋난다.
+//   2) resumable 세션을 다음 날 재개하는 경우, insert 시점에 박아둔 절대 시각이
+//      이미 과거가 되어 finalize 순간 즉시 공개될 수 있다.
+//   3) 실패 방향이 안전하다 — update가 실패해도 영상은 private로 남는다.
+// ─────────────────────────────────────────────────────────────
+
+/** videos.update part=status — 예약 시각을 포함한 status 파트를 통째로 다시 쓴다 */
+async function putStatus(token, videoId, meta, withSyntheticInitial, publishAtIso) {
+  let withSynthetic = withSyntheticInitial;
+  for (;;) {
+    const res = await api('https://www.googleapis.com/youtube/v3/videos?part=status', {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: videoId, status: buildStatus(meta, 'private', withSynthetic, publishAtIso) }),
+    }, { allow: withSynthetic ? [400] : [] });
+
+    if (res.status === 400 && withSynthetic) {
+      const t = await res.text();
+      if (/containsSyntheticMedia|unexpected|invalidMetadata|badRequest/i.test(t)) {
+        console.log('   ⚠ status.containsSyntheticMedia 필드가 거부됐다 — 필드를 빼고 재시도.');
+        withSynthetic = false;
+        continue;
+      }
+      throw classifyApiError(400, t);
+    }
+    return await res.json();
+  }
+}
+
+/** videos.list part=status — 실제로 무엇이 설정됐는지 서버에서 다시 읽는다 (추정 금지) */
+async function fetchVideoStatus(token, videoId) {
+  const res = await api(
+    `https://www.googleapis.com/youtube/v3/videos?part=status&id=${encodeURIComponent(videoId)}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  const j = await res.json();
+  const item = j.items?.[0];
+  if (!item) throw new DanbiError(E.API, `videos.list가 ${videoId}에 대해 아무것도 반환하지 않았다.`, '업로드 직후 색인 지연일 수 있다. 유튜브 스튜디오에서 직접 확인하라.');
+  return item.status ?? {};
+}
+
+/**
+ * 예약 공개를 확정·적용·검증한다.
+ * anchorMs는 상대 지정의 기준 시각(= 업로드 완료 시각). 여기서 실제 시스템 시각을 읽는다.
+ */
+async function applySchedule(token, videoId, meta, sched, { withSynthetic, anchorMs, notes, dryRun = false }) {
+  const targetMs = sched.mode === 'relative' ? anchorMs + sched.deltaMs : sched.epochMs;
+  const d = describePublishAt(targetMs, sched.offsetMinutes);
+  const basis = sched.mode === 'relative'
+    ? `업로드 완료 시각 ${formatOffsetIso(anchorMs, sched.offsetMinutes)} + ${sched.raw} (--publish-in)`
+    : `절대 지정 (--publish-at ${sched.raw})`;
+
+  console.log(`\n▶ 예약 공개 설정`);
+  console.log(`   기준        : ${basis}`);
+  console.log(`   예약 시각   : ${d.iso}`);
+  console.log(`                 = ${d.human} (${d.zone})   [UTC ${d.utcIso}]`);
+  console.log(`   privacyStatus: private (YouTube 규약상 예약 공개는 private에서만 동작)`);
+
+  const base = { mode: sched.mode, raw: sched.raw, basis, iso: d.iso, human: d.human, zone: d.zone, utcIso: d.utcIso, epochMs: targetMs };
+
+  // 업로드에 걸린 시간 때문에 절대 시각이 이미 지났을 수 있다 — 즉시 공개를 막는다.
+  const now = Date.now();
+  if (targetMs <= now + APPLY_LEAD_MS) {
+    const msg = `⚠ 예약 시각(${d.iso})이 이미 지났거나 ${Math.round(APPLY_LEAD_MS / 1000)}초 이내다 — 즉시 공개를 막기 위해 예약을 설정하지 않았다. 영상은 private 상태로 남아 있다. 스튜디오에서 직접 예약하라.`;
+    console.log(`   ❌ ${msg}`);
+    notes?.push(msg);
+    return { ...base, applied: false, reason: '적용 시점에 과거·임박 시각', actualPrivacyStatus: null, actualPublishAt: null };
+  }
+
+  if (dryRun) {
+    console.log('   (--dry-run — API 호출 없음)');
+    return { ...base, applied: false, reason: 'dry-run', actualPrivacyStatus: null, actualPublishAt: null };
+  }
+
+  await putStatus(token, videoId, meta, withSynthetic, d.iso);
+
+  // ── 검증: 응답을 믿지 말고 서버에서 다시 읽는다
+  const actual = await fetchVideoStatus(token, videoId);
+  const actualMs = actual.publishAt ? Date.parse(actual.publishAt) : NaN;
+  const privacyOk = actual.privacyStatus === 'private';
+  const timeOk = Number.isFinite(actualMs) && Math.abs(actualMs - targetMs) < 1000;
+
+  console.log(`   ${privacyOk ? '✔' : '✗'} API 확인 — status.privacyStatus = ${actual.privacyStatus ?? '(없음)'}`);
+  console.log(`   ${timeOk ? '✔' : '✗'} API 확인 — status.publishAt     = ${actual.publishAt ?? '(없음)'}`);
+  if (Number.isFinite(actualMs)) {
+    console.log(`                                      = ${describePublishAt(actualMs, sched.offsetMinutes).human} (${d.zone})`);
+  }
+
+  const result = {
+    ...base,
+    applied: privacyOk && timeOk,
+    actualPrivacyStatus: actual.privacyStatus ?? null,
+    actualPublishAt: actual.publishAt ?? null,
+  };
+  if (!result.applied) {
+    result.reason = `API 재조회 불일치 — privacyStatus=${actual.privacyStatus ?? '(없음)'}, publishAt=${actual.publishAt ?? '(없음)'}`;
+    const msg = `⚠ 예약 공개가 요청대로 설정되지 않았다. 요청 ${d.iso} / 서버 privacyStatus=${actual.privacyStatus ?? '(없음)'}, publishAt=${actual.publishAt ?? '(없음)'}. 유튜브 스튜디오에서 직접 확인·설정하라.`;
+    console.log(`   ❌ ${msg}`);
+    notes?.push(msg);
+  }
+  return result;
+}
+
+// ─────────────────────────────────────────────────────────────
 // 출력
 // ─────────────────────────────────────────────────────────────
 
@@ -332,7 +541,34 @@ function printSummary(meta, video, opts) {
   if (meta.syntheticLine) console.log(`                  근거: ${meta.syntheticLine.trim().slice(0, 90)}`);
   console.log(`    재생목록    : ${opts.playlist ?? `(ID 미지정)${meta.playlistNote ? ` — §0-D 메모: ${meta.playlistNote}` : ''}`}`);
   console.log(`    공개 범위   : ${opts.visibility}${opts.visibility === 'public' ? '  ⚠ 즉시 공개된다' : ''}`);
+  printSchedulePlan(opts.schedule, '    ');
   console.log(`\n${line}\n`);
+}
+
+/** 계산된 예약 시각을 ISO와 한국 시각 표기 양쪽으로 보여준다 (인간 확인용) */
+function printSchedulePlan(sched, indent = '') {
+  if (!sched) {
+    console.log(`${indent}예약 공개   : 없음 (기본값 — --publish-at / --publish-in 미지정)`);
+    return;
+  }
+  const now = Date.now();
+  if (sched.mode === 'absolute') {
+    const d = describePublishAt(sched.epochMs, sched.offsetMinutes);
+    console.log(`${indent}예약 공개   : ${d.iso}`);
+    console.log(`${indent}              = ${d.human} (${d.zone})`);
+    console.log(`${indent}              절대 지정 (--publish-at ${sched.raw}${sched.explicitOffset ? '' : ` — 오프셋 생략, ${d.zone} 로 해석`})`);
+    console.log(`${indent}              지금(${formatOffsetIso(now, sched.offsetMinutes)}) 기준 ${formatRemaining(sched.epochMs - now)} 뒤`);
+    console.log(`${indent}              UTC 전송값: ${d.utcIso}`);
+  } else {
+    const est = describePublishAt(now + sched.deltaMs, sched.offsetMinutes);
+    console.log(`${indent}예약 공개   : 업로드 완료 시각 + ${sched.raw}  (--publish-in — 완료 순간의 시스템 시각으로 확정)`);
+    console.log(`${indent}              지금(${formatOffsetIso(now, sched.offsetMinutes)}) 업로드가 끝난다고 가정하면`);
+    console.log(`${indent}              ${est.iso}`);
+    console.log(`${indent}              = ${est.human} (${est.zone})`);
+    console.log(`${indent}              ↑ 예상값이다. 실제 예약 시각은 업로드가 끝난 뒤 그만큼 뒤로 밀린다.`);
+  }
+  console.log(`${indent}              privacyStatus는 private로 강제된다. 예약 시각에 YouTube가 public으로 전환한다.`);
+  console.log(`${indent}              ⚠ 되돌릴 수 없는 동작 — 사람이 보지 않아도 공개로 넘어간다.`);
 }
 
 function usage() {
@@ -358,6 +594,44 @@ async function main() {
     meta.categorySource = `--category ${key}`;
   }
 
+  // ── 업로드 없이 기존 영상에 예약만 거는 모드
+  if (opts.scheduleOnly) {
+    const videoId = opts.videoId ?? meta.existingVideoId;
+    if (!videoId) throw new DanbiError(E.USAGE, 'video_id가 없다.', '04-publish frontmatter에 video_id가 있거나 --video-id로 지정해야 한다.');
+    const line = '─'.repeat(72);
+    console.log(`\n${line}`);
+    console.log(`  예약 공개만 설정 — ${meta.productionId} / ${videoId}`);
+    console.log(`  https://youtu.be/${videoId}`);
+    console.log(line);
+    printSchedulePlan(opts.schedule, '  ');
+    console.log(`  ※ videos.update part=status 는 status 파트를 통째로 다시 쓴다.`);
+    console.log(`     privacyStatus=private, license=youtube, embeddable=true, publicStatsViewable=true,`);
+    console.log(`     selfDeclaredMadeForKids=false 로 설정된다. 스튜디오에서 다른 값을 쓰고 있었다면 덮어쓴다.`);
+    console.log(`${line}\n`);
+
+    if (opts.dryRun) {
+      console.log('✅ 드라이런 완료 — API 호출 0회.');
+      console.log(`   실제 적용: node scripts/publish/upload.mjs ${opts.target} --schedule-only --video-id ${videoId}${opts.publishAt ? ` --publish-at "${opts.publishAt}"` : ` --publish-in ${opts.publishIn}`}\n`);
+      return;
+    }
+
+    const token = await getAccessToken();
+    const sch = await applySchedule(token, videoId, meta, opts.schedule, {
+      withSynthetic: meta.containsSyntheticMedia,
+      anchorMs: Date.now(),
+      notes: [],
+    });
+    if (opts.writeback) {
+      writeBackScheduleResult(publishPath, { ...sch, videoId, recordedAt: new Date().toISOString() });
+      console.log(`\n   04-publish.md 기입 완료: ${publishPath}`);
+    }
+    console.log(sch.applied
+      ? `\n✅ 예약 완료 — ${sch.iso} (${sch.human} ${sch.zone})에 자동 공개된다.\n   취소하려면 유튜브 스튜디오에서 예약을 해제하라(이 스크립트에는 예약 해제 경로가 없다).\n`
+      : `\n❌ 예약이 적용되지 않았다 (${sch.reason}). 영상은 private 상태다.\n`);
+    if (!sch.applied) process.exitCode = 1;
+    return;
+  }
+
   // ── 공개 범위만 변경하는 모드
   if (opts.setVisibility) {
     const videoId = opts.videoId ?? meta.existingVideoId;
@@ -373,15 +647,25 @@ async function main() {
   const video = probeVideo(meta.videoPath);
   printSummary(meta, video, opts);
 
+  const schedFlags = opts.schedule
+    ? (opts.schedule.mode === 'absolute' ? ` --publish-at "${opts.publishAt}"` : ` --publish-in ${opts.publishIn}`)
+      + (opts.timezone ? ` --timezone ${opts.timezone}` : '')
+    : '';
+
   if (opts.dryRun) {
     console.log('✅ 드라이런 완료 — 파싱·검증 통과. API 호출 0회, 업로드 없음.');
-    console.log(`   실제 업로드: node scripts/publish/upload.mjs ${opts.target}${opts.playlist ? ` --playlist ${opts.playlist}` : ''}\n`);
+    console.log(`   실제 업로드: node scripts/publish/upload.mjs ${opts.target}${opts.playlist ? ` --playlist ${opts.playlist}` : ''}${schedFlags}\n`);
     return;
   }
 
   if (opts.visibility === 'public') {
     console.log('⚠ --visibility public — 업로드 즉시 전체 공개된다. 5초 후 시작 (Ctrl+C로 중단)');
     await sleep(5000);
+  }
+
+  // 절대 예약 시각은 업로드 시작 직전에 다시 검사한다 (드라이런과 실행 사이에 시간이 흘렀을 수 있다)
+  if (opts.schedule?.mode === 'absolute') {
+    assertFuturePublishAt(opts.schedule.epochMs, opts.schedule.offsetMinutes, { minLeadMs: MIN_LEAD_MS, where: '--publish-at' });
   }
 
   const token = await getAccessToken();
@@ -428,10 +712,39 @@ async function main() {
 async function finish(result, session, token, meta, video, opts, publishPath) {
   const videoId = result.id;
   const url = `https://youtu.be/${videoId}`;
+  const completedAtMs = Date.now();     // ← 상대 예약의 기준. 여기서 시스템 시각을 실제로 읽는다.
   clearSession(meta.productionId);
   console.log(`\n✅ 업로드 완료: ${url}  (공개 범위: ${result.status?.privacyStatus ?? session.visibility})`);
 
   const notes = [];
+
+  // ── 예약 공개 (요청이 있을 때만)
+  let schedule = null;
+  if (opts.schedule) {
+    try {
+      schedule = await applySchedule(token, videoId, meta, opts.schedule, {
+        withSynthetic: session.syntheticApplied === true,
+        anchorMs: completedAtMs,
+        notes,
+      });
+    } catch (e) {
+      const msg = `⚠ 예약 공개 설정 실패 — 영상은 private 상태로 남아 있다. 스튜디오에서 수동 예약 필요: ${e.message}`;
+      console.log(`   ❌ ${msg}`);
+      notes.push(msg);
+      schedule = {
+        mode: opts.schedule.mode, raw: opts.schedule.raw,
+        basis: opts.schedule.mode === 'relative'
+          ? `업로드 완료 시각 ${formatOffsetIso(completedAtMs, opts.schedule.offsetMinutes)} + ${opts.schedule.raw} (--publish-in)`
+          : `절대 지정 (--publish-at ${opts.schedule.raw})`,
+        ...describePublishAt(
+          opts.schedule.mode === 'relative' ? completedAtMs + opts.schedule.deltaMs : opts.schedule.epochMs,
+          opts.schedule.offsetMinutes,
+        ),
+        applied: false, reason: e.message,
+        actualPrivacyStatus: null, actualPublishAt: null,
+      };
+    }
+  }
 
   // 썸네일
   let thumbUsed = null;
@@ -465,7 +778,11 @@ async function finish(result, session, token, meta, video, opts, publishPath) {
   if (session.syntheticApplied === 'manual') {
     notes.push('⚠ **변형·합성 콘텐츠 고지가 API로 적용되지 않았다.** 유튜브 스튜디오 → 해당 영상 → 세부정보 → "변형된 콘텐츠 또는 합성 콘텐츠" 항목을 수동 체크할 것.');
   }
-  notes.push('첫 업로드 확인 항목: OAuth 프로젝트가 미심사(테스트) 상태일 때 공개 전환이 실제로 제한되는지 — 이 업로드에서 `--set-visibility public`이 성공하는지로 검증한다.');
+  if (schedule?.applied) {
+    notes.push(`예약 공개 확인 항목: ${schedule.iso} (${schedule.human} ${schedule.zone})에 실제로 공개됐는지 그 시각 이후 대조할 것. OAuth 프로젝트가 미심사(테스트) 상태일 때 예약 공개가 실제로 동작하는지는 아직 실측되지 않았다.`);
+  } else {
+    notes.push('첫 업로드 확인 항목: OAuth 프로젝트가 미심사(테스트) 상태일 때 공개 전환이 실제로 제한되는지 — 이 업로드에서 `--set-visibility public`이 성공하는지로 검증한다.');
+  }
 
   if (opts.writeback) {
     writeBackPublishResult(publishPath, {
@@ -476,7 +793,7 @@ async function finish(result, session, token, meta, video, opts, publishPath) {
       categoryId: meta.categoryId, categorySource: meta.categorySource,
       syntheticApplied: session.syntheticApplied,
       thumbnail: thumbUsed, playlist: playlistUsed,
-      videoPath: video.path, notes,
+      videoPath: video.path, schedule, notes,
     });
     console.log(`   04-publish.md 기입 완료: ${publishPath}`);
   }
@@ -485,15 +802,28 @@ async function finish(result, session, token, meta, video, opts, publishPath) {
     console.log('\n후속 확인 사항:');
     notes.forEach((n) => console.log(`  - ${n.replace(/\*\*/g, '')}`));
   }
-  console.log(`\n다음: node scripts/publish/upload.mjs ${meta.productionId} --set-visibility public\n`);
+
+  if (schedule?.applied) {
+    console.log(`\n예약 완료 — ${schedule.iso} (${schedule.human} ${schedule.zone})에 YouTube가 자동으로 전체 공개한다.`);
+    console.log('   지금 수동 공개할 필요 없다. 취소하려면 유튜브 스튜디오에서 예약을 해제하라.\n');
+  } else if (schedule) {
+    console.log(`\n⚠ 예약이 적용되지 않았다 (${schedule.reason}). 영상은 비공개 상태다 — 스튜디오에서 직접 예약하라.\n`);
+  } else {
+    console.log(`\n다음: node scripts/publish/upload.mjs ${meta.productionId} --set-visibility public\n`);
+  }
 }
 
-main().catch((e) => {
-  if (e instanceof DanbiError) {
-    console.error(`\n❌ [${e.code}] ${e.message}`);
-    if (e.hint) console.error(`   → ${e.hint}`);
-  } else {
-    console.error('\n❌ 예기치 못한 오류:', e.stack ?? e.message);
-  }
-  process.exit(1);
-});
+// 직접 실행일 때만 main()을 돈다 — 단위 테스트가 parseArgs를 import할 수 있게 한다.
+const invokedDirectly = Boolean(process.argv[1]) && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (invokedDirectly) {
+  main().catch((e) => {
+    if (e instanceof DanbiError) {
+      console.error(`\n❌ [${e.code}] ${e.message}`);
+      if (e.hint) console.error(`   → ${e.hint}`);
+    } else {
+      console.error('\n❌ 예기치 못한 오류:', e.stack ?? e.message);
+    }
+    process.exit(1);
+  });
+}

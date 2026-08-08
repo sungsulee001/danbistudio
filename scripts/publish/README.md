@@ -21,6 +21,7 @@ scripts/publish/
 | 항목 | 기본 동작 |
 |---|---|
 | 공개 범위 | **private**. `--visibility public`을 명시해야만 공개된다 |
+| 예약 공개 | **없음.** `--publish-at` / `--publish-in`을 명시할 때만 걸린다 (§2 ③′) |
 | 드라이런 | `--dry-run`이면 API 호출 **0회** — 파싱·검증·요약만 |
 | §0 형식 불일치 | **에러로 중단.** 추측해서 올리지 않는다 |
 | 아동용 | 항상 `selfDeclaredMadeForKids: false` |
@@ -109,6 +110,51 @@ node scripts/publish/upload.mjs 2026-07-29-jagyeongnu-night --set-visibility pub
 `--visibility public`으로 처음부터 공개 업로드도 가능하지만, **권장하지 않는다** —
 설명란 오기입을 되돌릴 기회가 없어진다(ep1 사고가 그 형태였다).
 
+### ③′ 예약 공개 (`publishAt`)
+
+`--set-visibility public`을 사람이 직접 누르는 대신, **업로드와 동시에 공개 예약**을 걸 수 있다.
+
+```
+# 절대 시각 — RFC 3339 (오프셋 생략 시 KST로 해석)
+node scripts/publish/upload.mjs <production_id> --dry-run --publish-at "2026-08-08T18:12:01+09:00"
+
+# 상대 시각 — 업로드 "완료" 시각 기준
+node scripts/publish/upload.mjs <production_id> --dry-run --publish-in 6h
+
+# 이미 올라가 있는 영상에 예약만 걸기
+node scripts/publish/upload.mjs <production_id> --schedule-only --video-id <id> --publish-in 6h
+```
+
+드라이런이 ISO 값과 한국 시각을 **둘 다** 찍는다. 이 출력으로 인간이 확인한 뒤 인자를 빼고 실행한다.
+
+```
+예약 공개   : 2026-08-08T18:12:01+09:00
+              = 2026년 8월 8일(토) 오후 6시 12분 (KST)
+              지금(2026-08-08T16:08:22+09:00) 기준 2시간 3분 뒤
+              UTC 전송값: 2026-08-08T09:12:01.000Z
+```
+
+규칙:
+
+- **기본값은 예약 없음.** `--publish-at` / `--publish-in`을 명시할 때만 켜진다.
+- **`privacyStatus`는 `private`로 강제된다.** YouTube Data API v3는 `status.publishAt`을
+  `private`일 때만 적용한다. `--visibility public|unlisted`와 같이 주면 **에러로 막는다**
+  (조용히 무시되면 예약이 안 걸린 채 즉시 공개된다).
+- **과거·임박(60초 미만) 시각은 거부한다.** 업로드가 끝난 뒤에도 다시 검사해, 그 사이에
+  시각이 지났으면 **예약을 걸지 않고 private로 남긴다**(즉시 공개 방지).
+- `publishAt`은 업로드 본문이 아니라 **업로드 완료 후 `videos.update`로** 적용한다.
+  `--publish-in`이 완료 시각 기준이어야 하고, resumable 세션을 나중에 재개할 때
+  미리 박아둔 시각이 과거가 되는 사고를 막기 위해서다. 실패해도 영상은 private로 남는다.
+- 설정 후 **`videos.list`로 다시 읽어** `status.privacyStatus` / `status.publishAt`을 출력한다.
+  추정으로 "설정됨"이라고 적지 않는다. 결과는 `04-publish.md`에도 기입된다
+  (frontmatter `state: scheduled` · `publish_at`, 「예약 공개」 표 행).
+- ⚠ **되돌릴 수 없다.** 예약 시각이 되면 사람이 보지 않아도 공개로 넘어간다.
+
+타임존은 `+09:00`(KST) 기본. `--timezone`으로 바꾼다 — `+09:00` / `+0900` / `+9` / `Z` /
+`UTC` / `KST`를 받는다. **IANA 지역명(`Asia/Seoul`)과 서머타임은 지원하지 않고 거부한다.**
+
+단위 검증: `npx vitest run scripts/publish/__tests__/publish-schedule.test.mjs`
+
 ### 전체 옵션
 
 | 옵션 | 설명 |
@@ -116,7 +162,11 @@ node scripts/publish/upload.mjs 2026-07-29-jagyeongnu-night --set-visibility pub
 | `--dry-run` | 파싱·검증·요약만. API 호출 없음 |
 | `--visibility private\|unlisted\|public` | 업로드 시 공개 범위 (기본 `private`) |
 | `--set-visibility private\|unlisted\|public` | 업로드 없이 기존 영상의 공개 범위만 변경 |
-| `--video-id <id>` | `--set-visibility`용. 생략 시 frontmatter의 `video_id` |
+| `--video-id <id>` | `--set-visibility` / `--schedule-only`용. 생략 시 frontmatter의 `video_id` |
+| `--publish-at <RFC3339>` | 절대 시각으로 예약 공개. 예: `"2026-08-08T18:12:01+09:00"` |
+| `--publish-in <기간>` | 업로드 **완료** 시각 기준 상대 예약. `6h` / `30m` / `2d` / `1d6h30m` |
+| `--timezone <오프셋>` | 예약 시각의 해석·표기 기준 (기본 `+09:00`) |
+| `--schedule-only` | 업로드 없이 기존 영상에 예약만 설정 |
 | `--thumbnail <path>` | §0-D 썸네일 경로 덮어쓰기 |
 | `--no-thumbnail` | 썸네일 설정 건너뜀 |
 | `--playlist <playlistId>` | 업로드 후 재생목록에 추가 |
