@@ -13,6 +13,7 @@ import type { VoiceoverRecordingState } from './voiceover-workflow-helpers';
 
 const mediaBinText: Record<DanbiMenuLanguage, {
   add: string;
+  insertAction: string;
   added: string;
   allBins: string;
   allMedia: string;
@@ -68,6 +69,7 @@ const mediaBinText: Record<DanbiMenuLanguage, {
   smartCollection: string;
   sortAssets: string;
   source: string;
+  openInSourceMonitor: (name: string) => string;
   sourceControls: string;
   sourcePrefix: string;
   stopVoiceover: string;
@@ -86,6 +88,7 @@ const mediaBinText: Record<DanbiMenuLanguage, {
 }> = {
   en: {
     add: '+ Add',
+    insertAction: 'Insert',
     added: 'Added',
     allBins: 'All bins',
     allMedia: 'All media',
@@ -141,6 +144,7 @@ const mediaBinText: Record<DanbiMenuLanguage, {
     smartCollection: 'Smart collection',
     sortAssets: 'Sort assets',
     source: 'Source',
+    openInSourceMonitor: (name) => `Open ${name} in Source Monitor`,
     sourceControls: 'Source controls',
     sourcePrefix: 'Source',
     stopVoiceover: 'Stop voiceover',
@@ -159,6 +163,7 @@ const mediaBinText: Record<DanbiMenuLanguage, {
   },
   ko: {
     add: '+ 추가',
+    insertAction: '삽입',
     added: '추가됨',
     allBins: '모든 보관함',
     allMedia: '전체 미디어',
@@ -214,6 +219,7 @@ const mediaBinText: Record<DanbiMenuLanguage, {
     smartCollection: '스마트 컬렉션',
     sortAssets: '에셋 정렬',
     source: '소스',
+    openInSourceMonitor: (name) => `소스 모니터에서 ${name} 열기`,
     sourceControls: '소스 제어',
     sourcePrefix: '소스',
     stopVoiceover: '보이스오버 중지',
@@ -944,7 +950,7 @@ function MediaBinAssetCard({
         <div className={`${viewMode === 'list' ? 'hidden' : 'absolute inset-x-1 bottom-1 grid grid-cols-3 gap-1 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100'}`}>
           <button
             type="button"
-            aria-label={`${text.add} ${asset.name}`}
+            aria-label={`${text.insertAction} ${asset.name}`}
             onClick={() => {
               onSelectSourceAsset(asset.id);
               onInsertAsset(asset.id);
@@ -955,7 +961,7 @@ function MediaBinAssetCard({
           </button>
           <button
             type="button"
-            aria-label={`${text.source} ${asset.name}`}
+            aria-label={text.openInSourceMonitor(asset.name)}
             title={`${text.source}: ${asset.name}`}
             onClick={() => onSelectSourceAsset(asset.id)}
             className="truncate rounded on-dark bg-black/80 px-1.5 py-1 text-micro text-ink shadow hover:bg-ds-300"
@@ -1057,7 +1063,7 @@ function MediaBinAssetCard({
         <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
-            aria-label={`${text.add} ${asset.name}`}
+            aria-label={`${text.insertAction} ${asset.name}`}
             onClick={() => {
               onSelectSourceAsset(asset.id);
               onInsertAsset(asset.id);
@@ -1068,7 +1074,7 @@ function MediaBinAssetCard({
           </button>
           <button
             type="button"
-            aria-label={`${text.source} ${asset.name}`}
+            aria-label={text.openInSourceMonitor(asset.name)}
             onClick={() => onSelectSourceAsset(asset.id)}
             className="rounded border border-ds-300 px-2 py-1 text-meta text-ds-800 hover:border-ds-500"
           >

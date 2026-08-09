@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+﻿import { expect, test, type Locator, type Page } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -267,7 +267,7 @@ test('imports MP4 media then quick add inserts linked video and audio clips', as
     const { assetCard, assetId } = await importMediaIntoEditor(page, mediaPath, mediaName);
 
     await assetCard.hover();
-    await page.getByRole('button', { name: `+ Add ${mediaName}` }).click();
+    await page.getByRole('button', { name: `Insert ${mediaName}` }).click();
 
     const videoClip = page.locator(`[data-testid^="timeline-clip-"][data-asset-id="${assetId}"][data-clip-kind="video"]`).first();
     const audioClip = page.locator(`[data-testid^="timeline-clip-"][data-asset-id="${assetId}"][data-clip-kind="audio"]`).first();
