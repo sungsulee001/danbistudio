@@ -597,6 +597,10 @@ function InspectorDockTabList({
                 : 'border-transparent text-ds-600 hover:text-ink'
             }`}
           >
+            {/* The short label is the tab's mnemonic; folding these into word
+                tabs dropped it from the accessible name as well as the screen.
+                Keep it for assistive tech and leave the surface as words. */}
+            <span className="sr-only">{panel.shortLabel} </span>
             {panel.label}
           </button>
         ))}
@@ -10143,7 +10147,7 @@ export default function EditorPage() {
               }`}>
                 {mode.shortLabel}
               </span>
-              <span className="max-w-full truncate ed:hidden">{displayMode.label}</span>
+              <span className="max-w-full truncate ed:sr-only">{displayMode.label}</span>
             </button>
             );
           })}
@@ -10173,7 +10177,7 @@ export default function EditorPage() {
                 }`}
               >
                 <span className="text-micro leading-none ed:text-xs">{panel.shortLabel}</span>
-                <span className="max-w-full truncate ed:hidden">{displayPanel.label}</span>
+                <span className="max-w-full truncate ed:sr-only">{displayPanel.label}</span>
               </button>
             );
           })}
@@ -10189,7 +10193,7 @@ export default function EditorPage() {
             className="flex h-9 w-[78px] shrink-0 items-center justify-center gap-1 rounded-md text-meta font-semibold text-ds-700 transition hover:bg-ds-200 hover:text-ink ed:mt-auto ed:h-[30px] ed:w-[30px]"
           >
             <span aria-hidden="true">{theme === 'light' ? '☾' : '☀'}</span>
-            <span className="max-w-full truncate ed:hidden">{theme === 'light' ? editorText.chrome.themeLight : editorText.chrome.themeDark}</span>
+            <span className="max-w-full truncate ed:sr-only">{theme === 'light' ? editorText.chrome.themeLight : editorText.chrome.themeDark}</span>
           </button>
         </nav>
 
