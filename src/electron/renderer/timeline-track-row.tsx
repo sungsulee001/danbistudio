@@ -1,3 +1,4 @@
+﻿import { useLayoutEffect, useRef, useState } from 'react';
 import type { DragEvent, MouseEvent, ReactNode } from 'react';
 import {
   formatTrackPan,
@@ -1121,6 +1122,9 @@ function resolveTimelineDropImpactGhost(
   return null;
 }
 
+/** Breathing room kept between the callout and the scroller's edge. */
+const GUIDE_CALLOUT_GAP_PX = 8;
+
 function TimelineEditGuideCallout({
   guide,
   fps,
@@ -1129,20 +1133,44 @@ function TimelineEditGuideCallout({
   fps: number;
 }) {
   const metadata = formatTimelineEditGuideMetadata(guide);
+  const calloutRef = useRef<HTMLSpanElement>(null);
+  const [flipped, setFlipped] = useState(false);
+
+  // The callout hangs to the right of the guide line, so dragging near the end
+  // of the timeline pushed it past the edge of the scroller and out of sight —
+  // exactly when you most want to read it. Measure against the scroll viewport
+  // and hang it to the left instead.
+  //
+  // The decision uses the LINE's x and the callout's width, neither of which
+  // flipping changes, so this cannot oscillate.
+  useLayoutEffect(() => {
+    const callout = calloutRef.current;
+    const line = callout?.parentElement;
+    const viewport = line?.closest('[data-timeline-scroll-viewport]') ?? line?.parentElement;
+    if (!callout || !line || !viewport) {
+      return;
+    }
+
+    const lineLeft = line.getBoundingClientRect().left;
+    const viewportRight = viewport.getBoundingClientRect().right;
+    setFlipped(lineLeft + callout.offsetWidth + GUIDE_CALLOUT_GAP_PX > viewportRight);
+  }, [guide.time, guide.label, metadata]);
 
   return (
     <span
+      ref={calloutRef}
+      data-guide-callout-flipped={flipped ? 'true' : 'false'}
       data-testid={`timeline-edit-guide-callout-${guide.trackId}`}
       data-guide-callout-operation={guide.operation ?? ''}
       data-guide-callout-delta={guide.delta ?? ''}
       data-guide-callout-duration={guide.duration ?? ''}
       data-guide-callout-group-count={guide.groupCount ?? ''}
-      className={`absolute left-1 top-1 min-w-32 rounded px-1.5 py-1 text-micro font-semibold shadow ${timelineEditGuideLabelClassName(guide.tone)}`}
+      className={`absolute top-1 min-w-32 rounded px-1.5 py-1 text-micro font-semibold shadow ${flipped ? 'right-1' : 'left-1'} ${timelineEditGuideLabelClassName(guide.tone)}`}
     >
       <span className="block uppercase tracking-wide">{guide.label}</span>
       <span className="block text-micro tabular-nums">{formatTimecode(guide.time, fps)}</span>
       {metadata ? (
-        <span className="mt-0.5 block max-w-40 truncate text-micro font-medium normal-case tracking-normal opacity-85">
+        <span className="mt-0.5 block max-w-48 text-micro font-medium normal-case leading-tight tracking-normal opacity-85">
           {metadata}
         </span>
       ) : null}
@@ -1153,7 +1181,10 @@ function TimelineEditGuideCallout({
 function formatTimelineEditGuideMetadata(guide: TimelineEditGuide): string {
   const parts: string[] = [];
 
-  if (guide.operation) {
+  // The label above already names the operation for a plain move ("Move" then
+  // "move" read as a stutter), so only spell it out when it says something the
+  // label does not — slip, slide, roll.
+  if (guide.operation && !guide.label.toLowerCase().startsWith(guide.operation.toLowerCase())) {
     parts.push(guide.operation);
   }
 
@@ -1167,6 +1198,16 @@ function formatTimelineEditGuideMetadata(guide: TimelineEditGuide): string {
 
   if (guide.groupCount !== undefined && guide.groupCount > 1) {
     parts.push(`${guide.groupCount} clips`);
+  }
+
+  // Snap was computed on every drag and never shown. It is the one piece of
+  // feedback that tells you the edge you just landed on was not an accident.
+  if (guide.snapped) {
+    parts.push('snapped');
+  }
+
+  if (guide.constrained) {
+    parts.push('at limit');
   }
 
   if (guide.ripple) {

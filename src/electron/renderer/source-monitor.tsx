@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type PointerEvent } from 'react';
+﻿import { useCallback, useEffect, useRef, useState, type ChangeEvent, type PointerEvent } from 'react';
 import { buildSourceAudioMeter } from '../../lib/editor/audio-meter';
 import { resolveMediaBinAssetKindLabel } from '../../lib/editor/media-bin';
 import { stepShuttleRate } from '../../lib/editor/playback';
@@ -654,7 +654,11 @@ function SourceAudioMeterOverlay({ meter, language }: { meter: ReturnType<typeof
       testId="source-audio-meter"
       statusTestId="source-audio-meter-status"
       positionClassName="absolute right-3 top-3"
-      readoutOptions={{ contextLabel: text.source }}
+      // The literal, not the translated label: `contextLabel` is a
+      // discriminator that picks the clipping advice, so passing the Korean
+      // '소스' made the comparison fail and showed the Program warning on the
+      // source monitor.
+      readoutOptions={{ contextLabel: 'Source' }}
     />
   );
 }

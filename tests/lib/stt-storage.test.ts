@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+﻿import { access, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -26,7 +26,10 @@ describe('STT durable storage', () => {
       restoreEnvValue(key, originalEnv[key]);
     }
 
-    await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+    // The timed-out speaker-encoder child can still hold its script file when
+    // we get here; on Windows that makes rmdir fail with EBUSY. Retry rather
+    // than let cleanup flake the test that just passed.
+    await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 })));
   });
 
   it('resolves durable import sources and writes STT outputs under Electron user data', async () => {

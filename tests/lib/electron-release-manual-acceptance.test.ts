@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+﻿import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { appendFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -263,7 +263,7 @@ describe('Fresh Windows manual acceptance validation', () => {
 
     expect(report.status).toBe('failed');
     expect(report.outputEvidence.status).toBe('failed');
-    expect(report.outputEvidence.checks.handoffRelativePathMatchesExpected).toBe(false);
+    expect(report.outputEvidence.checks?.handoffRelativePathMatchesExpected).toBe(false);
     expect(report.failures.join('\n')).toContain('handoff-relative path must be fresh-windows-gui-render.mp4');
   });
 

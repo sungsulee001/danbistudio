@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+﻿import type { ReactNode } from 'react';
 
 export function NumberField({
   label,
@@ -52,18 +52,22 @@ export function ToggleButton({
   active,
   mixed = false,
   testId,
+  title,
   onClick,
 }: {
   label: string;
   active: boolean;
   mixed?: boolean;
   testId?: string;
+  /** Hover text. Short labels carry the surface; the tooltip carries the meaning. */
+  title?: string;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       data-testid={testId}
+      title={title}
       aria-pressed={active}
       onClick={onClick}
       className={`inline-flex min-h-9 items-center justify-center rounded-md border px-3 py-2 text-sm ${

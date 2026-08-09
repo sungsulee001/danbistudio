@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+﻿import { describe, expect, it, vi } from 'vitest';
 import { createDefaultEditorProject } from '../../src/lib/editor/project';
 import {
   buildRenderWorkerCentralTrustGovernanceSummary,
@@ -290,16 +290,26 @@ describe('render worker controller helpers', () => {
           kind: 'danbi.render-worker-handoff',
           createdAt: '2026-06-17T00:00:00.000Z',
           batchId: 'stalled-submit',
+          controller: {
+            protocol: 'headless-render-v1',
+            mode: 'local-network-handoff',
+          },
           project: {
             id: 'project',
             name: 'Project',
+            schemaVersion: 1,
+            duration: 0,
+            fps: 30,
+            width: 1920,
+            height: 1080,
             projectPath: 'project.danbi-project.json',
           },
           jobs: [],
           summary: {
             totalJobs: 0,
-            selectedJobCount: 0,
-            skippedJobCount: 0,
+            blockedJobs: 0,
+            warningJobs: 0,
+            readyJobs: 0,
           },
         },
       }, {

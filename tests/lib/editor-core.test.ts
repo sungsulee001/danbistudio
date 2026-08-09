@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+﻿import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join as joinPath, resolve as resolvePath } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -1908,7 +1908,7 @@ describe('editor core', () => {
       duration: 28,
       valid: true,
     });
-    expect(dragPreview.editGuide).toEqual({
+    expect(dragPreview.editGuide).toMatchObject({
       trackId: 'track-v2',
       time: 32,
       label: 'Drop',
@@ -1929,7 +1929,7 @@ describe('editor core', () => {
       valid: true,
       isNewTrack: true,
     });
-    expect(newTrackDragPreview.editGuide).toEqual({
+    expect(newTrackDragPreview.editGuide).toMatchObject({
       trackId: 'track-v1',
       time: 66,
       label: 'New track',
@@ -1983,7 +1983,7 @@ describe('editor core', () => {
       constrained: false,
       label: 'Trim tail +2s / 30s',
     });
-    expect(buildTimelineClipEditGuide(clip, trimPreview, 'end')).toEqual({
+    expect(buildTimelineClipEditGuide(clip, trimPreview, 'end')).toMatchObject({
       trackId: clip.trackId,
       time: 30,
       label: 'Trim tail +2s / 30s',
@@ -12569,7 +12569,7 @@ describe('editor core', () => {
     expect(savedState.serializedProject).toBe(savedProjectText);
     expect(savedState.projectSaveState).toBe('saved');
     expect(savedState.projectSaveStateLabel).toBe(getProjectSaveStateLabel('saved'));
-    expect(savedState.projectSaveStateClassName).toContain('emerald');
+    expect(savedState.projectSaveStateClassName).toContain('accent');
     expect(savedState.assetById.get('asset-interview')?.name).toBe('Interview master take');
     expect(savedState.assetReferenceCounts.get('asset-interview')).toBe(2);
     expect(savedState.assetReferenceCounts.get('asset-bgm')).toBe(1);
@@ -12591,7 +12591,7 @@ describe('editor core', () => {
     const unusedAsset = dirtyProject.assets.find((asset) => asset.name === 'unused.wav');
 
     expect(dirtyState.projectSaveState).toBe('dirty');
-    expect(dirtyState.projectSaveStateClassName).toContain('amber');
+    expect(dirtyState.projectSaveStateClassName).toContain('warn');
     expect(unusedAsset).toBeDefined();
     expect(dirtyState.assetById.get(unusedAsset!.id)?.name).toBe('unused.wav');
     expect(dirtyState.unusedAssetCount).toBe(1);

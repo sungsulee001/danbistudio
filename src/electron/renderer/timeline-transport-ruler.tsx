@@ -1,4 +1,4 @@
-import { useMemo, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type WheelEvent } from 'react';
+﻿import { useMemo, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type WheelEvent } from 'react';
 import { formatRulerTime, formatTimecode } from './editor-time-helpers';
 import type { TimelineMarker } from '../../lib/editor/types';
 import { TIMELINE_TRACK_HEADER_WIDTH } from './timeline-layout-constants';
@@ -68,7 +68,9 @@ const timelineText = {
     height: 'Height',
     timelineTrackHeight: 'Timeline track height',
     fit: 'Fit',
+    fitTitle: 'Fit the whole timeline in view',
     fitSelection: 'Fit Sel',
+    fitSelectionTitle: 'Fit the selection in view',
     gap: 'Gap',
     gapSeconds: 'Gap seconds',
     insertGap: 'Insert Gap',
@@ -140,7 +142,9 @@ const timelineText = {
     height: '높이',
     timelineTrackHeight: '타임라인 트랙 높이',
     fit: '전체 맞춤',
+    fitTitle: '타임라인 전체를 화면에 맞춤',
     fitSelection: '선택 맞춤',
+    fitSelectionTitle: '선택 범위를 화면에 맞춤',
     gap: '간격',
     gapSeconds: '간격 초',
     insertGap: '간격 삽입',
@@ -349,12 +353,12 @@ export function TimelineTransportRulerPanel({
             <TimelineMenuButton onClick={onPreviousEdit}>{text.previousEdit}</TimelineMenuButton>
             <TimelineMenuButton onClick={onNextEdit}>{text.nextEdit}</TimelineMenuButton>
           </TimelineMenu>
+          {/* The Edit menu holds what the button row does NOT. Split, Trim
+              head/tail and Ripple delete each sat in both places, so the same
+              command appeared twice within one toolbar — they stay on the row,
+              which is the faster target, and are gone from here. */}
           <TimelineMenu label={text.edit}>
-            <TimelineMenuButton disabled={!canSplitAtPlayhead} onClick={onSplit}>{text.splitAtPlayhead}</TimelineMenuButton>
             <TimelineMenuButton onClick={onSplitAll}>{text.splitAll}</TimelineMenuButton>
-            <TimelineMenuButton disabled={!canTrimAtPlayhead} onClick={onTrimIn}>{text.trimHead}</TimelineMenuButton>
-            <TimelineMenuButton disabled={!canTrimAtPlayhead} onClick={onTrimOut}>{text.trimTail}</TimelineMenuButton>
-            <TimelineMenuButton disabled={!canDeleteTimelineTarget} onClick={onRippleDeleteSelection}>{text.rippleDelete}</TimelineMenuButton>
             <TimelineMenuButton disabled={!hasSelection} onClick={onDuplicateSelection}>{text.duplicate}</TimelineMenuButton>
             <TimelineMenuButton disabled={selectedClipCount < 2} onClick={onGroupSelection}>{text.groupClips}</TimelineMenuButton>
             <TimelineMenuButton disabled={!hasSelection} onClick={onUngroupSelection}>{text.ungroupClips}</TimelineMenuButton>
@@ -528,6 +532,7 @@ export function TimelineTransportRulerPanel({
           </label>
           <button
             type="button"
+            title={text.fitTitle}
             className="rounded border border-ds-200 bg-paper px-2 py-1 text-xs text-ds-800 hover:border-accent-500"
             onClick={() => onFitTimelineZoom('timeline')}
           >
@@ -535,6 +540,7 @@ export function TimelineTransportRulerPanel({
           </button>
           <button
             type="button"
+            title={text.fitSelectionTitle}
             className="rounded border border-ds-200 bg-paper px-2 py-1 text-xs text-ds-800 hover:border-accent-500"
             onClick={() => onFitTimelineZoom('selection')}
           >
@@ -567,6 +573,10 @@ export function TimelineTransportRulerPanel({
       <div
         ref={scrollRef}
         data-testid="timeline-scroll-container"
+        // Marks the box a drag callout must stay inside. The callout finds it
+        // with closest(), so the viewport does not have to be threaded down
+        // through every track and lane.
+        data-timeline-scroll-viewport="true"
         data-pixels-per-second={pixelsPerSecond}
         data-playhead-value={Number(playhead.toFixed(3))}
         className="min-h-0 flex-1 overflow-auto rounded-md border border-ds-200 bg-paper"

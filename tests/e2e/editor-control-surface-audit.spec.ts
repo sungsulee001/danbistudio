@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+﻿import { expect, test, type Locator, type Page } from '@playwright/test';
 
 test('exposes connected top toolbar menus and safe toggle states', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -108,7 +108,6 @@ test('routes primary mode buttons to their asset bay and inspector panels', asyn
     { id: 'effects', label: 'Effects' },
     { id: 'transitions', label: 'Transitions' },
     { id: 'captions', label: 'Captions' },
-    { id: 'filters', label: 'Filters' },
     { id: 'adjust', label: 'Adjust' },
     { id: 'templates', label: 'Templates' },
     { id: 'ai', label: 'AI' },

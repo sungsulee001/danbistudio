@@ -281,7 +281,7 @@ import { EXTENSION_SANDBOX_PLAN_EFFECTS_COMMAND, EXTENSION_SANDBOX_PLAN_TRANSITI
 
 type EditorAssetPanelId = 'media' | 'project' | 'templates' | 'health';
 type EditorDockPanelId = 'clip' | 'video' | 'audio' | 'speed' | 'animation' | 'tracking' | 'adjust' | 'effects' | 'text' | 'jobs' | 'export' | 'plugins';
-type EditorPrimaryModeId = 'media' | 'audio' | 'text' | 'effects' | 'transitions' | 'captions' | 'filters' | 'adjust' | 'templates' | 'ai';
+type EditorPrimaryModeId = 'media' | 'audio' | 'text' | 'effects' | 'transitions' | 'captions' | 'adjust' | 'templates' | 'ai';
 
 const EDITOR_ASSET_PANELS: Array<{ id: EditorAssetPanelId; label: string; shortLabel: string }> = [
   { id: 'media', label: 'Media', shortLabel: 'M' },
@@ -322,7 +322,6 @@ const EDITOR_PRIMARY_MODES: Array<{
   { id: 'effects', label: 'Effects', shortLabel: 'Fx', assetPanel: 'templates', dockPanel: 'effects' },
   { id: 'transitions', label: 'Transitions', shortLabel: 'Tr', assetPanel: 'templates', dockPanel: 'video' },
   { id: 'captions', label: 'Captions', shortLabel: 'CC', assetPanel: 'project', dockPanel: 'text' },
-  { id: 'filters', label: 'Filters', shortLabel: 'Fi', assetPanel: 'media', dockPanel: 'adjust' },
   { id: 'adjust', label: 'Adjust', shortLabel: 'Ad', assetPanel: 'media', dockPanel: 'adjust' },
   { id: 'templates', label: 'Templates', shortLabel: 'Te', assetPanel: 'templates', dockPanel: 'clip' },
   { id: 'ai', label: 'AI', shortLabel: 'AI', assetPanel: 'project', dockPanel: 'jobs' },
@@ -345,6 +344,7 @@ const editorPageText: Record<DanbiMenuLanguage, {
     comfySeed: string;
     comfySteps: string;
     comfyWidth: string;
+    customWorkspace: string;
     edit: string;
     editWorkspace: string;
     emptySelection: string;
@@ -392,7 +392,6 @@ const editorPageText: Record<DanbiMenuLanguage, {
       effects: 'Effects',
       transitions: 'Transitions',
       captions: 'Captions',
-      filters: 'Filters',
       adjust: 'Adjust',
       templates: 'Templates',
       ai: 'AI',
@@ -410,6 +409,7 @@ const editorPageText: Record<DanbiMenuLanguage, {
       comfySeed: 'Seed',
       comfySteps: 'Steps',
       comfyWidth: 'Width',
+      customWorkspace: 'Custom',
       edit: 'Edit',
       editWorkspace: 'Edit Workspace',
       emptySelection: 'Select a timeline clip to edit these properties.',
@@ -457,7 +457,6 @@ const editorPageText: Record<DanbiMenuLanguage, {
       effects: '효과',
       transitions: '전환',
       captions: '자막',
-      filters: '필터',
       adjust: '조정',
       templates: '템플릿',
       ai: 'AI',
@@ -475,6 +474,7 @@ const editorPageText: Record<DanbiMenuLanguage, {
       comfySeed: '시드',
       comfySteps: '스텝',
       comfyWidth: '너비',
+      customWorkspace: '사용자 설정',
       edit: '편집',
       editWorkspace: '편집 작업공간',
       emptySelection: '타임라인 클립을 선택하면 속성을 편집할 수 있습니다.',
@@ -5882,15 +5882,22 @@ export default function EditorPage() {
     });
   };
 
+  // One source of truth for "can I split here". The button used to be enabled
+  // whenever anything was selected, while the plan additionally requires the
+  // playhead to sit inside a clip — so Split looked available, and clicking it
+  // only produced "Move the playhead inside a clip before splitting". The
+  // control and the command now read the same plan.
+  const splitAtPlayheadPlan = useMemo(() => resolveSplitClipAtPlayheadPlan({
+    selectedClip,
+    selectedClips,
+    selectedClipIds,
+    activeTimelineClip,
+    playhead,
+    fps: project.fps,
+  }), [activeTimelineClip, playhead, project.fps, selectedClip, selectedClipIds, selectedClips]);
+
   const handleSplit = () => {
-    const plan = resolveSplitClipAtPlayheadPlan({
-      selectedClip,
-      selectedClips,
-      selectedClipIds,
-      activeTimelineClip,
-      playhead,
-      fps: project.fps,
-    });
+    const plan = splitAtPlayheadPlan;
     if (!plan.canSplit) {
       setStatus(plan.status);
       return;
@@ -10010,7 +10017,7 @@ export default function EditorPage() {
         canUndo={history.length > 0}
         canRedo={future.length > 0}
         canPackSelection={selectedClips.length >= 2}
-        canSplitAtPlayhead={selectedClipIds.length > 0 || Boolean(activeTimelineClip)}
+        canSplitAtPlayhead={splitAtPlayheadPlan.canSplit}
         canTrimSelectionToPlayhead={Boolean(selectedClip)}
         selectedClipCount={selectedClipIds.length}
         clipboardClipCount={clipboardClips.length}
@@ -10395,7 +10402,9 @@ export default function EditorPage() {
               <div className="flex items-center gap-2">
                 <span className="font-semibold uppercase tracking-wide text-ds-600">{editorText.chrome.editWorkspace}</span>
                 <span className="rounded border border-ds-200 px-2 py-0.5 text-ds-700">
-                  {readEditorPrimaryModeDisplay(activePrimaryModeId, menuLanguage).label}
+                  {activePrimaryModeId
+                    ? readEditorPrimaryModeDisplay(activePrimaryModeId, menuLanguage).label
+                    : editorText.chrome.customWorkspace}
                 </span>
                 <div
                   role="group"
@@ -10614,7 +10623,7 @@ export default function EditorPage() {
                 clipboardClipCount={clipboardClips.length}
                 hasAttributeClipboard={Boolean(attributeClipboard)}
                 hasMarkedRange={Boolean(markedRange)}
-                canSplitAtPlayhead={selectedClipIds.length > 0 || Boolean(activeTimelineClip)}
+                canSplitAtPlayhead={splitAtPlayheadPlan.canSplit}
                 selectedCanRelinkAudio={selectedCanRelinkAudio}
                 onSplit={handleSplit}
                 onSplitAll={handleSplitAll}
@@ -11365,7 +11374,7 @@ export default function EditorPage() {
             markerTimePreview={markerTimePreview}
             canUndo={history.length > 0}
             canRedo={future.length > 0}
-            canSplitAtPlayhead={selectedClipIds.length > 0 || Boolean(activeTimelineClip)}
+            canSplitAtPlayhead={splitAtPlayheadPlan.canSplit}
             canTrimAtPlayhead={canEditTimelinePlayheadTarget}
             canDeleteTimelineTarget={canDeleteTimelineToolbarTarget}
             selectedClipCount={selectedClipIds.length}
@@ -11537,7 +11546,7 @@ export default function EditorPage() {
           hasInMark={markIn !== null}
           hasOutMark={markOut !== null}
           hasMarkedRange={Boolean(markedRange)}
-          canSplitAtPlayhead={selectedClipIds.length > 0 || Boolean(activeTimelineClip)}
+          canSplitAtPlayhead={splitAtPlayheadPlan.canSplit}
           onCopy={() => runContextAction(handleCopySelected)}
           onCopyAttributes={() => runContextAction(handleCopyClipAttributes)}
           onCut={() => runContextAction(handleCutSelected)}

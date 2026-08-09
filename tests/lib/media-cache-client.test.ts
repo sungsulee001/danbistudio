@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+﻿import { describe, expect, it, vi } from 'vitest';
 
 import { fetchMediaCacheJob, queueMediaCacheJob } from '../../src/electron/renderer/media-cache-client';
 import type { MediaCacheJobView } from '../../src/electron/renderer/editor-view-model';
@@ -127,6 +127,7 @@ describe('renderer media cache client', () => {
       id: 'cache-extensionless-label',
       status: 'queued',
       progress: 0,
+      priority: 5,
       warnings: [],
     };
     const asset: EditorAsset = {

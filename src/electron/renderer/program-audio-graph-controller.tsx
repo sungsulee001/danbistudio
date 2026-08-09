@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   buildProgramAudioFftLayerSample,
   buildProgramAudioFftSample,
@@ -138,7 +138,12 @@ function ProgramAudioLayerPreview({
     contextState: 'none',
     playError: '',
   });
-  const source = resolvePreviewMediaSource(layer.asset).source;
+  // `layer.asset` is optional, and a missing asset resolves to an empty
+  // source — so the `!source` guard below already implies the asset exists.
+  // Narrowing on it here states that directly instead of leaving the reader
+  // (and the compiler) to infer it through the helper.
+  const asset = layer.asset;
+  const source = resolvePreviewMediaSource(asset).source;
   const layerId = buildProgramAudioLayerId(layer);
   const monitorState = resolveProgramAudioMonitorState(layer, playbackRate, active);
   const monitorCanPlay = monitorState.canPlay;
@@ -336,7 +341,7 @@ function ProgramAudioLayerPreview({
     onFftLayerEnd?.(layerId);
   }, [layerId, onFftLayerEnd]);
 
-  if (!source) {
+  if (!asset || !source) {
     return null;
   }
 
@@ -347,7 +352,7 @@ function ProgramAudioLayerPreview({
       preload="auto"
       data-testid={`program-audio-layer-${layer.clip.id}`}
       data-audio-layer-id={layerId}
-      data-audio-asset-id={layer.asset.id}
+      data-audio-asset-id={asset.id}
       data-audio-clip-id={layer.clip.id}
       data-audio-can-play={monitorState.canPlay ? 'true' : 'false'}
       data-audio-gain={monitorState.gain}

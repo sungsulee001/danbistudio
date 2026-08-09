@@ -1,4 +1,4 @@
-// Adapted from OpenCut Classic actions definitions/registry/types.
+﻿// Adapted from OpenCut Classic actions definitions/registry/types.
 // Source: https://github.com/opencut-app/opencut-classic
 // Commit: cf5e79e919144200294fb9fed22a222592a0aeea
 // License: MIT. See third_party/NOTICE.md and docs/THIRD_PARTY_SOURCE_REGISTER_KR.md.
@@ -172,6 +172,26 @@ export function getEditorCommandDefinition(commandId: EditorCommandId): typeof E
   }
 
   return command;
+}
+
+/**
+ * How a command is invoked, phrased for a tooltip: `"Slip edit — Alt+Drag clip"`.
+ *
+ * The gestures were implemented but never surfaced, so the editor grew a
+ * parallel grid of 40 frame-nudge buttons to reach the same operations. The
+ * registry already records the real trigger for every command, so hints are
+ * read from here rather than retyped into each control — a binding cannot drift
+ * from its tooltip if there is only one copy of it.
+ */
+export function describeEditorCommandGesture(commandId: EditorCommandId): string {
+  // `keys` is required on every definition, so there is no unlabelled case.
+  const command = getEditorCommandDefinition(commandId);
+  return `${command.label} — ${command.keys}`;
+}
+
+/** The same, joined for controls that carry several gestures at once. */
+export function describeEditorCommandGestures(commandIds: readonly EditorCommandId[]): string {
+  return commandIds.map(describeEditorCommandGesture).join('\n');
 }
 
 export function normalizeEditorShortcut(shortcut: string): string {

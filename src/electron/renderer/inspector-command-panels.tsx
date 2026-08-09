@@ -1,8 +1,9 @@
-import type { ReactNode } from 'react';
+﻿import type { ReactNode } from 'react';
 import type { TimelineTransition } from '../../lib/editor/types';
 import type { DanbiMenuLanguage } from '../../lib/editor/menu-language';
 import { NumberField } from './editor-form-controls';
 import { useMenuLanguage } from './use-menu-language';
+import { describeEditorCommandGesture, type EditorCommandId } from '../../lib/editor/command-registry';
 
 type InspectorTransitionType = Exclude<TimelineTransition['type'], 'cut' | 'match-cut'>;
 
@@ -277,42 +278,44 @@ export function InspectorCommandPanels({
           </span>
         </div>
         <CommandCluster label={text.primary} testId="inspector-command-cluster-primary">
-          <CommandButton label={text.actions.cutAtPlayhead} testLabel="Cut at playhead" disabled={!canSplitAtPlayhead} onClick={onSplit} />
+          <CommandButton label={text.actions.cutAtPlayhead} testLabel="Cut at playhead" gesture="edit.split" disabled={!canSplitAtPlayhead} onClick={onSplit} />
           <CommandButton label={text.actions.cutAll} testLabel="Cut all" onClick={onSplitAll} />
-          <CommandButton label={text.actions.trimIn} testLabel="Trim in" disabled={!hasSelection} onClick={() => onTrimToPlayhead('start')} />
-          <CommandButton label={text.actions.trimOut} testLabel="Trim out" disabled={!hasSelection} onClick={() => onTrimToPlayhead('end')} />
-          <CommandButton label={text.actions.deleteLeft} testLabel="Delete left" disabled={!hasSelection} onClick={() => onDeleteSide('left')} />
-          <CommandButton label={text.actions.deleteRight} testLabel="Delete right" disabled={!hasSelection} onClick={() => onDeleteSide('right')} />
-          <CommandButton label={text.actions.duplicate} testLabel="Duplicate" disabled={!hasSelection} onClick={onDuplicateSelectedClips} />
-          <CommandButton label={text.actions.group} testLabel="Group" disabled={!canApplyMultiClipCommand} onClick={onGroupSelectedClips} />
+          <CommandButton label={text.actions.trimIn} testLabel="Trim in" gesture="trim.toPlayhead" disabled={!hasSelection} onClick={() => onTrimToPlayhead('start')} />
+          <CommandButton label={text.actions.trimOut} testLabel="Trim out" gesture="trim.toPlayhead" disabled={!hasSelection} onClick={() => onTrimToPlayhead('end')} />
+          <CommandButton label={text.actions.deleteLeft} testLabel="Delete left" gesture="edit.deleteLeftOfPlayhead" disabled={!hasSelection} onClick={() => onDeleteSide('left')} />
+          <CommandButton label={text.actions.deleteRight} testLabel="Delete right" gesture="edit.deleteRightOfPlayhead" disabled={!hasSelection} onClick={() => onDeleteSide('right')} />
+          <CommandButton label={text.actions.duplicate} testLabel="Duplicate" gesture="edit.duplicateSelection" disabled={!hasSelection} onClick={onDuplicateSelectedClips} />
+          <CommandButton label={text.actions.group} testLabel="Group" gesture="edit.groupSelection" disabled={!canApplyMultiClipCommand} onClick={onGroupSelectedClips} />
         </CommandCluster>
         <CommandCluster label={text.clipboard} testId="inspector-command-cluster-clipboard">
-          <CommandButton label={text.actions.ungroup} testLabel="Ungroup" disabled={!hasSelection} onClick={onUngroupSelectedClips} />
-          <CommandButton label={text.actions.copy} testLabel="Copy" disabled={!hasSelection} onClick={onCopySelected} />
-          <CommandButton label={text.actions.copyAttr} testLabel="Copy attr" disabled={!hasSelection} onClick={onCopyClipAttributes} />
-          <CommandButton label={text.actions.cut} testLabel="Cut" disabled={!hasSelection} onClick={onCutSelected} />
-          <CommandButton label={text.actions.paste} testLabel="Paste" disabled={!hasClipboard} onClick={onPasteClipboard} />
-          <CommandButton label={text.actions.pasteAttr} testLabel="Paste attr" disabled={!canPasteAttributes} onClick={onPasteClipAttributes} />
-          <CommandButton label={text.actions.append} testLabel="Append" disabled={!hasClipboard} onClick={onAppendClipboard} />
+          <CommandButton label={text.actions.ungroup} testLabel="Ungroup" gesture="edit.ungroupSelection" disabled={!hasSelection} onClick={onUngroupSelectedClips} />
+          <CommandButton label={text.actions.copy} testLabel="Copy" gesture="clipboard.copyCutPaste" disabled={!hasSelection} onClick={onCopySelected} />
+          <CommandButton label={text.actions.copyAttr} testLabel="Copy attr" gesture="clipboard.attributes" disabled={!hasSelection} onClick={onCopyClipAttributes} />
+          <CommandButton label={text.actions.cut} testLabel="Cut" gesture="clipboard.cutSelection" disabled={!hasSelection} onClick={onCutSelected} />
+          <CommandButton label={text.actions.paste} testLabel="Paste" gesture="clipboard.pasteSelection" disabled={!hasClipboard} onClick={onPasteClipboard} />
+          <CommandButton label={text.actions.pasteAttr} testLabel="Paste attr" gesture="clipboard.pasteAttributes" disabled={!canPasteAttributes} onClick={onPasteClipAttributes} />
+          <CommandButton label={text.actions.append} testLabel="Append" gesture="clipboard.appendSelection" disabled={!hasClipboard} onClick={onAppendClipboard} />
           <CommandButton label={text.actions.matchFrame} testLabel="Match frame" tone="sky" disabled={!hasSelection} onClick={onMatchFrameToSource} />
         </CommandCluster>
         <CommandCluster label={text.range} testId="inspector-command-cluster-range">
-          <CommandButton label={text.actions.markIn} testLabel="Mark in" onClick={() => onSetMark('in')} />
-          <CommandButton label={text.actions.markOut} testLabel="Mark out" onClick={() => onSetMark('out')} />
-          <CommandButton label={text.actions.liftRange} testLabel="Lift range" tone="rose" disabled={!hasMarkedRange} onClick={() => onDeleteMarkedRange(false)} />
-          <CommandButton label={text.actions.extractRange} testLabel="Extract range" tone="rose" disabled={!hasMarkedRange} onClick={() => onDeleteMarkedRange(true)} />
-          <CommandButton label={text.actions.delete} testLabel="Delete" tone="rose" disabled={!hasSelection} onClick={() => onDeleteSelected(false)} />
-          <CommandButton label={text.actions.rippleDelete} testLabel="Ripple delete" tone="rose" disabled={!hasSelection} onClick={() => onDeleteSelected(true)} />
-          <CommandButton label={language === 'ko' ? '-1 프레임' : '-1 frame'} testLabel="-1 frame" disabled={!hasSelection} onClick={() => onMoveSelected(-frameStep)} />
-          <CommandButton label={language === 'ko' ? '+1 프레임' : '+1 frame'} testLabel="+1 frame" disabled={!hasSelection} onClick={() => onMoveSelected(frameStep)} />
+          <CommandButton label={text.actions.markIn} testLabel="Mark in" gesture="timeline.setMark" onClick={() => onSetMark('in')} />
+          <CommandButton label={text.actions.markOut} testLabel="Mark out" gesture="timeline.setMark" onClick={() => onSetMark('out')} />
+          <CommandButton label={text.actions.liftRange} testLabel="Lift range" gesture="timeline.liftMarkedRange" tone="rose" disabled={!hasMarkedRange} onClick={() => onDeleteMarkedRange(false)} />
+          <CommandButton label={text.actions.extractRange} testLabel="Extract range" gesture="timeline.cutMarkedRange" tone="rose" disabled={!hasMarkedRange} onClick={() => onDeleteMarkedRange(true)} />
+          <CommandButton label={text.actions.delete} testLabel="Delete" gesture="edit.deleteSelection" tone="rose" disabled={!hasSelection} onClick={() => onDeleteSelected(false)} />
+          <CommandButton label={text.actions.rippleDelete} testLabel="Ripple delete" gesture="edit.rippleDeleteSelection" tone="rose" disabled={!hasSelection} onClick={() => onDeleteSelected(true)} />
+          <CommandButton label={language === 'ko' ? '-1 프레임' : '-1 frame'} testLabel="-1 frame" gesture="edit.moveSelection" disabled={!hasSelection} onClick={() => onMoveSelected(-frameStep)} />
+          <CommandButton label={language === 'ko' ? '+1 프레임' : '+1 frame'} testLabel="+1 frame" gesture="edit.moveSelection" disabled={!hasSelection} onClick={() => onMoveSelected(frameStep)} />
         </CommandCluster>
         <CommandCluster label={text.transitions} testId="inspector-command-cluster-transitions">
-          <CommandButton label={text.actions.crossfade} testLabel="Crossfade" disabled={!hasSelection} onClick={() => onApplyTransition('crossfade')} />
-          <CommandButton label={text.actions.dip} testLabel="Dip" disabled={!hasSelection} onClick={() => onApplyTransition('dip')} />
-          <CommandButton label={text.actions.push} testLabel="Push" disabled={!hasSelection} onClick={() => onApplyTransition('push')} />
-          <CommandButton label={text.actions.wipe} testLabel="Wipe" disabled={!hasSelection} onClick={() => onApplyTransition('wipe')} />
+          <CommandButton label={text.actions.crossfade} testLabel="Crossfade" gesture="transition.applyCrossfade" disabled={!hasSelection} onClick={() => onApplyTransition('crossfade')} />
+          <CommandButton label={text.actions.dip} testLabel="Dip" gesture="transition.applyDip" disabled={!hasSelection} onClick={() => onApplyTransition('dip')} />
+          <CommandButton label={text.actions.push} testLabel="Push" gesture="transition.applyPush" disabled={!hasSelection} onClick={() => onApplyTransition('push')} />
+          <CommandButton label={text.actions.wipe} testLabel="Wipe" gesture="transition.applyWipe" disabled={!hasSelection} onClick={() => onApplyTransition('wipe')} />
           <button
             data-testid="inspector-command-ai-morph"
+            title={`${language === 'ko' ? 'AI 모프' : 'AI Morph'}
+${describeEditorCommandGesture('transition.applyAiMorph')}`}
             className="rounded-md border border-accent2-500/40 bg-accent2-500/10 px-3 py-2 text-sm text-accent2-900 hover:border-accent2-700 disabled:cursor-not-allowed disabled:opacity-40"
             disabled={!hasSelection}
             onClick={() => onApplyTransition('ai-morph')}
@@ -336,6 +339,8 @@ export function InspectorCommandPanels({
           <button
             type="button"
             data-testid="inspector-command-pack"
+            title={`${text.pack}
+${describeEditorCommandGesture('edit.packSelection')}`}
             onClick={() => onArrangeSelectedClips(0)}
             className="rounded-md border border-ds-200 bg-paper px-3 py-2 text-sm hover:border-accent-500 disabled:cursor-not-allowed disabled:opacity-40"
             disabled={selectedClipCount < 2}
@@ -367,14 +372,14 @@ export function InspectorCommandPanels({
           />
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <TrimButton label={text.trim.slip(precisionEditStepFrames, '-')} testLabel={`Slip -${precisionEditStepFrames}f`} disabled={!hasSelection} onClick={() => onSlipSelected(-precisionStep)} />
-          <TrimButton label={text.trim.slip(precisionEditStepFrames, '+')} testLabel={`Slip +${precisionEditStepFrames}f`} disabled={!hasSelection} onClick={() => onSlipSelected(precisionStep)} />
-          <TrimButton label={text.trim.rollHead(precisionEditStepFrames, '-')} testLabel={`Roll head -${precisionEditStepFrames}f`} tone="sky" disabled={!hasSelection} onClick={() => onRollTrimSelected('start', -precisionStep)} />
-          <TrimButton label={text.trim.rollHead(precisionEditStepFrames, '+')} testLabel={`Roll head +${precisionEditStepFrames}f`} tone="sky" disabled={!hasSelection} onClick={() => onRollTrimSelected('start', precisionStep)} />
-          <TrimButton label={text.trim.rollTail(precisionEditStepFrames, '-')} testLabel={`Roll tail -${precisionEditStepFrames}f`} tone="sky" disabled={!hasSelection} onClick={() => onRollTrimSelected('end', -precisionStep)} />
-          <TrimButton label={text.trim.rollTail(precisionEditStepFrames, '+')} testLabel={`Roll tail +${precisionEditStepFrames}f`} tone="sky" disabled={!hasSelection} onClick={() => onRollTrimSelected('end', precisionStep)} />
-          <TrimButton label={text.trim.slide(precisionEditStepFrames, '-')} testLabel={`Slide -${precisionEditStepFrames}f`} tone="amber" disabled={!hasSelection} onClick={() => onSlideSelected(-precisionStep)} />
-          <TrimButton label={text.trim.slide(precisionEditStepFrames, '+')} testLabel={`Slide +${precisionEditStepFrames}f`} tone="amber" disabled={!hasSelection} onClick={() => onSlideSelected(precisionStep)} />
+          <TrimButton label={text.trim.slip(precisionEditStepFrames, '-')} testLabel={`Slip -${precisionEditStepFrames}f`} gesture="trim.slipDrag" disabled={!hasSelection} onClick={() => onSlipSelected(-precisionStep)} />
+          <TrimButton label={text.trim.slip(precisionEditStepFrames, '+')} testLabel={`Slip +${precisionEditStepFrames}f`} gesture="trim.slipDrag" disabled={!hasSelection} onClick={() => onSlipSelected(precisionStep)} />
+          <TrimButton label={text.trim.rollHead(precisionEditStepFrames, '-')} testLabel={`Roll head -${precisionEditStepFrames}f`} gesture="trim.rollDrag" tone="sky" disabled={!hasSelection} onClick={() => onRollTrimSelected('start', -precisionStep)} />
+          <TrimButton label={text.trim.rollHead(precisionEditStepFrames, '+')} testLabel={`Roll head +${precisionEditStepFrames}f`} gesture="trim.rollDrag" tone="sky" disabled={!hasSelection} onClick={() => onRollTrimSelected('start', precisionStep)} />
+          <TrimButton label={text.trim.rollTail(precisionEditStepFrames, '-')} testLabel={`Roll tail -${precisionEditStepFrames}f`} gesture="trim.rollDrag" tone="sky" disabled={!hasSelection} onClick={() => onRollTrimSelected('end', -precisionStep)} />
+          <TrimButton label={text.trim.rollTail(precisionEditStepFrames, '+')} testLabel={`Roll tail +${precisionEditStepFrames}f`} gesture="trim.rollDrag" tone="sky" disabled={!hasSelection} onClick={() => onRollTrimSelected('end', precisionStep)} />
+          <TrimButton label={text.trim.slide(precisionEditStepFrames, '-')} testLabel={`Slide -${precisionEditStepFrames}f`} gesture="trim.slideDrag" tone="amber" disabled={!hasSelection} onClick={() => onSlideSelected(-precisionStep)} />
+          <TrimButton label={text.trim.slide(precisionEditStepFrames, '+')} testLabel={`Slide +${precisionEditStepFrames}f`} gesture="trim.slideDrag" tone="amber" disabled={!hasSelection} onClick={() => onSlideSelected(precisionStep)} />
           <TrimButton
             label={text.trim.audioHead(precisionEditStepFrames, '-')}
             testLabel={`Audio head -${precisionEditStepFrames}f`}
@@ -433,17 +438,23 @@ function CommandButton({
   testLabel = label,
   tone = 'emerald',
   disabled = false,
+  gesture,
   onClick,
 }: {
   label: string;
   testLabel?: string;
   tone?: 'emerald' | 'rose' | 'sky';
   disabled?: boolean;
+  /** The registered command this button runs, so its tooltip can name the
+      shortcut. Read from the registry, never retyped here. */
+  gesture?: EditorCommandId;
   onClick: () => void;
 }) {
   return (
     <button
       data-testid={`inspector-command-${toActionTestId(testLabel)}`}
+      title={gesture ? `${label}
+${describeEditorCommandGesture(gesture)}` : label}
       className={`${baseCommandButtonClass} ${hoverBorderClass(tone)} disabled:cursor-not-allowed disabled:opacity-40`}
       disabled={disabled}
       onClick={onClick}
@@ -458,17 +469,24 @@ function TrimButton({
   testLabel = label,
   tone = 'emerald',
   disabled = false,
+  gesture,
   onClick,
 }: {
   label: string;
   testLabel?: string;
   tone?: 'emerald' | 'sky' | 'amber' | 'lime';
   disabled?: boolean;
+  /** The command this button duplicates, so its tooltip can teach the faster
+      gesture. These frame-nudge buttons exist because the drag gestures were
+      never surfaced; naming the gesture here is how someone finds it. */
+  gesture?: EditorCommandId;
   onClick: () => void;
 }) {
   return (
     <button
       data-testid={`inspector-command-${toActionTestId(testLabel)}`}
+      title={gesture ? `${label}
+${describeEditorCommandGesture(gesture)}` : label}
       className={`${baseTrimButtonClass} ${hoverBorderClass(tone)} disabled:cursor-not-allowed disabled:opacity-40`}
       disabled={disabled}
       onClick={onClick}

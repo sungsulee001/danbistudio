@@ -701,6 +701,7 @@ function ProgramMonitorControlBar({
           <button
             type="button"
             data-testid="program-monitor-fit-button"
+            title="Fit the picture to the monitor"
             className="rounded border border-ds-300 px-2 py-1 text-xs text-ds-800 hover:border-accent-600"
             onClick={onFitMonitor}
           >

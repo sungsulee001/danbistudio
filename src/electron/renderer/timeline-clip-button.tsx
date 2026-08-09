@@ -29,6 +29,17 @@ import {
   type TimelineClipEdgeInteractionSession,
 } from './timeline-interaction-adapter';
 import { formatSignedEditDelta } from './editor-time-helpers';
+import { describeEditorCommandGestures } from '../../lib/editor/command-registry';
+import { resolveTimelineClipCursorMode, timelineClipCursorClassName, useModifierKeys } from './use-modifier-keys';
+
+/** What you can do by dragging a clip. Read from the command registry so the
+    hint and the binding cannot disagree. */
+const CLIP_GESTURE_HINT = describeEditorCommandGestures([
+  'trim.slipDrag',
+  'trim.slideDrag',
+  'trim.rollDrag',
+  'trim.toPlayhead',
+]);
 
 export interface TimelineClipButtonProps {
   clip: TimelineClip;
@@ -106,10 +117,18 @@ export function TimelineClipButton({
   const volumeDragRef = useRef<{ bounds: DOMRect; startVolume: number; nextVolume: number; moved: boolean } | null>(null);
   const suppressClickRef = useRef(false);
   const [dragDelta, setDragDelta] = useState(0);
+  const [pendingDragMode, setPendingDragMode] = useState<TimelineClipBodyDragMode | null>(null);
   const [trimDelta, setTrimDelta] = useState(0);
   const [transitionDurationPreview, setTransitionDurationPreview] = useState<number | null>(null);
   const [keyframeTimePreview, setKeyframeTimePreview] = useState<{ id: string; time: number } | null>(null);
   const [volumePreview, setVolumePreview] = useState<number | null>(null);
+  // Holding Alt over a clip changed nothing on screen, so there was no way to
+  // know slip mode had been entered until the drag committed. The cursor now
+  // says which edit the next drag would start; once dragging, the mode that
+  // actually began wins, so releasing Alt mid-drag does not lie about it.
+  const modifiers = useModifierKeys();
+  const cursorMode = pendingDragMode ?? resolveTimelineClipCursorMode(modifiers, locked);
+  const cursorClassName = timelineClipCursorClassName(cursorMode, pendingDragMode !== null);
 
   const handlePointerDown = (event: MouseEvent<HTMLButtonElement>) => {
     onSelect(event);
@@ -140,6 +159,7 @@ export function TimelineClipButton({
       mode,
     });
     suppressClickRef.current = false;
+    setPendingDragMode(mode);
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
       const drag = dragRef.current;
@@ -178,6 +198,7 @@ export function TimelineClipButton({
       const drag = dragRef.current;
       dragRef.current = null;
       setDragDelta(0);
+      setPendingDragMode(null);
 
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
@@ -566,7 +587,8 @@ export function TimelineClipButton({
       onContextMenu={onContextMenu}
       // Tight inset — a clip is a lane-height block, so its label sits close to
       // the edge the way the prototype's does rather than taking panel padding.
-      className={`absolute overflow-hidden rounded-md border px-2 py-1 text-left shadow-sm transition ${
+      data-clip-cursor-mode={cursorMode}
+      className={`absolute overflow-hidden rounded-md border px-2 py-1 text-left shadow-sm transition ${cursorClassName} ${
         selected ? 'border-white ring-2 ring-accent-600' : 'border-white/20 hover:border-white/60'
       } ${isPreviewing ? 'ring-2 ring-info-700/70' : ''} ${previewAdjusted ? previewTone.outlineClassName : ''} ${muted ? 'opacity-50' : ''} ${locked ? 'border-dashed' : ''}`}
       style={{
@@ -576,7 +598,9 @@ export function TimelineClipButton({
         width: Math.max(previewDuration * pixelsPerSecond, 58),
         backgroundColor: clip.color,
       }}
-      title={`${clip.name} ${formatRulerTime(previewStart)} / ${formatRulerTime(previewDuration)}`}
+      title={`${clip.name} ${formatRulerTime(previewStart)} / ${formatRulerTime(previewDuration)}
+
+${CLIP_GESTURE_HINT}`}
       data-testid={`timeline-clip-${clip.id}`}
       data-clip-id={clip.id}
       data-asset-id={clip.assetId}

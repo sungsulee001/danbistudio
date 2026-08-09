@@ -227,8 +227,14 @@ function InspectorSilencePanel({
         />
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2">
+        {/* Named "Close gaps", not "Ripple": the toolbar and the timeline both
+            carry a "Ripple" toggle for the global ripple EDIT MODE, and this
+            one is a different thing — whether removing silence closes the gap
+            it leaves behind. One word meaning two concepts is worse than a
+            duplicate button. */}
         <ToggleButton
-          label="Ripple"
+          label="Close gaps"
+          title="Close the gaps left where silence was removed"
           active={settings.ripple}
           testId="inspector-silence-ripple"
           onClick={() => onSettingsPatch({ ripple: !settings.ripple })}
