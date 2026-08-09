@@ -956,6 +956,7 @@ function MediaBinAssetCard({
           <button
             type="button"
             aria-label={`${text.source} ${asset.name}`}
+            title={`${text.source}: ${asset.name}`}
             onClick={() => onSelectSourceAsset(asset.id)}
             className="truncate rounded on-dark bg-black/80 px-1.5 py-1 text-micro text-ink shadow hover:bg-ds-300"
           >

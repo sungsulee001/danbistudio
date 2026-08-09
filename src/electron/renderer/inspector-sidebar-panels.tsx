@@ -1,4 +1,4 @@
-import type { ChangeEvent, RefObject } from 'react';
+﻿import type { ChangeEvent, RefObject } from 'react';
 import type { SpeakerDiarizationReport } from '../../lib/editor/stt-speaker-diarization';
 import type { SttCaptionReviewReport } from '../../lib/editor/stt-caption-review';
 import type { updateMarker } from '../../lib/editor/timeline';
@@ -63,15 +63,17 @@ interface CaptionEditorPanelProps {
 
 export function InspectorTechnicalPanel({ clip }: InspectorTechnicalPanelProps) {
   return (
-    <div className="rounded-md border border-ds-200 bg-surface p-3">
-      <h2 className="text-kicker font-heading font-semibold uppercase text-ds-600">Technical</h2>
+    <details className="rounded-md border border-ds-200 bg-surface p-3">
+      <summary className="cursor-pointer list-none text-kicker font-heading font-semibold uppercase text-ds-600 hover:text-ds-800">
+        Technical
+      </summary>
       <dl className="mt-3 space-y-3 text-sm">
         <Readout label="Track" value={clip.trackId} />
         <Readout label="Asset" value={clip.assetId ?? 'none'} />
         <Readout label="Transition" value={clip.transitionOut?.type ?? 'cut'} />
         <Readout label="Keyframes" value={String(clip.keyframes.length)} />
       </dl>
-    </div>
+    </details>
   );
 }
 

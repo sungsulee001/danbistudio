@@ -345,6 +345,7 @@ const editorPageText: Record<DanbiMenuLanguage, {
     comfySteps: string;
     comfyWidth: string;
     customWorkspace: string;
+    importToBay: string;
     edit: string;
     editWorkspace: string;
     emptySelection: string;
@@ -356,6 +357,7 @@ const editorPageText: Record<DanbiMenuLanguage, {
     program: string;
     selectClip: string;
     showSource: string;
+    showSourceMonitor: string;
     source: string;
     themeDark: string;
     themeLight: string;
@@ -410,6 +412,7 @@ const editorPageText: Record<DanbiMenuLanguage, {
       comfySteps: 'Steps',
       comfyWidth: 'Width',
       customWorkspace: 'Custom',
+      importToBay: 'Import media into the bay',
       edit: 'Edit',
       editWorkspace: 'Edit Workspace',
       emptySelection: 'Select a timeline clip to edit these properties.',
@@ -421,6 +424,7 @@ const editorPageText: Record<DanbiMenuLanguage, {
       program: 'Program',
       selectClip: 'Select a clip',
       showSource: 'Show Source',
+      showSourceMonitor: 'Show the source monitor',
       source: 'Source',
       themeDark: 'Dark',
       themeLight: 'Light',
@@ -475,6 +479,7 @@ const editorPageText: Record<DanbiMenuLanguage, {
       comfySteps: '스텝',
       comfyWidth: '너비',
       customWorkspace: '사용자 설정',
+      importToBay: '에셋 보관함으로 미디어 가져오기',
       edit: '편집',
       editWorkspace: '편집 작업공간',
       emptySelection: '타임라인 클립을 선택하면 속성을 편집할 수 있습니다.',
@@ -486,6 +491,7 @@ const editorPageText: Record<DanbiMenuLanguage, {
       program: '프로그램',
       selectClip: '클립 선택',
       showSource: '소스 열기',
+      showSourceMonitor: '소스 모니터 표시',
       source: '소스',
       themeDark: '다크',
       themeLight: '라이트',
@@ -10206,6 +10212,7 @@ export default function EditorPage() {
               </div>
               <button
                 type="button"
+                title={editorText.chrome.importToBay}
                 onClick={() => void handleImportMediaRequest()}
                 className="rounded border border-ds-300 px-2 py-1 text-xs font-medium text-ds-800 hover:border-ds-500 hover:bg-surface"
               >
@@ -10428,6 +10435,7 @@ export default function EditorPage() {
                   <button
                     type="button"
                     data-testid="editor-monitor-switch-source"
+                    title={editorText.chrome.showSourceMonitor}
                     aria-pressed={activeMonitor === 'source'}
                     onClick={handleActivateSourceMonitor}
                     className={`border-l border-ds-200 px-2.5 py-1 text-meta font-medium ${
@@ -10699,8 +10707,11 @@ export default function EditorPage() {
               />
 
               {selectedComfyUIBinding ? (
-                <div className="rounded-md border border-accent2-500/30 bg-surface p-3">
-                  <div className="flex items-center justify-between gap-2">
+                <details className="rounded-md border border-accent2-500/30 bg-surface p-3">
+                  {/* Folded by default: this is integration setup, not a
+                      property of the clip you are looking at. The status stays
+                      on the summary so you can see it without opening. */}
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
                     <h2 className="text-kicker font-heading font-semibold uppercase text-accent2-800">{editorText.chrome.comfyBinding}</h2>
                     <span className={`rounded px-2 py-0.5 text-meta ${
                       selectedComfyUIBinding.status === 'rendered'
@@ -10709,7 +10720,7 @@ export default function EditorPage() {
                     }`}>
                       {selectedComfyUIBinding.status}
                     </span>
-                  </div>
+                  </summary>
                   <div className="mt-3 grid grid-cols-2 gap-3">
                     <label className="block text-xs text-ds-600">
                       {editorText.chrome.comfyPreset}
@@ -10818,7 +10829,7 @@ export default function EditorPage() {
                   <div className="mt-3 rounded border border-ds-200 bg-paper p-2 text-meta text-ds-700">
                     {selectedComfyUIBinding.preset.description}
                   </div>
-                </div>
+                </details>
               ) : null}
 
               <InspectorTechnicalPanel clip={selectedClip} />

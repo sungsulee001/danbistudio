@@ -1,4 +1,4 @@
-import type { ClipEffect, ClipKeyframe, TimelineClip, TimelineTransition } from '../../lib/editor/types';
+﻿import type { ClipEffect, ClipKeyframe, TimelineClip, TimelineTransition } from '../../lib/editor/types';
 import type { DanbiMenuLanguage } from '../../lib/editor/menu-language';
 import {
   MOTION_PRESETS,
@@ -27,6 +27,7 @@ const inspectorMotionText: Record<DanbiMenuLanguage, {
   easing: string;
   keyframes: string;
   motionPresets: string;
+  resetTitle: string;
   noKeyframes: string;
   positionX: string;
   positionY: string;
@@ -61,6 +62,7 @@ const inspectorMotionText: Record<DanbiMenuLanguage, {
     property: 'Property',
     removeTransition: 'Remove transition',
     reset: 'Reset',
+    resetTitle: 'Reset scale, position and rotation to default',
     rotation: 'Rotation',
     scale: 'Scale',
     time: 'Time',
@@ -96,6 +98,7 @@ const inspectorMotionText: Record<DanbiMenuLanguage, {
     property: '속성',
     removeTransition: '전환 제거',
     reset: '초기화',
+    resetTitle: '크기·위치·회전을 기본값으로',
     rotation: '회전',
     scale: '확대',
     time: '시간',
@@ -250,6 +253,7 @@ export function InspectorMotionPanel({
         <button
           type="button"
           data-testid={`${testIdPrefix}-reset`}
+          title={text.resetTitle}
           disabled={!canUseMotion}
           onClick={onResetMotionTransform}
           className="rounded-md border border-ds-200 bg-paper px-2 py-2 text-xs text-ds-800 hover:border-info-500 disabled:cursor-not-allowed disabled:opacity-40"

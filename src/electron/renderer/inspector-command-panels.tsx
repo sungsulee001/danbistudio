@@ -1,4 +1,5 @@
-﻿import type { ReactNode } from 'react';
+﻿import { useState } from 'react';
+import type { ReactNode } from 'react';
 import type { TimelineTransition } from '../../lib/editor/types';
 import type { DanbiMenuLanguage } from '../../lib/editor/menu-language';
 import { NumberField } from './editor-form-controls';
@@ -277,7 +278,7 @@ export function InspectorCommandPanels({
             {text.range} {hasMarkedRange ? text.rangeOn : text.rangeOff}
           </span>
         </div>
-        <CommandCluster label={text.primary} testId="inspector-command-cluster-primary">
+        <CommandCluster label={text.primary} testId="inspector-command-cluster-primary" defaultOpen>
           <CommandButton label={text.actions.cutAtPlayhead} testLabel="Cut at playhead" gesture="edit.split" disabled={!canSplitAtPlayhead} onClick={onSplit} />
           <CommandButton label={text.actions.cutAll} testLabel="Cut all" onClick={onSplitAll} />
           <CommandButton label={text.actions.trimIn} testLabel="Trim in" gesture="trim.toPlayhead" disabled={!hasSelection} onClick={() => onTrimToPlayhead('start')} />
@@ -359,8 +360,10 @@ ${describeEditorCommandGesture('edit.packSelection')}`}
         </div>
       </div>
 
-      <div className="rounded-md border border-ds-200 bg-surface p-3">
-        <h2 className="text-kicker font-heading font-semibold uppercase text-ds-600">{text.precisionTrim}</h2>
+      <details className="rounded-md border border-ds-200 bg-surface p-3">
+        <summary className="cursor-pointer list-none text-kicker font-heading font-semibold uppercase text-ds-600 hover:text-ds-800">
+          {text.precisionTrim}
+        </summary>
         <div className="mt-3">
           <NumberField
             label={text.stepFrames}
@@ -409,27 +412,47 @@ ${describeEditorCommandGesture('edit.packSelection')}`}
             onClick={() => onLinkedAudioSplitEdit('end', precisionStep)}
           />
         </div>
-      </div>
+      </details>
     </>
   );
 }
 
+/**
+ * A collapsible group of timeline commands.
+ *
+ * These clusters printed all at once: 29 controls, 987px, inside a 448px
+ * inspector — so the panel that exists to show a clip's PROPERTIES opened on
+ * two screens of buttons and you had to scroll past them to reach Scale and
+ * Position. Everything is still one click away; only `Primary` starts open.
+ */
 function CommandCluster({
   label,
   testId,
+  defaultOpen = false,
   children,
 }: {
   label: string;
   testId: string;
+  defaultOpen?: boolean;
   children: ReactNode;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
+
   return (
-    <section data-testid={testId} data-command-cluster-label={label} className="rounded-md border border-ds-200 bg-paper/45 p-2">
-      <h3 className="mb-2 text-micro font-semibold uppercase tracking-wide text-ds-600">{label}</h3>
-      <div className="grid grid-cols-2 gap-2">
+    <details
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+      data-testid={testId}
+      data-command-cluster-label={label}
+      className="rounded-md border border-ds-200 bg-paper/45 p-2"
+    >
+      <summary className="cursor-pointer list-none text-micro font-semibold uppercase tracking-wide text-ds-600 hover:text-ds-800">
+        {label}
+      </summary>
+      <div className="mt-2 grid grid-cols-2 gap-2">
         {children}
       </div>
-    </section>
+    </details>
   );
 }
 
