@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import type { FfmpegRenderPlan } from '../../lib/editor/ffmpeg-renderer';
 import {
   buildRenderDiagnosticView,
@@ -68,6 +68,14 @@ export function RenderStatusPanel({
   const canQueueCurrentRender = Boolean(onQueueCurrentRender) && shouldOfferCurrentExportRenderAction(renderJob) && !canRetryRenderJob;
   const [showFullCommand, setShowFullCommand] = useState(false);
   const commandPreview = buildRenderCommandPreview(renderPlan.commandText);
+  // The ffmpeg command is built from process.env — the caption font path comes
+  // from DANBI_CAPTION_FONT_FILE and the Windows font directory. Node has those
+  // during SSR and the browser does not, so the two passes produced commands of
+  // different length and React reported a hydration mismatch on the "N
+  // characters hidden" count. It is a machine-specific string; render it once
+  // the client owns the tree.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   return (
     <>
@@ -186,7 +194,7 @@ export function RenderStatusPanel({
       <div className="rounded-md border border-ds-200 bg-paper p-2">
         <div className="mb-2 flex items-center justify-between gap-2 text-meta text-ds-600">
           <span>Render command</span>
-          {commandPreview.isTruncated ? (
+          {mounted && commandPreview.isTruncated ? (
             <button
               type="button"
               className="text-info-700 hover:text-info-800"
@@ -200,9 +208,9 @@ export function RenderStatusPanel({
           data-testid="render-command-preview"
           className="max-h-28 overflow-auto whitespace-pre-wrap text-meta leading-5 text-ds-700 custom-scrollbar"
         >
-          {showFullCommand ? renderPlan.commandText : commandPreview.text}
+          {mounted ? (showFullCommand ? renderPlan.commandText : commandPreview.text) : ''}
         </pre>
-        {commandPreview.isTruncated && !showFullCommand ? (
+        {mounted && commandPreview.isTruncated && !showFullCommand ? (
           <div className="mt-1 text-micro text-ds-400">
             {commandPreview.omittedCharacterCount} command characters hidden until expanded.
           </div>

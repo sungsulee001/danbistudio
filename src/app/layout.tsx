@@ -1,30 +1,29 @@
-import type { Metadata } from 'next';
+﻿import type { Metadata } from 'next';
+import { cookies } from 'next/headers';
 import './globals.css';
-import { THEME_BOOTSTRAP_SCRIPT } from './theme';
+import { DanbiThemeProvider } from './theme';
+import { normalizeTheme, THEME_COOKIE } from './theme-shared';
 
 export const metadata: Metadata = {
   title: 'Danbi Studio',
   description: 'Local-first desktop video editor and orchestration platform',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Read the theme here rather than from an inline script after load: the
+  // server can stamp the attribute itself, so the first frame is already right
+  // and the client starts from the same value instead of correcting it.
+  const theme = normalizeTheme((await cookies()).get(THEME_COOKIE)?.value);
+
   return (
-    // The theme script stamps `data-theme` on <html> before React hydrates, so
-    // the served markup and the live document differ by that one attribute by
-    // design — suppress the warning here rather than paint the wrong ground.
-    //
-    // A raw <script> rather than next/script: `beforeInteractive` does not run
-    // an inline body early enough here, which left the stored theme unapplied
-    // on load and flashed the dark ground at anyone on light.
-    <html lang="ko" suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
-      </head>
-      <body className="min-h-screen custom-scrollbar antialiased">{children}</body>
+    <html lang="ko" data-theme={theme === 'light' ? 'light' : undefined}>
+      <body className="min-h-screen custom-scrollbar antialiased">
+        <DanbiThemeProvider initialTheme={theme}>{children}</DanbiThemeProvider>
+      </body>
     </html>
   );
 }
